@@ -79,7 +79,7 @@
    nn_foss     = 1         !  frequency of OSS module call
       !                    !  (control sea-ice & iceberg model call)
       !              ! Type of coupling (Ice/Ocean) :
-   ln_prs_oce  = .false.   !  uses a prescribed surface state of the ocean => standalone mode
+   ln_prs_oce  = .true.    !  uses a prescribed surface state of the ocean => standalone mode
    ln_cpl_oce  = .false.   !  ocean coupled   formulation          ( requires key_oasis3 )
       !
    ln_ice_embd = .false.   !  =T embedded sea-ice (pressure + mass and salt exchanges)
@@ -87,7 +87,7 @@
 /
 !!
 !-----------------------------------------------------------------------
-&namoss_ssx    !   Surface ocean state (when coupled=>init and not coupled =>prescibed)
+&namoss_ssx    !   Surface ocean state (`ln_prs_oce=T` => prescibed sate | `ln_cpl_oce=T`=>initial state)
 !-----------------------------------------------------------------------
    ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
       ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
@@ -98,12 +98,11 @@
    !
    ! Relevant if `ln_prs_oce=T`:
    ln_ssV_T    = .false.      !  prescribed sea surface velocities are provided on T grid points (default is U,V!)
-   ln_ssv_Fgrid= .false.      !  =T also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )
+   ln_ssv_Fgrid= .false.      !  if true: also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )
    !
-   ln_slab_sst = .true.       ! if true => correct the prescribed SST based on a simplistic slab model approach
+   ln_slab_sst = .false.      ! if true => prescribed SST & SSS are corrected based on a simplistic slab model approach
          rn_mld_0 = 10.       ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT USED'`
          rn_ncs_sst = 0.5     ! nudging coefficient for SLAB bulk SST correction (the higher, the closer to the prescribed SST)
-   !
    !
    cn_dir      = './'      !  root directory for the ocean data location
    !___________!_________________________!___________________!___________!_____________!________!___________!__________________!__________!_______________!
@@ -114,9 +113,9 @@
    sn_tem      = 'sas_grid_T'            ,       120.        , 'sosstsst',   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_sal      = 'sas_grid_T'            ,       120.        , 'sosaline',   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_ssh      = 'sas_grid_T'            ,       120.        , 'sossheig',   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_mld      = 'sas_grid_T'            ,       120.        , 'mld'     ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''      
-   sn_e3t      = 'sas_grid_T'            ,       120.        , 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_frq      = 'sas_grid_T'            ,       120.        , 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_mld      = 'NOT USED'              ,       120.        , 'mld'     ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_e3t      = 'NOT USED'              ,       120.        , 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_frq      = 'NOT USED'              ,       120.        , 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    !!
    !! Following is only for idealized test-cases for 2D advection featuring advection of scalars @ F-points:
    sn_usf      = 'NOT USED'              ,       120.        , 'uos_v'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
