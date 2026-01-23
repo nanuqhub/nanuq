@@ -29,7 +29,6 @@ case ${RESKM} in
             ;;
 esac
 
-
 dir_in="${DIR_NC_IN}/CYCLONE/${RESKM}km"
 
 if [ ! -d ${dir_in} ]; then echo " PROBLEM: ${dir_in} does not exist!"; exit; fi
