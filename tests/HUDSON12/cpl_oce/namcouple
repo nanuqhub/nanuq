@@ -1,0 +1,246 @@
+##############################################################################
+#
+#      Input file for OASIS3
+##
+##     NANUQ coupled to OCE (ocean component of NEMO)
+#
+#     NANUK aka "OPA -- OASIS -- neXtSIM" on CREG025 (source and target) domain
+#
+#     2024: L. Brodeau
+#
+#    Important:
+#    ----------
+#   00432000 and 240 have to be replaced by the length of the simulation (s) and
+#   the coupling frequency (s), respectively.
+#
+#
+###############################################################################
+#
+#      Input delimiters have to occupy position 1 to 9 !
+#      No blank lines allowed !
+#      Length of input lines <= 80 !
+#
+###############################################################################
+#
+# NFIELDS : total number of fields being exchanged.
+#
+ $NFIELDS
+         15
+ $END
+#
+###############################################################################
+#
+# RUNTIME (<I8)
+#         total simulated time for the actual run in seconds
+#         the value will be set before the actual integration
+#
+ $RUNTIME
+           00432000
+ $END
+#
+ $NLOGPRT
+   0  0
+ $END
+#
+ $STRINGS
+#
+#
+############################################################################
+#                      OCEAN  --->>>  ICE
+#                      ------------------
+###############################################################################
+#
+# --- start Field 1 --- Sea_surface_temperature [K;K]
+#
+# LOLO: 1st name = in OASISI = what found in restart file => 'O_SSTSST'
+# LOLO: 2nd name = in the relevant code = `sbccpl.F90` if NEMO, or SAS, or in neXtSIM ==> I_SSTSST.
+O_SSTSST I_SSTSST 1 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 1 ---
+#
+###############################################################################
+#
+# --- start Field 2 --- sea_surface_salinity  [PSU;PSU]
+#
+O_SSSal  I_SSSal 2 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 2 ---
+#
+###############################################################################
+#
+# --- start Field 3 --- zonal_current  [m/s;m/s]
+#
+O_OCurx1 I_OCurx1 2 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 uor2 uor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 3 ---
+#
+###############################################################################
+#
+# --- start Field 4 --- meridional_current  [m/s;m/s]
+#
+O_OCury1 I_OCury1 2 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 vor2 vor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 4 ---
+#
+###############################################################################
+#
+# --- start Field 5 --- SSHeight  [m;m]
+#
+O_SSHght I_SSHght 2 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 5 ---
+#
+###############################################################################
+#
+# --- start Field 6 --- First level depth (vvl only)
+#
+O_E3T1st I_E3T1st 2 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 6 ---
+###############################################################################
+#
+# --- start Field 7 --- Fraction of solar net radiation absorbed in the first ocean level
+#
+O_FraQsr I_FraQsr 2 240  1 ocean_CPL_restart.nc EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 7 ---
+#
+#
+#
+#
+#
+#
+#
+############################################################################
+#                      ICE  --->>>  OCEAN
+############################################################################
+#
+# --- start Field 8 --- eastward  wind stress over ocean at U point
+#
+I_OTaux1  O_OTaux1   23  240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 uor2 uor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 8 ---
+#
+#########################################################################
+#
+# --- start Field 9 --- northward wind stress over ocean at V point
+#
+I_OTauy1  O_OTauy1   24  240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 vor2 vor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 9 ---
+#
+############################################################################
+#
+# --- start Field 10 --- Total E-P -> [ Evaporation - (rain + snow) ]
+#
+IOEvaMPr  OOEvaMPr 28 240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 10 ---
+#
+###########################################################################
+#
+# --- start Field 11 --- Total Non Solar
+#
+I_QnsOce O_QnsOce 6  240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+# --- end field 11 ---
+#
+############################################################################
+#
+# --- start Field 12 --- Total Solar
+#
+I_QsrOce  O_QsrOce 7 240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 12 ---
+##########################################################################
+#
+# --- start Field 13 --- Salt flux [PSS.kg/m2/s]
+#
+I_SFLX  O_SFLX 7 240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 13 ---
+#
+##########################################################################
+#
+# --- start Field 14 --- Wind stress module
+#
+I_TauMod  O_TauMod 7 240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+AVERAGE
+#
+# --- end field 14 ---
+##########################################################################
+#
+# --- start Field 15 ---  Sea ice cover
+#
+IIceFrc  RIceFrc 7 240  1  ice_CPL_restart.nc  EXPORTED
+225 435  225 435 tor2 tor2  SEQ=1 LAG=240
+R  0  R  0
+#
+LOCTRANS
+INSTANT
+#
+# --- end field 15 ---
+##########################################################################
+ $END

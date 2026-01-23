@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<!--
+============================================================================================================
+= grid definition = = DO NOT CHANGE =
+============================================================================================================
+-->
+
+<grid_definition>
+
+  <grid id="grid_T_2D" >
+    <domain domain_ref="grid_T" />
+  </grid>
+
+  <grid id="grid_T_ncatice" >
+    <domain domain_ref="grid_T" />
+    <axis axis_ref="ncatice" />
+  </grid>
+
+  <!--  -->
+
+  <grid id="grid_U_2D" >
+    <domain domain_ref="grid_U" />
+  </grid>
+
+  <!--  -->
+
+  <grid id="grid_V_2D" >
+    <domain domain_ref="grid_V" />
+  </grid>
+
+  <!--  -->
+
+  <grid id="grid_W_2D" >
+    <domain domain_ref="grid_W" />
+  </grid>
+
+  <!--  -->
+
+  <grid id="grid_F_2D" >
+    <domain domain_ref="grid_F" />
+  </grid>
+
+  <!--  -->
+
+  <grid id="grid_1point" >
+    <domain domain_ref="1point"/>
+  </grid>
+
+  <!--  -->
+
+  <grid id="grid_U_scalar" >
+    <domain domain_ref="grid_U" />
+    <scalar/>
+  </grid>
+
+  <grid id="grid_V_scalar" >
+    <domain domain_ref="grid_V" />
+    <scalar/>
+  </grid>
+
+
+  <!-- scalars -->
+  <grid id="grid_scalar" >
+    <scalar/>
+  </grid>
+
+  <!-- ABL grid definition -->
+  <grid id="grid_TA_2D">
+    <domain domain_ref="grid_T" />
+  </grid>
+  <grid id="grid_TA_3D">
+    <domain domain_ref="grid_T" />
+    <axis  id="ght_abl" />
+  </grid>
+  <grid id="grid_WA_3D">
+    <domain domain_ref="grid_T" />
+    <axis  id="ghw_abl" />
+  </grid>
+
+  <!--  -->
+
+</grid_definition>

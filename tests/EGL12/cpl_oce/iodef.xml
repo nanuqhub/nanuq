@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<simulation>
+
+  <context id="nemo" >
+
+    <variable_definition>
+      <!-- Year/Month/Day of time origin for NetCDF files; defaults to 1800-01-01 -->
+      <variable id="ref_year"  type="int"> 1970 </variable>
+      <variable id="ref_month" type="int"> 01 </variable>
+      <variable id="ref_day"   type="int"> 01 </variable>
+      <variable id="rho0"      type="float" > 1026.0 </variable>
+      <variable id="cpocean"   type="float" > 3991.86795711963 </variable>
+      <variable id="convSpsu"  type="float" > 0.99530670233846  </variable>
+      <variable id="rhoic"     type="float" > 917.0 </variable>
+      <variable id="rhosn"     type="float" > 330.0 </variable>
+      <variable id="missval"   type="float" > 1.e20 </variable>
+    </variable_definition>
+
+    <!--
+        ============================================================================================================
+        =                                  definition of all existing variables                                    =
+        =                                            DO NOT CHANGE                                                 =
+        ============================================================================================================
+    -->
+    <field_definition src="./field_def_opa.xml"/>
+    <!--
+        ============================================================================================================
+        =                                           output files definition                                        =
+        =                                            Define your own files                                         =
+        =                                         put the variables you want...                                    =
+        ============================================================================================================
+    -->
+
+    <file_definition src="./file_def_opa.xml"/>
+
+    <axis_definition src="./axis_def_opa.xml" />
+
+    <domain_definition src="./domain_def_opa.xml"/>
+
+    <grid_definition   src="./grid_def_opa.xml"/>
+
+  </context>
+
+
+
+  <context id="nanuq" >
+
+    <variable_definition>
+      <!-- Year/Month/Day of time origin for NetCDF files; defaults to 1800-01-01 -->
+      <variable id="ref_year"  type="int"> 1970 </variable>
+      <variable id="ref_month" type="int"> 01 </variable>
+      <variable id="ref_day"   type="int"> 01 </variable>
+      <variable id="rho0"      type="float" > 1026.0 </variable>
+      <variable id="cpocean"   type="float" > 3991.86795711963 </variable>
+      <variable id="convSpsu"  type="float" > 0.99530670233846  </variable>
+      <variable id="rhoic"     type="float" > 917.0 </variable>
+      <variable id="rhosn"     type="float" > 330.0 </variable>
+      <variable id="missval"   type="float" > 1.e20 </variable>
+    </variable_definition>
+
+    <!--
+        ============================================================================================================
+        =                                  definition of all existing variables                                    =
+        =                                            DO NOT CHANGE                                                 =
+        ============================================================================================================
+    -->
+    <field_definition src="./field_def_nanuq.xml"/>
+    <!--
+        ============================================================================================================
+        =                                           output files definition                                        =
+        =                                            Define your own files                                         =
+        =                                         put the variables you want...                                    =
+        ============================================================================================================
+    -->
+    <file_definition src="./file_def_nanuq.xml" />
+
+    <axis_definition src="./axis_def_nanuq.xml" />
+
+    <domain_definition src="./domain_def_nanuq.xml"/>
+
+    <grid_definition   src="./grid_def_nanuq.xml"/>
+
+  </context>
+
+
+  <context id="xios">
+
+    <variable_definition>
+
+      <!--
+          We must have buffer_size > jpi*jpj*jpk*8 (with jpi and jpj the subdomain size)
+      -->
+      <variable id="info_level"                type="int">5</variable>
+      <variable id="using_server"              type="bool">true</variable>
+      <variable id="using_oasis"               type="bool">true</variable>
+      <variable id="oasis_codes_id"            type="string" >oceanx,nanuq</variable>
+
+    </variable_definition>
+
+  </context>
+
+</simulation>

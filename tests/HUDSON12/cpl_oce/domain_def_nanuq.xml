@@ -1,0 +1,19 @@
+
+<domain_definition>
+
+  <!--   T grid   -->
+  <domain id="grid_T" long_name="grid T"/>
+
+  <!--   U grid   -->
+  <domain id="grid_U" long_name="grid U"/>
+
+  <!--   V grid   -->
+  <domain id="grid_V" long_name="grid V"/>
+
+  <!--   W grid   -->
+  <domain id="grid_W" long_name="grid W"/>
+
+  <!--   F grid   -->
+  <domain id="grid_F" long_name="grid F"/>
+
+</domain_definition>

@@ -1,0 +1,641 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="328.74207mm"
+   height="185.51419mm"
+   viewBox="0 0 328.74207 185.51419"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.2.2 (b0a8486541, 2022-12-01)"
+   sodipodi:docname="mods.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="false"
+     inkscape:zoom="0.65834035"
+     inkscape:cx="435.18524"
+     inkscape:cy="460.24826"
+     inkscape:window-width="2560"
+     inkscape:window-height="1361"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2">
+    <marker
+       style="overflow:visible"
+       id="EmptyTriangleIn"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="EmptyTriangleIn"
+       markerWidth="5.8241119"
+       markerHeight="6.7330775"
+       viewBox="0 0 5.8241121 6.7330776"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-fill;fill-rule:evenodd;stroke:context-stroke;stroke-width:2"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path153" />
+    </marker>
+    <rect
+       x="694.92639"
+       y="317.92615"
+       width="372.70395"
+       height="435.00031"
+       id="rect1447" />
+    <inkscape:perspective
+       sodipodi:type="inkscape:persp3d"
+       inkscape:vp_x="0 : 37.014184 : 1"
+       inkscape:vp_y="0 : 999.99997 : 0"
+       inkscape:vp_z="210 : 37.014184 : 1"
+       inkscape:persp3d-origin="105.00001 : -12.48581 : 1"
+       id="perspective298" />
+    <marker
+       style="overflow:visible"
+       id="EmptyTriangleIn-9"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="EmptyTriangleIn"
+       markerWidth="5.8241119"
+       markerHeight="6.7330775"
+       viewBox="0 0 5.8241121 6.7330776"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-fill;fill-rule:evenodd;stroke:context-stroke;stroke-width:2"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path153-4" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="EmptyTriangleIn-9-5"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="EmptyTriangleIn"
+       markerWidth="5.8241119"
+       markerHeight="6.7330775"
+       viewBox="0 0 5.8241121 6.7330776"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-fill;fill-rule:evenodd;stroke:context-stroke;stroke-width:2"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path153-4-3" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="EmptyTriangleIn-91"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="EmptyTriangleIn"
+       markerWidth="5.8241119"
+       markerHeight="6.7330775"
+       viewBox="0 0 5.8241121 6.7330776"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-fill;fill-rule:evenodd;stroke:context-stroke;stroke-width:2"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path153-2" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="EmptyTriangleIn-91-2"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="EmptyTriangleIn"
+       markerWidth="5.8241119"
+       markerHeight="6.7330775"
+       viewBox="0 0 5.8241121 6.7330776"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-fill;fill-rule:evenodd;stroke:context-stroke;stroke-width:2"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path153-2-6" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="EmptyTriangleIn-0-7"
+       refX="0"
+       refY="0"
+       orient="auto-start-reverse"
+       inkscape:stockid="EmptyTriangleIn"
+       markerWidth="5.8241119"
+       markerHeight="6.7330775"
+       viewBox="0 0 5.8241121 6.7330776"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-fill;fill-rule:evenodd;stroke:context-stroke;stroke-width:2"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path153-9-8" />
+    </marker>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-35.729469,-1.2241331)">
+    <rect
+       style="fill:#ffffff;stroke:none;stroke-width:0.499999"
+       id="rect556"
+       width="328.74207"
+       height="185.51419"
+       x="35.729469"
+       y="1.2241331" />
+    <text
+       xml:space="preserve"
+       transform="matrix(0.26458333,0,0,0.26458333,-2.1166667,0.52916667)"
+       id="text1445"
+       style="font-size:40px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect1447);display:inline" />
+    <g
+       id="g3841"
+       transform="translate(-11.200439,-0.75511303)">
+      <g
+         id="g3709">
+        <g
+           id="g611"
+           transform="rotate(-90,207.64392,23.53359)">
+          <rect
+             style="fill:#92b5ed;fill-opacity:1;stroke:#656565;stroke-width:1.99906;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none"
+             id="rect1197"
+             width="58.000942"
+             height="138.00095"
+             x="51.5681"
+             y="35.230785" />
+          <g
+             id="g575"
+             transform="translate(-6.3500003,-4.2333335)">
+            <g
+               id="g2728"
+               transform="translate(34.744176,-20.768745)">
+              <g
+                 id="g2298"
+                 transform="translate(-0.21313651)">
+                <rect
+                   style="fill:#cccccc;fill-opacity:1;stroke:#f4f4f4;stroke-width:0.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                   id="rect1949"
+                   width="34.65583"
+                   height="13.910527"
+                   x="28.709616"
+                   y="73.8946" />
+                <text
+                   xml:space="preserve"
+                   style="font-size:9.87778px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+                   x="38.520542"
+                   y="83.911972"
+                   id="text2109"><tspan
+                     sodipodi:role="line"
+                     id="tspan2107"
+                     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';stroke-width:0.264583"
+                     x="38.520542"
+                     y="83.911972">DOM</tspan></text>
+              </g>
+              <g
+                 id="g2293"
+                 transform="translate(-0.21313651,0.39785752)">
+                <rect
+                   style="fill:#cccccc;fill-opacity:1;stroke:#f4f4f4;stroke-width:0.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                   id="rect1949-4"
+                   width="34.65583"
+                   height="13.910527"
+                   x="28.709616"
+                   y="91.655991" />
+                <text
+                   xml:space="preserve"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+                   x="38.377312"
+                   y="101.67336"
+                   id="text2109-5"><tspan
+                     sodipodi:role="line"
+                     id="tspan2107-0"
+                     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';stroke-width:0.264583"
+                     x="38.377312"
+                     y="101.67336">LBC</tspan></text>
+              </g>
+              <g
+                 id="g2288"
+                 transform="translate(-0.21313651,0.65361757)"
+                 style="fill:#808080">
+                <rect
+                   style="fill:#4d4d4d;fill-opacity:1;stroke:#f4f4f4;stroke-width:0.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                   id="rect1949-4-6"
+                   width="34.65583"
+                   height="13.910527"
+                   x="28.709616"
+                   y="109.55948" />
+                <text
+                   xml:space="preserve"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;fill:#000000;stroke-width:0.264583"
+                   x="38.555111"
+                   y="119.57685"
+                   id="text2109-5-1"><tspan
+                     sodipodi:role="line"
+                     id="tspan2107-0-0"
+                     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';fill:#000000;stroke-width:0.264583"
+                     x="38.555111"
+                     y="119.57685">SBC</tspan></text>
+              </g>
+              <g
+                 id="g2283"
+                 transform="translate(-0.21313651,0.34101825)">
+                <rect
+                   style="fill:#cccccc;fill-opacity:1;stroke:#f4f4f4;stroke-width:0.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                   id="rect1949-4-63"
+                   width="34.65583"
+                   height="13.910527"
+                   x="28.709616"
+                   y="128.03133" />
+                <text
+                   xml:space="preserve"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+                   x="38.347679"
+                   y="138.04871"
+                   id="text2109-5-2"><tspan
+                     sodipodi:role="line"
+                     id="tspan2107-0-06"
+                     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';stroke-width:0.264583"
+                     x="38.347679"
+                     y="138.04871">IOM</tspan></text>
+              </g>
+              <g
+                 id="g2278"
+                 transform="translate(-0.21313651,-8.2128683)">
+                <rect
+                   style="fill:#cccccc;fill-opacity:1;stroke:#f4f4f4;stroke-width:0.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                   id="rect1949-4-1"
+                   width="34.65583"
+                   height="13.910527"
+                   x="28.709616"
+                   y="154.74446" />
+                <text
+                   xml:space="preserve"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+                   x="38.421764"
+                   y="164.76183"
+                   id="text2109-5-5"><tspan
+                     sodipodi:role="line"
+                     id="tspan2107-0-5"
+                     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';stroke-width:0.264583"
+                     x="38.421764"
+                     y="164.76183">BDY</tspan></text>
+              </g>
+              <g
+                 id="g2278-4"
+                 transform="translate(-0.21313651,9.9463799)"
+                 style="fill:#cccccc">
+                <rect
+                   style="fill:#cccccc;fill-opacity:1;stroke:#f4f4f4;stroke-width:0.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                   id="rect1949-4-1-7"
+                   width="34.65583"
+                   height="13.910527"
+                   x="28.709616"
+                   y="154.74446" />
+                <text
+                   xml:space="preserve"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;fill:#000000;stroke-width:0.264583"
+                   x="38.421764"
+                   y="164.76183"
+                   id="text2109-5-5-6"><tspan
+                     sodipodi:role="line"
+                     id="tspan2107-0-5-5"
+                     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:9.87778px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';fill:#000000;stroke-width:0.264583"
+                     x="38.421764"
+                     y="164.76183">DYN</tspan></text>
+              </g>
+              <g
+                 id="g2695"
+                 style="fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-opacity:1"
+                 transform="matrix(1.3061946,0,0,1.3061946,-11.317074,-55.631573)">
+                <g
+                   aria-label="..."
+                   id="text2493"
+                   style="font-size:10.5833px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-width:0.264583;stroke-opacity:1"
+                   transform="matrix(0,0.60987673,-0.74889255,0,96.401542,69.493673)">
+                  <ellipse
+                     style="fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-width:0.837962;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                     id="path2643"
+                     cx="-70.310516"
+                     cy="184.78049"
+                     transform="rotate(-90)"
+                     rx="0.24867125"
+                     ry="0.40085661" />
+                </g>
+                <g
+                   aria-label="..."
+                   id="text2493-6"
+                   style="font-size:10.5833px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-width:0.264583;stroke-opacity:1"
+                   transform="matrix(0,0.60987673,-0.74889255,0,96.401542,72.056004)">
+                  <ellipse
+                     style="fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-width:0.837962;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                     id="path2643-9"
+                     cx="-70.310516"
+                     cy="184.78049"
+                     transform="rotate(-90)"
+                     rx="0.24867125"
+                     ry="0.40085661" />
+                </g>
+                <g
+                   aria-label="..."
+                   id="text2493-3"
+                   style="font-size:10.5833px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-width:0.264583;stroke-opacity:1"
+                   transform="matrix(0,0.60987673,-0.74889255,0,96.401542,74.618335)">
+                  <ellipse
+                     style="fill:#ebebeb;fill-opacity:1;stroke:#ebebeb;stroke-width:0.837962;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+                     id="path2643-7"
+                     cx="-70.310516"
+                     cy="184.78049"
+                     transform="rotate(-90)"
+                     rx="0.24867125"
+                     ry="0.40085661" />
+                </g>
+              </g>
+            </g>
+          </g>
+        </g>
+        <path
+           style="fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
+           d="m 244.26489,48.32214 v 0"
+           id="path3400"
+           sodipodi:nodetypes="cc" />
+        <path
+           style="fill:none;stroke:#656565;stroke-width:0.942452;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#EmptyTriangleIn)"
+           d="m 233.77944,91.944111 14.77079,29.242349"
+           id="path3451"
+           sodipodi:nodetypes="cc" />
+        <text
+           xml:space="preserve"
+           style="font-size:7.05556px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+           x="266.8334"
+           y="14.388456"
+           id="text5284"><tspan
+             sodipodi:role="line"
+             id="tspan5282"
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:7.05556px;font-family:Ubuntu;-inkscape-font-specification:Ubuntu;fill:#666666;stroke-width:0.264583"
+             x="266.8334"
+             y="14.388456">Coupled mode</tspan></text>
+        <g
+           id="g1259"
+           transform="translate(-8.7719399,-17.732982)">
+          <rect
+             style="fill:#9edaf0;fill-opacity:1;stroke:#656565;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none"
+             id="rect1089-2"
+             width="90.388496"
+             height="30.193619"
+             x="252.93259"
+             y="43.532833" />
+          <text
+             xml:space="preserve"
+             style="font-size:14.1111px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+             x="264.87402"
+             y="61.084972"
+             id="text1145-4"><tspan
+               sodipodi:role="line"
+               id="tspan1143-5"
+               style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.1111px;font-family:Ubuntu;-inkscape-font-specification:Ubuntu;stroke-width:0.264583"
+               x="264.87402"
+               y="61.084972">nanuq.exe</tspan></text>
+        </g>
+        <text
+           xml:space="preserve"
+           style="font-size:10.5833px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+           x="257.58652"
+           y="134.19444"
+           id="text1145-6"><tspan
+             sodipodi:role="line"
+             id="tspan1143-7"
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Ubuntu;-inkscape-font-specification:Ubuntu;fill:#ffffff;stroke-width:0.264583"
+             x="257.58652"
+             y="134.19444">NEMO / OCE</tspan></text>
+        <g
+           id="g2207"
+           transform="translate(176.74221)">
+          <g
+             id="g2154">
+            <path
+               style="fill:none;stroke:#656565;stroke-width:0.942452;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#EmptyTriangleIn-9)"
+               d="M 105.88947,60.126701 V 120.52286"
+               id="path3451-9"
+               sodipodi:nodetypes="cc" />
+            <path
+               style="fill:none;stroke:#656565;stroke-width:0.942452;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#EmptyTriangleIn-9-5)"
+               d="M 112.69872,116.86245 V 56.4663"
+               id="path3451-9-5"
+               sodipodi:nodetypes="cc" />
+          </g>
+          <g
+             id="g1801">
+            <rect
+               style="fill:#ffff00;fill-opacity:1;stroke:#333333;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+               id="rect1949-4-6-3"
+               width="49.209888"
+               height="27.017752"
+               x="82.259827"
+               y="75.247864" />
+            <text
+               xml:space="preserve"
+               style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.5833px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;fill:#000000;stroke-width:0.264583"
+               x="93.773232"
+               y="92.03756"
+               id="text2109-5-1-6"><tspan
+                 sodipodi:role="line"
+                 id="tspan2107-0-0-7"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.5833px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';fill:#000000;stroke-width:0.264583"
+                 x="93.773232"
+                 y="92.03756">OASIS</tspan></text>
+          </g>
+        </g>
+        <g
+           id="g2287"
+           transform="translate(176.74221)">
+          <rect
+             style="fill:#ffaaaa;stroke:#333333;stroke-width:0.892207;stroke-dasharray:none;stroke-opacity:1"
+             id="rect2251"
+             width="30.117435"
+             height="19.204845"
+             x="41.472897"
+             y="69.032967" />
+          <text
+             xml:space="preserve"
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.5833px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;fill:#000000;stroke-width:0.264583"
+             x="46.107063"
+             y="81.916214"
+             id="text2109-5-1-6-6"><tspan
+               sodipodi:role="line"
+               id="tspan2107-0-0-7-2"
+               style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.5833px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';fill:#000000;stroke-width:0.264583"
+               x="46.107063"
+               y="81.916214">XIOS</tspan></text>
+        </g>
+        <path
+           style="fill:none;stroke:#656565;stroke-width:0.942452;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#EmptyTriangleIn-91)"
+           d="m 233.84664,65.358003 9.75473,-18.514886"
+           id="path3451-7"
+           sodipodi:nodetypes="cc" />
+      </g>
+      <g
+         id="g2207-9"
+         transform="translate(1.5376568,-2.0927118e-4)">
+        <g
+           id="g2154-3" />
+        <g
+           id="g1801-5">
+          <g
+             id="g3605"
+             transform="translate(21.695841)">
+            <path
+               style="fill:none;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1"
+               d="m 69.060242,48.32193 v 0"
+               id="path3400-0"
+               sodipodi:nodetypes="cc"
+               transform="translate(-1.5376561,2.0926785e-4)" />
+            <text
+               xml:space="preserve"
+               style="font-size:7.05556px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+               x="71.443611"
+               y="14.388247"
+               id="text5284-1"
+               transform="translate(-1.5376561,2.0926785e-4)"><tspan
+                 sodipodi:role="line"
+                 id="tspan5282-5"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:7.05556px;font-family:Ubuntu;-inkscape-font-specification:Ubuntu;fill:#666666;stroke-width:0.264583"
+                 x="71.443611"
+                 y="14.388247">Standalone mode (default)</tspan></text>
+            <g
+               id="g1259-5"
+               transform="translate(-185.51357,-17.732983)">
+              <rect
+                 style="fill:#9edaf0;fill-opacity:1;stroke:#656565;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none"
+                 id="rect1089-2-4"
+                 width="90.388496"
+                 height="30.193619"
+                 x="252.93259"
+                 y="43.532833" />
+              <text
+                 xml:space="preserve"
+                 style="font-size:14.1111px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+                 x="264.87402"
+                 y="61.084972"
+                 id="text1145-4-7"><tspan
+                   sodipodi:role="line"
+                   id="tspan1143-5-6"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:14.1111px;font-family:Ubuntu;-inkscape-font-specification:Ubuntu;stroke-width:0.264583"
+                   x="264.87402"
+                   y="61.084972">nanuq.exe</tspan></text>
+            </g>
+            <text
+               xml:space="preserve"
+               style="font-size:10.5833px;line-height:1.25;font-family:'Courier New';-inkscape-font-specification:'Courier New';letter-spacing:0px;word-spacing:0px;stroke-width:0.264583"
+               x="82.381874"
+               y="134.19423"
+               id="text1145-6-5"
+               transform="translate(-1.5376561,2.0926785e-4)"><tspan
+                 sodipodi:role="line"
+                 id="tspan1143-7-6"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-family:Ubuntu;-inkscape-font-specification:Ubuntu;fill:#ffffff;stroke-width:0.264583"
+                 x="82.381874"
+                 y="134.19423">NEMO / OCE</tspan></text>
+            <g
+               id="g2287-7">
+              <rect
+                 style="fill:#ffaaaa;stroke:#333333;stroke-width:0.892207;stroke-dasharray:none;stroke-opacity:1"
+                 id="rect2251-4"
+                 width="30.117435"
+                 height="19.204845"
+                 x="41.472897"
+                 y="69.032967" />
+              <text
+                 xml:space="preserve"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.5833px;line-height:1.25;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;fill:#000000;stroke-width:0.264583"
+                 x="46.107063"
+                 y="81.916214"
+                 id="text2109-5-1-6-6-4"><tspan
+                   sodipodi:role="line"
+                   id="tspan2107-0-0-7-2-3"
+                   style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:10.5833px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';fill:#000000;stroke-width:0.264583"
+                   x="46.107063"
+                   y="81.916214">XIOS</tspan></text>
+            </g>
+            <path
+               style="fill:none;stroke:#656565;stroke-width:0.942452;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#EmptyTriangleIn-91-2)"
+               d="m 58.641992,65.357793 9.75473,-18.514886"
+               id="path3451-7-0"
+               sodipodi:nodetypes="cc"
+               transform="translate(-1.5376561,2.0926785e-4)" />
+            <path
+               style="fill:none;stroke:#656565;stroke-width:0.942452;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:none;stroke-opacity:1;marker-start:url(#EmptyTriangleIn-0-7)"
+               d="m 109.69588,60.199061 v 18.84127"
+               id="path3451-6-6"
+               sodipodi:nodetypes="cc"
+               transform="translate(-1.5376561,2.0926785e-4)" />
+            <rect
+               style="fill:#ffff00;fill-opacity:1;stroke:#333333;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+               id="rect1949-4-6-3-2"
+               width="49.180523"
+               height="28.645014"
+               x="84.633987"
+               y="75.262543" />
+            <text
+               xml:space="preserve"
+               style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;line-height:0.95;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';letter-spacing:0px;word-spacing:0px;fill:#000000;stroke-width:0.264583"
+               x="109.24013"
+               y="81.760216"
+               id="text2109-5-1-6-5"><tspan
+                 sodipodi:role="line"
+                 id="tspan2107-0-0-7-4"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';text-align:center;text-anchor:middle;fill:#000000;stroke-width:0.264583"
+                 x="109.24013"
+                 y="81.760216">Prescribed</tspan><tspan
+                 sodipodi:role="line"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';text-align:center;text-anchor:middle;fill:#000000;stroke-width:0.264583"
+                 x="109.24013"
+                 y="87.792717"
+                 id="tspan3509">ocean surface</tspan><tspan
+                 sodipodi:role="line"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';text-align:center;text-anchor:middle;fill:#000000;stroke-width:0.264583"
+                 x="109.24013"
+                 y="93.825218"
+                 id="tspan3511">state</tspan><tspan
+                 sodipodi:role="line"
+                 style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:6.35px;font-family:'Ubuntu Mono';-inkscape-font-specification:'Ubuntu Mono';text-align:center;text-anchor:middle;fill:#000000;stroke-width:0.264583"
+                 x="109.24013"
+                 y="99.857712"
+                 id="tspan3513">(netCDF)</tspan></text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>
