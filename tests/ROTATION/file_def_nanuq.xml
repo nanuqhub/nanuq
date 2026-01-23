@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+
+<file_definition type="one_file" name="@expname@_@freq@_@startdate@_@enddate@" sync_freq="6h" min_digits="4">
+
+  <file_group id="3h" output_freq="3h"  output_level="10" >  <!-- 3h files -->
+
+    <file id="file31" name_suffix="_icemod" description="ice variables" enabled=".true." >
+      <!-- general -->
+      <field field_ref="iceconc"    name="siconc-t" operation="instant" />
+      <field field_ref="iceconc-f"  name="siconc-f" operation="instant" />
+      <field field_ref="icevolu"    name="sivolu"   operation="instant" valid_min="0." valid_max="5." />
+      <field field_ref="icethic"    name="sithic"   operation="instant" valid_min="0." valid_max="5." />
+      <field field_ref="icedmgt"    name="damage-t" operation="instant" />
+      <field field_ref="icedmgf"    name="damage-f" operation="instant" />
+      <!--
+          <field field_ref="ssu_m"                      operation="instant" />
+          <field field_ref="ssv_m"                      operation="instant" />
+      -->
+      <!--
+          <field field_ref="uice"       name='u_ice-u'  operation="instant" />
+          <field field_ref="vice"       name='v_ice-v'  operation="instant" />
+          <field field_ref="uice_v"     name='u_ice-v'  operation="instant" />
+          <field field_ref="vice_u"     name='v_ice-u'  operation="instant" />
+      -->
+      <!-- -->
+    </file>
+
+  </file_group>
+
+</file_definition>
