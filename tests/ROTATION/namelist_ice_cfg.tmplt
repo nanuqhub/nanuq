@@ -1,5 +1,5 @@
 !!   *** ROTATION 2D advection test-case ***
-
+!!
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 !! NANUQ configuration namelist: Overwrites SHARED/namelist_ice_ref
 !!              1 - Generic parameters                 (nampar)
@@ -27,10 +27,7 @@
    ln_virtual_itd   =   .false.          !  virtual ITD mono-category parameterization (jpl=1 only)
    !                                     !     i.e. enhanced thermal conductivity & virtual thin ice melting
    ln_icethd        = .false.            !lolo!  ice thermo   (T) or not (F)
-   rn_amax          =  0.999999         !  maximum tolerated ice concentration
-   cn_icerst_in     = ''   !  suffix of ice restart name (input)
-   cn_icerst_indir  = ''  !  directory to read   input ice restarts
-   cn_icerst_outdir = '/data2/nobackup/laurent/tmp/ROTATION/ROTATION-00-R/00032400' !  directory to write output ice restarts
+   rn_amax          =   0.999999         !  maximum tolerated ice concentration
    !
    ! E-grid stuff (relevant when `ln_damage=T`):
    ln_damage        = .true.  ! Yes!  !  existance of the "ice damage" tracer in the code?
@@ -49,7 +46,7 @@
    !                                          !  when set to True, interpolation estimate of `A` and `h` @ F-points
    !                                          !  is done with WENO5-symetric rather thant the usual 4-surrounding-T-poi nt average...
    !                                          !  => costly but accurate !!!
-   cn_rmp_weno_wght = 'WENO5-SYM_weights_ROTATION_2km.nc'       ! file in which WENO-symetric weights are read
+   cn_rmp_weno_wght = 'WENO5-SYM_weights_ROTATION_<RESKM>.nc'       ! file in which WENO-symetric weights are read
 /
 !
 !------------------------------------------------------------------------------
@@ -133,15 +130,15 @@ ln_pnd = .false.
    ! -- for nn_iceini_file = 1
    !       !  file name       ! frequency (hours) !  variable   ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
    !       !                  !  (if <0  months)  !    name     !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_hti = 'Ice_initialization_ROTATION_2km.nc', -12. ,'hti'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_hts = 'Ice_initialization_ROTATION_2km.nc', -12. ,'hts'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_ati = 'Ice_initialization_ROTATION_2km.nc', -12. ,'ati'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_hti = 'Ice_initialization_ROTATION_<RESKM>.nc', -12. ,'hti'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_hts = 'Ice_initialization_ROTATION_<RESKM>.nc', -12. ,'hts'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_ati = 'Ice_initialization_ROTATION_<RESKM>.nc', -12. ,'ati'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_smi = 'NOT USED'                     , -12. ,'smi'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tmi = 'NOT USED'                     , -12. ,'tmi'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tsu = 'NOT USED'                     , -12. ,'tsu'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tms = 'NOT USED'                     , -12. ,'tms'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    ! BBM:
-   sn_dmg = 'Ice_initialization_ROTATION_2km.nc', -12. ,'dmg'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_dmg = 'Ice_initialization_ROTATION_<RESKM>.nc', -12. ,'dmg'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    cn_dir='./'
 /
 !------------------------------------------------------------------------------

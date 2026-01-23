@@ -3,6 +3,7 @@
 #DIR_NC_IN="/DATA/IO/INPUT_NANUQ_DISTRIB"
 DIR_NC_IN="/home/laurent/tmp/INPUT_NANUQ_DISTRIB"
 
+
 if [ "${1}" = "" ]; then
     echo "USAGE: ${0} <res_in_km>"
     exit
@@ -15,7 +16,15 @@ if [ "`echo ${lok} | grep ${RESKM}`" = "" ]; then
     echo "Available resolutions in km are: ${lok} !"
     exit
 fi
-   
+
+case ${RESKM} in
+    "2")  DT="240"      ; # NANUQ time step in seconds
+            NTS="32400" ; # number of time steps to go...
+            ;;
+    "10") DT="1200"     ; # NANUQ time step in seconds
+            NTS="6480"  ; # number of time steps to go...
+            ;;
+esac
 
 dir_in="${DIR_NC_IN}/ROTATION/${RESKM}km"
 
@@ -25,7 +34,6 @@ ln -sf ${dir_in}/*.nc .
 
 ln -sf ../../cfgs/generic/BLD/bin/nanuq.exe .
 
-# Picking the right namelists:
-ln -sf namelist_dom_cfg.${RESKM}km namelist_dom_cfg
-ln -sf namelist_ice_cfg.${RESKM}km namelist_ice_cfg
-
+# Building the right namelists:
+sed -e s/"<RESKM>"/"${RESKM}km"/g -e s/"<DT>"/"${DT}"/g -e s/"<NTS>"/"${NTS}"/g namelist_dom_cfg.tmplt > namelist_dom_cfg
+sed -e s/"<RESKM>"/"${RESKM}km"/g                                               namelist_ice_cfg.tmplt > namelist_ice_cfg
