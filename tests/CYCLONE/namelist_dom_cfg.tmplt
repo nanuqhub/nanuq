@@ -1,15 +1,15 @@
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 !! NEMO/OCE  Configuration namelist : overwrite default values defined in SHARED/namelist_ref
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-!!    CYCLONE (10km!) configuration                  !!
+!!    CYCLONE (<RESKM>!) configuration                  !!
 !!======================================================================
 !
 !-----------------------------------------------------------------------
 &namrun        !   parameters of the run
 !-----------------------------------------------------------------------
-   cn_exp      =  'CYCLONE_10km' !  experience name
+   cn_exp      =  'CYCLONE_<RESKM>' !  experience name
    nn_it000    =    1   !  first time step
-   nn_itend    =    288   !  last  time step (std 5840)
+   nn_itend    =    <NTS>   !  last  time step (std 5840)
    nn_date0    =    20100101   !  date at nit_0000 (format yyyymmdd) used if ln_rstart=F or (ln_rstart=T and nn_rstctl=0 or 1)
    nn_leapy    =       1   !  Leap year calendar (1) or not (0)
    ln_rstart   =  .false.   !  start from rest (F) or from a restart file (T)
@@ -19,22 +19,22 @@
       !                          !    = 2 nn_date0 read in restart  ; nn_it000 : check consistancy between namelist and restart
    nn_istate   =       0   !  output the initial state (1) or not (0)
    ln_rst_list = .false.   !  output restarts at list of times using nn_stocklist (T) or at set frequency with nn_stock (F)
-   nn_stock    = 288  !  frequency of creation of a restart file (modulo referenced to 1)
-   nn_write    = 288   !  frequency of write in the output file   (modulo referenced to nn_it000)
+   nn_stock    = <NTS>  !  frequency of creation of a restart file (modulo referenced to 1)
+   nn_write    = <NTS>   !  frequency of write in the output file   (modulo referenced to nn_it000)
    ln_mskland  = .false.   !  mask land points in NetCDF outputs
    ln_clobber  = .true.    !  clobber (overwrite) an existing file
 /
 !-----------------------------------------------------------------------
 &namdom        !   time and space domain
 !-----------------------------------------------------------------------
-   rn_Dt      = 600.      !  time step for the dynamics and tracer
+   rn_Dt      = <DT>.      !  time step for the dynamics and tracer
    ln_meshmask = .false.   !  =T create a mesh file
 /
 !-----------------------------------------------------------------------
 &namcfg        !   parameters of the configuration                      (default: use namusr_def in namelist_cfg)
 !-----------------------------------------------------------------------
    ln_read_cfg = .true.    !  (=T) read the domain configuration file
-      cn_domcfg = 'domain_cfg_CYCLONE_10km'  ! domain configuration filename
+      cn_domcfg = 'domain_cfg_CYCLONE_<RESKM>'  ! domain configuration filename
 /
 !!
 !!
@@ -70,13 +70,13 @@
    !___________!_________________________!___________________!___________!_____________!________!___________!__________________!__________!_______________!
    !           !  file name              ! frequency (hours) ! variable  ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
    !           !                         !  (if <0  months)  !   name    !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_usp      = 'ssx_CYCLONE_10km'  ,         -1.       , 'uos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
-   sn_vsp      = 'ssx_CYCLONE_10km'  ,         -1.       , 'vos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
-   sn_tem      = 'ssx_CYCLONE_10km'  ,         -1.       , 'tos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
-   sn_sal      = 'ssx_CYCLONE_10km'  ,         -1.       , 'sos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
-   sn_ssh      = 'ssx_CYCLONE_10km'  ,         -1.       , 'zos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
-   sn_e3t      = 'ssx_CYCLONE_10km'  ,         -1.       , 'e3t_m'   ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
-   sn_frq      = 'ssx_CYCLONE_10km'  ,         -1.       , 'frq_m'   ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_usp      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'uos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_vsp      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'vos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_tem      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'tos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_sal      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'sos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_ssh      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'zos'     ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_e3t      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'e3t_m'   ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
+   sn_frq      = 'ssx_CYCLONE_<RESKM>'  ,         -1.       , 'frq_m'   ,   .true.    , .true.,  'yearly'  ,    ''            ,    ''    ,    ''
 /
 !!
 !!
@@ -127,15 +127,15 @@
    !___________!____________!___________!__________!_____________!________!___________!_____________________________________________________________!__________!_______________!
    !           !  file name ! freq. (h) ! variable ! time interp.!  clim  ! 'yearly'/ !       weights filename                                      ! rotation ! land/sea mask !
    !           !            !           !   name   !   (logical) !  (T/F) ! 'monthly' !                                                             ! pairing  !    filename   !
-   sn_wndi = 'FATM_10m_CYCLONE_10km', -1.,  'u10m'   ,.true. , .true.  , 'yearly' , ''  ,''       , ''
-   sn_wndj = 'FATM_10m_CYCLONE_10km', -1.,  'v10m'   ,.true. , .true.  , 'yearly' , ''  ,''       , ''
-   sn_qsr  = 'FATM_10m_CYCLONE_10km', -1.,  'qdsw'   ,.false., .true.  , 'yearly' , '' , ''       , ''
-   sn_qlw  = 'FATM_10m_CYCLONE_10km', -1.,  'qdlw'   ,.false., .true.  , 'yearly' , '' , ''       , ''
-   sn_tair = 'FATM_10m_CYCLONE_10km', -1.,  't10m'   ,.true. , .true.  , 'yearly' , '' , ''       , ''
-   sn_humi = 'FATM_10m_CYCLONE_10km', -1.,  'q10m'   ,.true. , .true.  , 'yearly' , '' , ''       , ''
-   sn_prec = 'FATM_10m_CYCLONE_10km', -1.,  'fwtp'   ,.false., .true.  , 'yearly' , '' , ''       , ''
-   sn_snow = 'FATM_10m_CYCLONE_10km', -1.,  'fwsp'   ,.false., .true.  , 'yearly' , '' , ''       , ''
-   sn_slp  = 'FATM_10m_CYCLONE_10km', -1.,  'mslp'   ,.true. , .true.  , 'yearly' , '' , ''       , ''
+   sn_wndi = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'u10m'   ,.true. , .true.  , 'yearly' , ''  ,''       , ''
+   sn_wndj = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'v10m'   ,.true. , .true.  , 'yearly' , ''  ,''       , ''
+   sn_qsr  = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'qdsw'   ,.false., .true.  , 'yearly' , '' , ''       , ''
+   sn_qlw  = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'qdlw'   ,.false., .true.  , 'yearly' , '' , ''       , ''
+   sn_tair = 'FATM_10m_CYCLONE_<RESKM>', -1.,  't10m'   ,.true. , .true.  , 'yearly' , '' , ''       , ''
+   sn_humi = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'q10m'   ,.true. , .true.  , 'yearly' , '' , ''       , ''
+   sn_prec = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'fwtp'   ,.false., .true.  , 'yearly' , '' , ''       , ''
+   sn_snow = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'fwsp'   ,.false., .true.  , 'yearly' , '' , ''       , ''
+   sn_slp  = 'FATM_10m_CYCLONE_<RESKM>', -1.,  'mslp'   ,.true. , .true.  , 'yearly' , '' , ''       , ''
 /
 !!
 !!======================================================================

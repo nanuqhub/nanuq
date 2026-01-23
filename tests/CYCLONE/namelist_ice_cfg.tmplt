@@ -43,7 +43,7 @@
    !                                          !  when set to True, interpolation estimate of `A` and `h` @ F-points
    !                                          !  is done with WENO5-symetric rather thant the usual 4-surrounding-T-poi nt average...
    !                                          !  => costly but accurate !!!
-   cn_rmp_weno_wght = 'WENO5-SYM_weights_CYCLONE_10km.nc'       ! file in which WENO-symetric weights are read
+   cn_rmp_weno_wght = 'WENO5-SYM_weights_CYCLONE_<RESKM>.nc'       ! file in which WENO-symetric weights are read
 /
 !
 !------------------------------------------------------------------------------
@@ -84,12 +84,12 @@
       ln_adv_d_pra = .true.           !      use Prather advection scheme to advect damage (and stress components)
       ln_adv_d_wnx = .false.          !      use  WENO order X advection scheme to advect damage (and stress components)
       !                               !
-      rn_crndg      = 1.              ! Cross-Nudging coefficient [-]
+      rn_crndg      = 1.0             ! Cross-Nudging coefficient [-]
       !                               !
       rn_dmg_max     = 0.999999       !     upper-bound value to cap the damage to ! (~ 1 - eps )
       rn_C0          = -20.           ! compaction parameter "C" (Hibler's exponential)                              =  -20.
-      rn_alrlx       =   5.           ! `alpha` inherent to viscosity, Eq.10 of [Olason al.2022], used by Dansereau  =   5.
-      rn_btrlx       =   5.           ! `beta`: sort of an `alpha` to go in the exp[] of `lambda`, used by Olason Boutin =   5.
+      nn_alrlx       =   5            ! `alpha` inherent to viscosity, Eq.10 of [Olason al.2022], used by Dansereau  =   5.
+      nn_btrlx       =   5            ! `beta`: sort of an `alpha` to go in the exp[] of `lambda`, used by Olason Boutin =   5.
       !
       ! Ice cohesion:
       rn_c_ref       = 2.E6           ! cohesion value at the reference scale                      = 2.E6
@@ -149,15 +149,15 @@
    ! -- for nn_iceini_file = 1
    !       !  file name       ! frequency (hours) !  variable   ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
    !       !                  !  (if <0  months)  !    name     !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_hti = 'Ice_initialization_CYCLONE_10km.nc', -12. ,'hti'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_hts = 'Ice_initialization_CYCLONE_10km.nc', -12. ,'hts'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_ati = 'Ice_initialization_CYCLONE_10km.nc', -12. ,'ati'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_hti = 'Ice_initialization_CYCLONE_<RESKM>.nc', -12. ,'hti'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_hts = 'Ice_initialization_CYCLONE_<RESKM>.nc', -12. ,'hts'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_ati = 'Ice_initialization_CYCLONE_<RESKM>.nc', -12. ,'ati'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_smi = 'NOT USED'                     , -12. ,'smi'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tmi = 'NOT USED'                     , -12. ,'tmi'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tsu = 'NOT USED'                     , -12. ,'tsu'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tms = 'NOT USED'                     , -12. ,'tms'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    ! BBM:
-   sn_dmg = 'Ice_initialization_CYCLONE_10km.nc', -12. ,'dmg'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_dmg = 'Ice_initialization_CYCLONE_<RESKM>.nc', -12. ,'dmg'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    cn_dir='./'
 /
 !------------------------------------------------------------------------------
