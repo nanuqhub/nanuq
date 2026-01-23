@@ -1,0 +1,63 @@
+   !
+            zmW1 = REAL(pmlbc(ji,jj,1,3),wp) ; zmW2 = REAL(pmlbc(ji,jj,2,3),wp) ; zmW = MAX(zmW1,zmW2)
+            zmE1 = REAL(pmlbc(ji,jj,1,1),wp) ; zmE2 = REAL(pmlbc(ji,jj,2,1),wp) ; zmE = MAX(zmE1,zmE2)
+            !
+            zF(1) = (1._wp-zmW)  * pf(ji-2,jj) + zmW1 * pf(ji+1,jj) + zmW2 * pf(ji-1,jj)
+            !
+            zF(2) = (1._wp-zmW1) * pf(ji-1,jj) + zmW1 * pf(ji,jj)
+            !
+            zF(3) =                pf(ji,jj)
+            !
+            zF(4) = (1._wp-zmE1) * pf(ji+1,jj) + zmE1 * pf(ji,jj)
+            !
+            zF(5) = (1._wp-zmE)  * pf(ji+2,jj) + zmE1 * pf(ji-1,jj) + zmE2 * pf(ji+1,jj)
+            !
+
+
+            !  GENERIC:
+            !  ~~~~~~~~
+            !
+            !zF(kpw) =                pf(ji,jj)
+            !
+            !DO jp = 1, kpw-1
+            !
+            !   jm = kpw - jp
+            !
+            !   ! WENO5:                                     ! WENO7:                               
+            !   ! jp  |     zm0    |  zm1  |  zm2  |         ! jp  |     zm0    |  zm1  |  zm2  |  zm3  | =>mask
+            !   ! 1   | (1.-zmW )  | zmW1  | zmW2  |         ! 1   | (1.-zmW )  | zmW1  | zmW2  | zmW3  |
+            !   ! 2   | (1.-zmW1 ) | zmW1  |   0   |         ! 2   | (1.-zmW )  | zmW1  | zmW2  |   0   |
+            !   !                                            ! 3   | (1.-zmW1 ) | zmW1  |   0   |   0   |
+            !   !                                                                                                                ! jp   jm
+            !   zf(jp)     = (1._wp-zmW ) * pf(ji-jm,jj) + zmW1 * pf(ji+jm-1,jj) + zmW2 * pf(ji+jm-3,jj) + zmW3 * pf(ji+jm-5,jj) !  1   3   (1)      ! WENO7
+            !   zF(jp)     = (1._wp-zmW)  * pf(ji-jm,jj) + zmW1 * pf(ji+jm-1,jj) + zmW2 * pf(ji+jm-3,jj)                         !  1   2   (1)
+            !   zF(jp)     = (1._wp-zmW1) * pf(ji-jm,jj) + zmW1 * pf(ji+jm-1,jj)                                                 !  2   1   (2)
+            !
+            !   !--------------------------------------------------------------------------------------------------------------------------------------------
+            !   
+            !   ! WENO5:                                     ! WENO7:                               
+            !   ! jp  |     zp0    |  zp1  |  zp2  |         ! jp  |     zp0    |  zp1  |  zp2  |  zp3  | => mask
+            !   ! 1   | (1.-zmE1 ) | zmE1  |   0   |         ! 1   | (1.-zmE1 ) | zmE1  |   0   |   0   |
+            !   ! 2   | (1.-zmE )  | zmE1  | zmE2  |         ! 2   | (1.-zmE )  | zmE1  | zmE2  |   0   |               
+            !   !                                            ! 3   | (1.-zmE )  | zmE1  | zmE2  | zmE3  |
+            !   !
+            !   zF(kpw+jp) = (1._wp-zmE1) * pf(ji+jp,jj) + zmE1 * pf(ji-jp+1,jj)                                                 !  1   2   (4)
+            !   zF(kpw+jp) = (1._wp-zmE)  * pf(ji+jp,jj) + zmE1 * pf(ji-jp+1,jj) + zmE2 * pf(ji-jp+3,jj)                         !  2   1   (5)
+            !   zf(kpw+jp) = (1._wp-zmE ) * pf(ji+jp,jj) + zmE1 * pf(ji-jp+1,jj) + zmE2 * pf(ji-jp+3,jj) + zmE3 * pf(ji+jp+5,jj) !  3   1   (7)      ! WENO7
+            !END DO
+            
+            
+            ! WENO 7:
+            !zf1 = (1._wp-zmW ) * pf(ji-3,jj) + zmW1 * pf(ji+2,jj) + zmW2 * pf(ji,jj) + zmW3 * pf(ji-2,jj)
+            !                                                                                                                                 
+            !zf2 = (1._wp-zmW ) * pf(ji-2,jj) + zmW1 * pf(ji+1,jj) + zmW2 * pf(ji-1,jj)
+            !                                                                                                                                
+            !zf3 = (1._wp-zmW1) * pf(ji-1,jj) + zmW1 * pf(ji,jj)
+            !                                                                                                                                 
+            !zf4 =                pf(ji,jj)
+            !                                                                                                                                 
+            !zf5 = (1._wp-zmE1) * pf(ji+1,jj) + zmE1 * pf(ji,jj)
+            !                                                                                                                                 
+            !zf6 = (1._wp-zmE ) * pf(ji+2,jj) + zmE1 * pf(ji-1,jj) + zmE2 * pf(ji+1,jj)
+            !                                                                                                                                 
+            !zf7 = (1._wp-zmE ) * pf(ji+3,jj) + zmE1 * pf(ji-2,jj) + zmE2 * pf(ji,jj) + zmE3 * pf(ji+2,jj)

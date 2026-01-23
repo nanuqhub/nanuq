@@ -1,0 +1,39 @@
+# ADASTRA / brodeau intel
+
+%NCDF_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_intelv2_par
+%HDF5_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_intelv2_par
+%XIOS_HOME           /lus/store/CT1/hmg2840/brodeau/opt/xios-trunk_intelv2
+%OASIS_HOME 
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdff -lnetcdf -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+%FC                  ftn
+
+%FCFLAGS             -i4 -r8 -O3 -init=zero -init=arrays -fp-model strict
+
+###%FCFLAGS            -i4 -r8 -O0 -CB -g -traceback -init=zero -init=arrays -fp-model precise
+###%FCFLAGS          -i4 -r8 -O1 -g -traceback -init=zero -init=arrays -fp-model strict -CB -fpe0
+###%FCFLAGS          -i4 -r8 -O1 -check all -warn all -debug extended -C -g -traceback -init=zero -init=arrays -fp-model precise -ftrapuv -fpe0
+###%FCFLAGS            -i4 -r8 -O0 -CB -g -traceback -init=zero -init=arrays -fp-model precise -fpe0
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+%FPPFLAGS            -P  -traditional
+
+%LD                  ftn
+%LDFLAGS             -L${GCC_PREFIX}/lib64 -lstdc++
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  mpicc
+%CFLAGS              -O3

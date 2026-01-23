@@ -1,0 +1,24 @@
+            !! F-centric cell
+            !! ~~~~~~~~~~~~~~
+            zE  = rn_E0 * p1mdf(ji,jj) * pxpCf(ji,jj)
+
+            zdx = res_grd_loc_f(ji,jj)
+
+            zrr   = pSclH_f(ji,jj)    ! this is `SQRT( rn_l_ref/dx ) * h_f`
+            zCohe = rn_c_ref * zrr
+            zNlim = rn_Nref  * zrr    ! `N` of [Eq.29]
+
+            zsqrtE = SQRT(MAX(zE,epsi06))                               ! `sqrt(E)` (damaged ice)...
+            zTd    = MAX( zdx * rsqrt_nu_rhoi / zsqrtE , epsi06 )       ! characteristic time for damage [s] |  (we shall divide by it)...
+
+            zsigI  = 0.5_wp * (zs11f + zs22f)
+            zsigII = sigmaII_sclr(zs11f, zs22f, zs12f)
+
+            zrr = mc_incrmt( zsigI, zsigII, zNlim, zCohe, zTd )
+
+            zrr = zrr * pdt
+
+            p1mdf(ji,jj)   = MIN( MAX( p1mdf(ji,jj) - p1mdf(ji,jj) * zrr , r_dmd_min ) , 1._wp )
+            psgmf(ji,jj,1) =               zs11f    -     zs11f    * zrr
+            psgmf(ji,jj,2) =               zs22f    -     zs22f    * zrr
+            psgmt(ji,jj,3) =               zs12f    -     zs12f    * zrr

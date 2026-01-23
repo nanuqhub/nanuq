@@ -1,0 +1,20 @@
+            !! Fill required T-point arrays:
+            zs11 = psgmt(ji,jj,1)
+            zs22 = psgmt(ji,jj,2)
+            zs12 = psgmf(ji,jj,3)
+            !
+            zE = rn_E0 * p1mdt(ji,jj) * pxpCt(ji,jj)
+            !
+            zdx = res_grd_loc_t(ji,jj)
+            !
+            zsqrtE = SQRT(MAX(zE,epsi06))                               ! `sqrt(E)` (damaged ice)...
+            zTd_t(ji,jj) = MAX( zdx * rsqrt_nu_rhoi / zsqrtE , epsi06 )       ! characteristic time for damage [s] |  (we shall divide by it)...
+            !
+            zrr          = pSclH_t(ji,jj)
+            zCh_t(ji,jj) = rn_c_ref * zrr
+            zNl_t(ji,jj) = rn_Nref  * zrr
+            !
+            zSI_h_t(ji,jj)  = 0.5_wp * (zs11 + zs22)  !#LOLOsh rm `* h`
+            zrr   =           zs11 - zs22
+            zSII_h_t(ji,jj) = SQRT( 0.25_wp*zrr*zrr +  zs12*zs12 )  !#LOLOsh rm `* h`
+            !

@@ -1,0 +1,10 @@
+               ! *** F-centric cell:
+               !                              !--- ds11/dx + ds12/dy
+               zdivSx_f = ( ( pSf(ji,jj,1)  *e2f2(ji,jj)   - pSf(ji-1,jj,1)*e2f2(ji-1,jj) ) * r1_e2v(ji,jj) &
+                  &       + ( pSf(ji,jj+1,3)*e1t2(ji,jj+1) - pSf(ji,jj,3)  *e1t2(ji,jj)   ) * r1_e1v(ji,jj) &
+                  &             ) * r1_e1e2v(ji,jj)
+               !
+               !                              !--- ds22/dy + ds12/dx
+               zdivSy_f = ( ( pSf(ji,jj,2)  *e1f2(ji,jj)   - pSf(ji,jj-1,2)*e1f2(ji,jj-1) ) * r1_e1u(ji,jj) &
+                  &       + ( pSf(ji+1,jj,3)*e2t2(ji+1,jj) - pSf(ji,jj,3)  *e2t2(ji,jj)   ) * r1_e2u(ji,jj) &
+                  &             ) * r1_e1e2u(ji,jj)

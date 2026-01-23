@@ -1,0 +1,24 @@
+            !
+            zmS1 = REAL(pmlbc(ji,jj,1,4),wp)
+            zmS2 = REAL(pmlbc(ji,jj,2,4),wp)
+            zmS3 = REAL(pmlbc(ji,jj,3,4),wp)
+            zmS  = MAX(zmS1,zmS2,zmS3)
+            zmN1 = REAL(pmlbc(ji,jj,1,2),wp)
+            zmN2 = REAL(pmlbc(ji,jj,2,2),wp)
+            zmN3 = REAL(pmlbc(ji,jj,3,2),wp)
+            zmN  = MAX(zmN1,zmN2,zmN3)
+            !
+            zF1 = (1._wp-zmS ) * pf(ji,jj-3) + zmS1 * pf(ji,jj+2) + zmS2 * pf(ji,jj) + zmS3 * pf(ji,jj-2)
+            !
+            zF2 = (1._wp-zmS ) * pf(ji,jj-2) + zmS1 * pf(ji,jj+1) + zmS2 * pf(ji,jj-1)
+            !
+            zF3 = (1._wp-zmS1) * pf(ji,jj-1) + zmS1 * pf(ji,jj)
+            !
+            zF4 =                pf(ji,jj)
+            !
+            zF5 = (1._wp-zmN1) * pf(ji,jj+1) + zmN1 * pf(ji,jj)
+            !
+            zF6 = (1._wp-zmN)  * pf(ji,jj+2) + zmN1 * pf(ji,jj-1) + zmN2 * pf(ji,jj+1)
+            !
+            zF7 = (1._wp-zmN ) * pf(ji,jj+3) + zmN1 * pf(ji,jj-2) + zmN2 * pf(ji,jj) + zmN3 * pf(ji,jj+2)
+            !

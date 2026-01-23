@@ -1,0 +1,41 @@
+# Merlat / Debian - intel 2020 -- NANUQ standalone
+
+%NCDF_HOME           /opt/hdf5_netcdf4_intel_par
+%HDF5_HOME           /opt/hdf5_netcdf4_intel_par
+%XIOS_HOME           /opt/xios-trunk
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L%HDF5_HOME/lib -lhdf5_hl -lhdf5
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+### DEBUG !!! -check pointers -check uninit -fpe0 -traceback -traceback -check pointers -check uninit
+############## -i4 -r8 -O0 -g -fpe0 -traceback -CB  -fp-model strict -xAVX -fno-alias -init=zero -init=arrays
+
+%FC                  mpiifx
+
+%FCFLAGS             -i4 -r8 -O3 -fp-model strict -xHOST -init=zero -init=arrays
+##%FCFLAGS             -i4 -r8 -O0  -g -init=zero -init=arrays -traceback -CB -fpe0
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+
+%FPPFLAGS            -P -traditional
+#  -D_TRDBG
+
+###%FPPFLAGS            -P -traditional -Dkey_mpi_off -D_OPENACC
+
+%LD                  mpiifx
+%LDFLAGS             -lstdc++
+
+%AR                  ar
+%ARFLAGS             rs
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  mpiicx
+%CFLAGS              -O2

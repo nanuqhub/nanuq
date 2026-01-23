@@ -1,0 +1,205 @@
+                        !----------------------------------------!
+                        !                                        !
+                        !      Conduction flux is on             !
+                        !                                        !
+                        !----------------------------------------!
+                        !
+                        ! ==> we use a modified BL99 solver with conduction flux (qcn_ice) as forcing term
+                        !
+
+                        !--------------------------------------
+                        ! 5) Sea ice specific heat, eta factors
+                        !--------------------------------------
+                        IF( h_i(ji,jj,jl_cat) > 0._wp ) THEN
+                           z1_h_i = 1._wp / zh_i                       !       it must be very small
+                           !$acc loop seq
+                           DO jk = 1, nlay_i
+                              zcpi = rcpi + zgamma * sz_i(ji,jj,jk,jl_cat) / MAX( ( t_i(ji,jj,jk,jl_cat) - rt0 ) * ( ztiold(jk) - rt0 ), epsi10 )
+                              zeta_i(jk) = rDt_ice * r1_rhoi * z1_h_i / zcpi
+                           END DO
+                        ELSE
+                           !$acc loop seq
+                           DO jk = 1, nlay_i
+                              zeta_i(jk) = 0._wp
+                           END DO                          
+                        ENDIF
+                        IF( h_s(ji,jj,jl_cat) > 0._wp ) THEN
+                           z1_h_s = 1._wp / zh_s                       !       it must be very small
+                           !$acc loop seq
+                           DO jk = 1, nlay_s
+                              zeta_s(jk) = rDt_ice * r1_rhos * r1_rcpi * z1_h_s
+                           END DO
+                        ELSE
+                           !$acc loop seq
+                           DO jk = 1, nlay_s
+                              zeta_s(jk) = 0._wp
+                           END DO
+                        ENDIF
+
+                        !----------------------------
+                        ! 6) surface flux computation
+                        !----------------------------
+                        ! update of the non solar flux according to the update in T_su
+                        ! Variable used after iterations
+                        ! Value must be frozen after convergence for MPP independance reason
+
+                        ! before temperatures
+                        !$acc loop seq
+                        DO jk = 1, nlay_i
+                           ztib(jk) = t_i(ji,jj,jk,jl_cat)
+                        END DO
+                        !$acc loop seq
+                        DO jk = 1, nlay_s
+                           ztsb(jk) = t_s(ji,jj,jk,jl_cat)
+                        END DO
+
+                        !----------------------------
+                        ! 7) tridiagonal system terms
+                        !----------------------------
+                        ! layer denotes the number of the layer in the snow or in the ice
+                        ! jm denotes the reference number of the equation in the tridiagonal
+                        ! system, terms of tridiagonal system are indexed as following :
+                        ! 1 is subdiagonal term, 2 is diagonal and 3 is superdiagonal one
+
+                        ! ice interior terms (top equation has the same form as the others)
+                        !$acc loop seq
+                        DO jk = 1, nlay_i+nlay_s+1
+                           ztrid(jk,1)  = 0._wp
+                           ztrid(jk,2)  = 0._wp
+                           ztrid(jk,3)  = 0._wp
+                           zindterm(jk) = 0._wp
+                           zindtbis(jk) = 0._wp
+                           zdiagbis(jk) = 0._wp
+                        END DO
+
+                        !$acc loop seq
+                        DO jm = nlay_s + 2, nlay_s + nlay_i
+                           jk = jm - nlay_s - 1
+                           ztrid   (jm,1) =       - zeta_i(jk) *   zkappa_i(jk-1)
+                           ztrid   (jm,2) = 1._wp + zeta_i(jk) * ( zkappa_i(jk-1) + zkappa_i(jk) )
+                           ztrid   (jm,3) =       - zeta_i(jk) *                       zkappa_i(jk)
+                           zindterm(jm)   = ztiold(jk) + zeta_i(jk) * zradab_i(jk)
+                        END DO
+
+                        ! ice bottom term
+                        jm =  nlay_s + nlay_i + 1
+                        ztrid   (jm,1) =       - zeta_i(nlay_i) *   zkappa_i(nlay_i-1)
+                        ztrid   (jm,2) = 1._wp + zeta_i(nlay_i) * ( zkappa_i(nlay_i-1) + zkappa_i(nlay_i) * zg1 )
+                        ztrid   (jm,3) = 0._wp
+                        zindterm(jm)   = ztiold(nlay_i) + zeta_i(nlay_i) *  &
+                           &         ( zradab_i(nlay_i) + zkappa_i(nlay_i) * zg1 * t_bo(ji,jj) )
+
+                        !                                      !---------------------!
+                        IF( h_s(ji,jj,jl_cat) > 0._wp ) THEN   !  snow-covered cells !
+                           !                                   !---------------------!
+                           ! snow interior terms (bottom equation has the same form as the others)
+                           !$acc loop seq
+                           DO jm = 3, nlay_s + 1
+                              jk = jm - 1
+                              ztrid   (jm,1) =       - zeta_s(jk) *   zkappa_s(jk-1)
+                              ztrid   (jm,2) = 1._wp + zeta_s(jk) * ( zkappa_s(jk-1) + zkappa_s(jk) )
+                              ztrid   (jm,3) =       - zeta_s(jk) *                       zkappa_s(jk)
+                              zindterm(jm)   = ztsold(jk) + zeta_s(jk) * zradab_s(jk)
+                           END DO
+
+                           ! case of only one layer in the ice (ice equation is altered)
+                           IF( nlay_i == 1 ) THEN
+                              ztrid   (nlay_s+2,3) = 0._wp
+                              zindterm(nlay_s+2)   = zindterm(nlay_s+2) + zeta_i(1) * zkappa_i(1) * t_bo(ji,jj)
+                           ENDIF
+
+                           jm_min = 2
+                           jm_max = nlay_i + nlay_s + 1
+
+                           ! first layer of snow equation
+                           ztrid   (2,1) = 0._wp
+                           ztrid   (2,2) = 1._wp + zeta_s(1) * zkappa_s(1)
+                           ztrid   (2,3) =       - zeta_s(1) * zkappa_s(1)
+                           zindterm(2)   = ztsold(1) + zeta_s(1) * ( zradab_s(1) + qcn_ice(ji,jj,jl_cat) )
+
+                           !                            !---------------------!
+                        ELSE                            ! cells without snow  !
+                           !                            !---------------------!
+                           jm_min = nlay_s + 2
+                           jm_max = nlay_i + nlay_s + 1
+
+                           ! first layer of ice equation
+                           ztrid   (jm_min,1) = 0._wp
+                           ztrid   (jm_min,2) = 1._wp + zeta_i(1) * zkappa_i(1)
+                           ztrid   (jm_min,3) =       - zeta_i(1) * zkappa_i(1)
+                           zindterm(jm_min)   = ztiold(1) + zeta_i(1) * ( zradab_i(1) + qcn_ice(ji,jj,jl_cat) )
+
+                           ! case of only one layer in the ice (surface & ice equations are altered)
+                           IF( nlay_i == 1 ) THEN
+                              ztrid   (jm_min,1) = 0._wp
+                              ztrid   (jm_min,2) = 1._wp + zeta_i(1) * zkappa_i(1)
+                              ztrid   (jm_min,3) = 0._wp
+                              zindterm(jm_min)   = ztiold(1) + zeta_i(1) *  &
+                                 &                ( zradab_i(1) + zkappa_i(1) * t_bo(ji,jj) + qcn_ice(ji,jj,jl_cat) )
+                           ENDIF
+
+                        ENDIF
+                        !
+                        zindtbis(jm_min) = zindterm(jm_min)
+                        zdiagbis(jm_min) = ztrid   (jm_min,2)
+                        !
+                        !
+                        !------------------------------
+                        ! 8) tridiagonal system solving
+                        !------------------------------
+                        ! Solve the tridiagonal system with Gauss elimination method.
+                        ! Thomas algorithm, from Computational fluid Dynamics, J.D. ANDERSON, McGraw-Hill 1984
+                        !$acc loop seq
+                        DO jm = jm_min+1, jm_max
+                           zdiagbis(jm) = ztrid   (jm,2) - ztrid(jm,1) * ztrid   (jm-1,3) / zdiagbis(jm-1)
+                           zindtbis(jm) = zindterm(jm  ) - ztrid(jm,1) * zindtbis(jm-1  ) / zdiagbis(jm-1)
+                        END DO
+
+                        ! ice temperatures
+                        ! Variable used after iterations
+                        ! Value must be frozen after convergence for MPP independance reason
+                        t_i(ji,jj,nlay_i,jl_cat) = zindtbis(jm_max) / zdiagbis(jm_max)
+                        !$acc loop seq
+                        DO jm = nlay_i + nlay_s, nlay_s + 2, -1
+                           jk = jm - nlay_s - 1
+                           t_i(ji,jj,jk,jl_cat) = ( zindtbis(jm) - ztrid(jm,3) * t_i(ji,jj,jk+1,jl_cat) ) / zdiagbis(jm)
+                        END DO
+
+                        ! snow temperatures
+                        ! Variables used after iterations
+                        ! Value must be frozen after convergence for MPP independance reason
+                        IF( h_s(ji,jj,jl_cat) > 0._wp )    t_s(ji,jj,nlay_s,jl_cat) = ( zindtbis(nlay_s+1) - ztrid(nlay_s+1,3) * t_i(ji,jj,1,jl_cat) ) / zdiagbis(nlay_s+1)
+
+                        !$acc loop seq
+                        DO jm = nlay_s, 2, -1
+                           jk = jm - 1
+                           IF( h_s(ji,jj,jl_cat) > 0._wp ) t_s(ji,jj,jk,jl_cat) = ( zindtbis(jm) - ztrid(jm,3) * t_s(ji,jj,jk+1,jl_cat) ) / zdiagbis(jm)
+                        END DO
+                        !
+                        !--------------------------------------------------------------
+                        ! 9) Has the scheme converged?, end of the iterative procedure
+                        !--------------------------------------------------------------
+                        ! check that nowhere it has started to melt
+                        ! zdti_max is a measure of error, it has to be under zdti_bnd
+
+                        zdti_max = 0._wp
+
+                        IF( h_s(ji,jj,jl_cat) > 0._wp ) THEN
+                           !$acc loop seq
+                           DO jk = 1, nlay_s
+                              t_s(ji,jj,jk,jl_cat) = MAX( MIN( t_s(ji,jj,jk,jl_cat), rt0 ), rt0 - 100._wp )
+                              zdti_max      = MAX ( zdti_max , ABS( t_s(ji,jj,jk,jl_cat) - ztsb(jk) ) )
+                           END DO
+                        ENDIF
+                        !$acc loop seq
+                        DO jk = 1, nlay_i
+                           ztmelts       = -rTmlt * sz_i(ji,jj,jk,jl_cat) + rt0
+                           t_i(ji,jj,jk,jl_cat) =  MAX( MIN( t_i(ji,jj,jk,jl_cat), ztmelts ), rt0 - 100._wp )
+                           zdti_max      =  MAX( zdti_max, ABS( t_i(ji,jj,jk,jl_cat) - ztib(jk) ) )
+                        END DO
+
+                        ! convergence test
+                        !IF( ln_zdf_chkcvg ) THEN
+                        !   ztice_cvgerr(ji,jj,jl_cat) = zdti_max
+                        !   ztice_cvgstp(ji,jj,jl_cat) = REAL(iconv)
+                        !ENDIF

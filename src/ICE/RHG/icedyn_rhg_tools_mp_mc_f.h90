@@ -1,0 +1,23 @@
+
+            ! F-centric cell
+            ! ~~~~~~~~~~~~~~
+            zinc_sw = zinc_ne   ! SW point of F-point is the same as NE point of T-point => ji,jj for both T and F arrays !
+
+            ! Computing increment at NE:
+            zinc_ne = MC_INCRMT( zSI_h_mp(ji+1,jj+1,3), zSII_h_mp(ji+1,jj+1,3), zNl_mp(ji+1,jj+1,3), zCh_mp(ji+1,jj+1,3), zTd_mp(ji+1,jj+1,3) )
+            !
+            ! Computing increment at NW:
+            zinc_nw = MC_INCRMT( zSI_h_mp(ji  ,jj+1,4), zSII_h_mp(ji  ,jj+1,4), zNl_mp(ji  ,jj+1,4), zCh_mp(ji  ,jj+1,4), zTd_mp(ji  ,jj+1,4) )
+            !
+            ! Computing increment at SW:
+            !zinc_sw = MC_INCRMT( zSI_sw, zSII_sw, zNl_sw, zCh_sw, zTd_sw )
+            !
+            ! Computing increment at SE:
+            zinc_se = MC_INCRMT( zSI_h_mp(ji+1,jj,2), zSII_h_mp(ji+1,jj,2), zNl_mp(ji+1,jj,2), zCh_mp(ji+1,jj,2), zTd_mp(ji+1,jj,2) )
+            !
+            zinc = 0.25_wp * ( zinc_ne + zinc_nw + zinc_sw + zinc_se )
+            !
+            p1mdf(ji,jj)   = MIN( MAX( p1mdf(ji,jj)   - p1mdf(ji,jj)   * zinc * pdt , r_dmd_min ) , 1._wp )
+            psgmf(ji,jj,1) =           psgmf(ji,jj,1) - psgmf(ji,jj,1) * zinc * pdt
+            psgmf(ji,jj,2) =           psgmf(ji,jj,2) - psgmf(ji,jj,2) * zinc * pdt
+            psgmt(ji,jj,3) =           psgmt(ji,jj,3) - psgmt(ji,jj,3) * zinc * pdt

@@ -1,0 +1,95 @@
+# DIBARBOX / brodeau nvidia/NVFORTRAN
+
+##%CUDAV                12.8
+##%FCMPV                25.3
+##%OMPIV                4.1.5
+###%NVROOT               /opt/nvidia/hpc_sdk/Linux_x86_64/%FCMPV
+##%MPI_ROOT             %NVROOT/comm_libs/%CUDAV/openmpi4/openmpi-%OMPIV
+
+%MPI_ROOT             /opt/nvidia/hpc_sdk/Linux_x86_64/25.11/comm_libs/13.0/hpcx/hpcx-2.25.1/ompi
+
+%NCDF_HOME           /opt/hdf5_netcdf4_nvidia_par.NEW
+%HDF5_HOME           /opt/hdf5_netcdf4_nvidia_par.NEW
+%XIOS_HOME           /opt/xios2_trunk_nvidia.NEW
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+
+%FC                  %MPI_ROOT/bin/mpif90
+
+
+
+## -Minit-real=zero|snan
+##                     Initialize local real variables and arrays to a specific value below:
+##     zero            0.0
+##     snan            signaling NaNs
+
+###############################################################################################################################################
+### From Rémi Kazeroni
+#   %BASE_FFLAGS         -i4 -r8 -acc=gpu -gpu=cc70
+#   %PROD_FFLAGS         -gopt -traceback -fast -gpu=fastmath
+#   %DEV_FFLAGS          -Kieee -g -O1 -traceback -gpu=nofma -Mnofma -gpu=zeroinit -Minit-real=zero -Minit-integer=zero -Minit-logical=false
+###############################################################################################################################################
+
+
+%BASE_FFLAGS         -i4 -r8 -Minit-integer=zero -Minit-real=zero
+
+%PROD_FFLAGS         -O3
+
+%DEV_FFLAGS          -Kieee -g -O1 -traceback -Minit-logical=false -Minfo=accel -C -Ktrap=divz,fp,ovf -ffpe-trap=invalid,zero,overflow
+
+%ACC_BASE_FLAGS      -acc=gpu -gpu=cc89 -Minfo=accel
+%ACC_DEV_FLAGS       -gpu=nofma -Mnofma -gpu=zeroinit 
+%ACC_PROD_FLAGS      -fast -gpu=fastmath
+%ACC_FPP_FLAGS       -D_OPENACC
+
+#######################################################
+
+
+# Production with OpenACC:
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+%FPPFLAGS            -P  -traditional %ACC_FPP_FLAGS 
+%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS %ACC_BASE_FLAGS %ACC_PROD_FLAGS
+#
+# Debug with OpenACC:
+# ~~~~~~~~~~~~~~~~~~~
+#%FPPFLAGS            -P  -traditional %ACC_FPP_FLAGS -D_TRDBG
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS %ACC_BASE_FLAGS %ACC_DEV_FLAGS
+
+
+# Production on CPU only:
+# ~~~~~~~~~~~~~~~~~~~~~~~
+#%FPPFLAGS            -P  -traditional
+#%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
+#
+# Debug on CPU only:
+# ~~~~~~~~~~~~~~~~~~
+###%FPPFLAGS            -P  -traditional -D_TRDBG
+#%FPPFLAGS            -P  -traditional
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
+
+
+
+## -ffpe-trap=invalid|zero|overflow|underflow|inexact
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+
+%LD                  %MPI_ROOT/bin/mpif90 %FCFLAGS
+%LDFLAGS             -L%MPI_ROOT/compilers/lib -lacchost
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  %MPI_ROOT/bin/mpicc
+%CFLAGS              -O3

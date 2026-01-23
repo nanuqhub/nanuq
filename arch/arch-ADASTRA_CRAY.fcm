@@ -1,0 +1,38 @@
+# ADASTRA / brodeau CRAY
+
+%NCDF_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_cray_par
+%HDF5_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_cray_par
+%XIOS_HOME           /lus/store/CT1/hmg2840/brodeau/opt/xios-trunk_cray
+%OASIS_HOME 
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdff -lnetcdf -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+%FC                  ftn
+
+%FCFLAGS             -s integer32 -s real64 -O3 -ef -e0 -ez -hvector_classic -hflex_mp=strict -N1023 -M878
+
+#%FCFLAGS             -s integer32 -s real64 -O3  -em -e0 -ez -hvector_classic -hflex_mp=strict -N1023 -M878
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+%FPPFLAGS            -P  -traditional
+
+###%LD                  mpicc -Wl,"--allow-multiple-definition"
+%LD                  ftn
+%LDFLAGS             -L${GCC_PREFIX}/lib64 -lstdc++
+####-L/opt/cray/pe/mpich/8.1.30/ofi/crayclang/18.0/lib -lmpifort_cray
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  cc
+%CFLAGS              -O3

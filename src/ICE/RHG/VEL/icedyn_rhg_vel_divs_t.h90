@@ -1,0 +1,10 @@
+               ! *** T-centric cell:
+               !                              !--- ds11/dx + ds12/dy
+               zdivSx_t = ( ( pSt(ji+1,jj,1)*e2t2(ji+1,jj) - pSt(ji,jj,1)  *e2t2(ji,jj)   ) * r1_e2u(ji,jj) &
+                  &       + ( pSt(ji,jj,3)  *e1f2(ji,jj)   - pSt(ji,jj-1,3)*e1f2(ji,jj-1) ) * r1_e1u(ji,jj) &
+                  &             ) * r1_e1e2u(ji,jj)
+               !
+               !                              !--- ds22/dy + ds12/dx
+               zdivSy_t = ( ( pSt(ji,jj+1,2)*e1t2(ji,jj+1) - pSt(ji,jj,2)  *e1t2(ji,jj)   ) * r1_e1v(ji,jj) &
+                  &       + ( pSt(ji,jj,3)  *e2f2(ji,jj)   - pSt(ji-1,jj,3)*e2f2(ji-1,jj) ) * r1_e2v(ji,jj) &
+                  &             ) * r1_e1e2v(ji,jj)

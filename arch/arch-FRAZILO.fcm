@@ -1,0 +1,49 @@
+# FRAZILO (Mac Pro / Debian 12) / brodeau intel
+
+%NCDF_HOME           /opt/hdf5_netcdf4_intel_par
+%HDF5_HOME           /opt/hdf5_netcdf4_intel_par
+%XIOS_HOME           /opt/xios-trunk
+%OASIS_HOME 
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+%FC                  mpiifx
+
+%BASE_FFLAGS         -i4 -r8 -init=zero -init=arrays -fp-model strict
+
+%PROD_FFLAGS         -O3 -xHOST
+
+#%DEV_FFLAGS          -O1 -check all -warn all -debug extended -C -g -traceback -ftrapuv -fpe0
+%DEV_FFLAGS          -O0 -g -traceback -CB -fpe0  -ftrapuv
+
+
+# Production on CPU:
+# ~~~~~~~~~~~~~~~~~~
+%FPPFLAGS            -P  -traditional
+%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
+
+# Debug on CPU:
+# ~~~~~~~~~~~~~
+##%FPPFLAGS            -P  -traditional -D_TRDBG
+#%FPPFLAGS            -P  -traditional
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
+
+%CPP	             cpp
+
+%LD                  mpiifx
+
+%LDFLAGS             -lstdc++
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  mpiicx
+%CFLAGS              -O3

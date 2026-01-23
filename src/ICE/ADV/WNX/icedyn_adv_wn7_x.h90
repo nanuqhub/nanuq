@@ -1,0 +1,96 @@
+   SUBROUTINE wn7_x( ksgn, pmlbc, pe1p, pLW, pOW, pf, pfx )
+      !!----------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      INTEGER,                                          INTENT(in)  :: ksgn  ! => +1 if velocity is positive along x / -1 if negative
+      INTEGER(1), DIMENSION(jpi,jpj,nn_hls,4),          INTENT(in)  :: pmlbc      ! masks for solid LBCs
+      REAL(wp),   DIMENSION(jpi,jpj),                   INTENT(in)  :: pe1p ! `e1t` or `e1f` depending on the point
+      REAL(wp),   DIMENSION(jpi,jpj,2*kp_weno,nn_WNx),  INTENT(in)  :: pLW ! array of linear weights for given grid point type
+      REAL(wp),   DIMENSION(jpi,jpj,2*kp_weno),         INTENT(in)  :: pOW ! array of optima weights for given grid point type
+      REAL(wp),   DIMENSION(jpi,jpj),                   INTENT(in)  :: pf   ! field to advect
+      REAL(wp),   DIMENSION(jpi,jpj),                   INTENT(out) :: pfx
+      !!----------------------------------------------------------------------
+      REAL(wp) :: zStc1, zStc2, zStc3, zStc4
+      REAL(wp) :: zW1, zW2, zW3, zW4
+      REAL(wp) :: zIS1, zIS2, zIS3, zIS4 
+      REAL(wp) :: zAl1, zAl2, zAl3, zAl4
+      REAL(wp) :: zm, zp ! masks
+      REAL(wp) :: ztau7, z1_S
+      REAL(wp) :: zFm, zFp
+      REAL(wp) :: zmW, zmE, zmW1, zmW2, zmE1, zmE2
+      REAL(wp) :: zmW3, zmE3
+      REAL(wp) :: z1_h, zrhm, zrhp, zF1, zF2, zF3, zF4, zF5, zF6, zF7
+      INTEGER  :: kpw
+      INTEGER  :: kpos, ji, jj, jl0
+      !!----------------------------------------------------------------------
+      CALL timing_start('wn7_x')
+      !$acc data present( pmlbc, pe1p, pLW, pOW, pf, pfx )
+
+      kpw = kp_weno    ! order of each of the `kp_weno`th stencils used in the recosntruction
+
+      kpos = (ksgn + 1)/2    ! => +1 if velocity is positive along x / 0 otherwize
+      zp   = REAL( kpos , wp )  ! => +1. if velocity is positive along x / 0. otherwize
+      zm   = 1._wp - zp        ! => 1. if velocity is negative along x / 0. otherwize
+      jl0  = kpos * kpw ! which is the first `l` row ?
+
+      !$acc parallel loop collapse(2) 
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+
+            ! Get the required elements of `pf` for relevant stencils
+            ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#           include "icedyn_adv_wn7_x_stncl.h90"
+
+            z1_h = 1._wp / pe1p(ji,jj)
+            zrhm = pe1p(ji-1,jj) * z1_h
+            zrhp = pe1p(ji+1,jj) * z1_h
+
+            zFm = pLW(ji,jj,1,    1)*zF1 + pLW(ji,jj,1,    2)*zF2 + pLW(ji,jj,1,    3)*zF3 + pLW(ji,jj,1,    4)*zF4
+            zFp = pLW(ji,jj,1+kpw,1)*zF1 + pLW(ji,jj,1+kpw,2)*zF2 + pLW(ji,jj,1+kpw,3)*zF3 + pLW(ji,jj,1+kpw,4)*zF4
+            zIS1    = weno7_ISx_G( 0, zrhm, zrhp, zF3, zF4, zF5, zFm, zFp )
+            zStc1 = zm * zFm  +  zp * zFp
+
+            zFm = pLW(ji,jj,2,    2)*zF2 + pLW(ji,jj,2,    3)*zF3 + pLW(ji,jj,2,    4)*zF4 + pLW(ji,jj,2,    5)*zF5
+            zFp = pLW(ji,jj,2+kpw,2)*zF2 + pLW(ji,jj,2+kpw,3)*zF3 + pLW(ji,jj,2+kpw,4)*zF4 + pLW(ji,jj,2+kpw,5)*zF5
+            zIS2    = weno7_ISx_G( 1, zrhm, zrhp, zF3, zF4, zF5, zFm, zFp )
+            zStc2 = zm * zFm  +  zp * zFp
+
+            zFm = pLW(ji,jj,3,    3)*zF3 + pLW(ji,jj,3,    4)*zF4 + pLW(ji,jj,3,    5)*zF5 + pLW(ji,jj,3,    6)*zF6
+            zFp = pLW(ji,jj,3+kpw,3)*zF3 + pLW(ji,jj,3+kpw,4)*zF4 + pLW(ji,jj,3+kpw,5)*zF5 + pLW(ji,jj,3+kpw,6)*zF6
+            zIS3    = weno7_ISx_G( 2, zrhm, zrhp, zF3, zF4, zF5, zFm, zFp )
+            zStc3 = zm * zFm  +  zp * zFp
+
+            zFm = pLW(ji,jj,4,    4)*zF4 + pLW(ji,jj,4,    5)*zF5 + pLW(ji,jj,4,    6)*zF6 + pLW(ji,jj,4,    7)*zF7
+            zFp = pLW(ji,jj,4+kpw,4)*zF4 + pLW(ji,jj,4+kpw,5)*zF5 + pLW(ji,jj,4+kpw,6)*zF6 + pLW(ji,jj,4+kpw,7)*zF7
+            zIS4    = weno7_ISx_G( 3, zrhm, zrhp, zF3, zF4, zF5, zFm, zFp )
+            zStc4 = zm * zFm  +  zp * zFp
+
+            ! Compute the alphas
+            ! ~~~~~~~~~~~~~~~~~~
+            ztau7 = ABS( zIs1 - zIs4 )
+            !zalfa1 = zd1 * ( 1._wp + ztau7 / MAX(zbeta1, epsi20) )
+            zAl1 = pOW(ji,jj,jl0+1) * ( 1._wp + ztau7 / MAX(zIS1, epsi20) )
+            zAl2 = pOW(ji,jj,jl0+2) * ( 1._wp + ztau7 / MAX(zIS2, epsi20) )
+            zAl3 = pOW(ji,jj,jl0+3) * ( 1._wp + ztau7 / MAX(zIS3, epsi20) )
+            zAl4 = pOW(ji,jj,jl0+4) * ( 1._wp + ztau7 / MAX(zIS4, epsi20) )
+
+            ! Compute the WENO weights
+            ! ~~~~~~~~~~~~~~~~~~~~~~~~
+            z1_S = 1._wp / MAX( zAl1 + zAl2 + zAl3 + zAl4, epsi20 )
+            zW1 = zAl1 * z1_S
+            zW2 = zAl2 * z1_S
+            zW3 = zAl3 * z1_S
+            zW4 = zAl4 * z1_S
+
+            ! Solution
+            ! ~~~~~~~~
+            ! centered about i-1/2==i_u-1 (when `ksgn<0`) or i+1/2==i_u (when `ksgn>0`):
+            pfx(ji,jj) = zW1*zStc1 + zW2*zStc2 + zW3*zStc3 + zW4*zStc4
+            !
+         ENDDO
+      ENDDO
+      !$acc end parallel loop
+      
+      !$acc end data
+      CALL timing_stop('wn7_x')
+      !
+   END SUBROUTINE wn7_x

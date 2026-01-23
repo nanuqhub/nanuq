@@ -1,0 +1,106 @@
+   SUBROUTINE ice_var_salprof_gpu
+      !!-------------------------------------------------------------------
+      !!                ***  ROUTINE ice_var_salprof_gpu ***
+      !!
+      !! ** Purpose :   computes salinity profile in function of bulk salinity
+      !!
+      !! ** Method  : If bulk salinity greater than zsi1,
+      !!              the profile is assumed to be constant (S_inf)
+      !!              If bulk salinity lower than zsi0,
+      !!              the profile is linear with 0 at the surface (S_zero)
+      !!              If it is between zsi0 and zsi1, it is a
+      !!              alpha-weighted linear combination of s_inf and s_zero
+      !!
+      !! ** References : Vancoppenolle et al., 2007
+      !!-------------------------------------------------------------------
+      INTEGER  ::   ji, jj, jk, jl   ! dummy loop index
+      REAL(wp) ::   z1_dS, zalpha, ztmp1, ztmp2, zsal
+      REAL(wp), PARAMETER ::   zsi0 = 3.5_wp
+      REAL(wp), PARAMETER ::   zsi1 = 4.5_wp
+      !!-------------------------------------------------------------------
+      !$acc data present( s_i, sz_i, sss_s )
+      SELECT CASE ( nn_icesal )
+         !
+         !            !---------------------------------------!
+      CASE( 1 )       !  constant salinity in time and space  !
+         !            !---------------------------------------!
+         !$acc parallel loop collapse(3)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               DO jl = 1, jpl
+                  !
+                  s_i (ji,jj,jl)   = rn_icesal
+                  !
+                  !$acc loop seq
+                  DO jk=1, nlay_i
+                     sz_i(ji,jj,jk,jl) = rn_icesal
+                  END DO
+                  !
+               END DO
+            END DO
+         END DO
+         !$acc end parallel loop
+         !
+         !            !---------------------------------------------!
+      CASE( 2 , 4 )   !  time varying salinity with linear profile  !
+         !            !---------------------------------------------!
+         z1_dS = 1._wp / ( zsi1 - zsi0 )
+
+         !$acc parallel loop collapse(3)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               DO jl = 1, jpl
+                  !
+                  !$acc loop seq
+                  DO jk = 1, nlay_i
+                     !
+                     zsal = s_i(ji,jj,jl)
+                     !
+                     zalpha = MERGE( 0._wp  ,  MERGE( 1._wp  ,  (zsi1 - zsal) * z1_dS  ,  zsal <= zsi0 )  ,  zsal >= zsi1 )
+                     !
+                     zalpha = MERGE( 0._wp  ,  zalpha  ,  zsal >= 0.5_wp*rn_sinew*sss_s(ji,jj) )
+                     zalpha = MERGE( 0._wp  ,  zalpha  ,  zsal <= REAL(nlay_i, wp) * rn_simin  )
+                     !
+                     ! linear profile with 0 surface value
+                     sz_i(ji,jj,jk,jl) = zalpha * zsal * 2._wp * (REAL(jk,wp) - 0.5_wp) * r1_nlay_i + (1._wp - zalpha) * zsal
+                     !  => mean(sz_i(jk)) = s_i
+                  END DO
+                  !
+               END DO
+            ENDDO
+         ENDDO
+         !$acc end parallel loop
+         !
+         !            !-------------------------------------------!
+      CASE( 3 )       ! constant salinity with a fix profile      ! (Schwarzacher (1959) multiyear salinity profile
+         !            !-------------------------------------------!                                   (mean = 2.30)
+         !
+         !$acc parallel loop collapse(3)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               DO jl = 1, jpl
+                  s_i(ji,jj,jl) = 2.3_wp
+               END DO
+            END DO
+         END DO
+         !$acc end parallel loop
+
+         !$acc loop seq
+         DO jk = 1, nlay_i
+            ztmp1 = ( REAL(jk,wp) - 0.5_wp ) * r1_nlay_i
+            ztmp2 = 1.6_wp * (  1._wp - COS( rpi * ztmp1**(0.407_wp/(0.573_wp+ztmp1)) ) )
+            !$acc parallel loop collapse(3)
+            DO jj=Njs0-nn_hls, Nje0+nn_hls
+               DO ji=Nis0-nn_hls, Nie0+nn_hls
+                  DO jl = 1, jpl
+                     sz_i(ji,jj,jk,jl) =  ztmp2
+                  END DO
+               END DO
+            END DO
+            !$acc end parallel loop
+         END DO
+         !
+      END SELECT
+      !
+      !$acc end data
+   END SUBROUTINE ice_var_salprof_gpu

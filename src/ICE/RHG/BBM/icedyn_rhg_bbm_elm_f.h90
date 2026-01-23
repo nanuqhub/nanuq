@@ -1,0 +1,33 @@
+
+            !! F-centric cell
+            !! ~~~~~~~~~~~~~~
+            zxpC = pxpCf(ji,jj)  ! `expC` [Eq.8]
+
+            z1md = p1mdf(ji,jj)
+
+            zE = rn_E0 * z1md * zxpC                 ! elasticity [Pa]  `E = E0 * (1 - d) * exp[-C*(1-A)]`
+
+            zeta = rn_eta0 * z1md**nn_alrlx * zxpCfbet(ji,jj) ! viscosity [Pa.s]
+            zL = MAX( zeta / MAX( zE, epsi20 ) , pdt )        ! lambda
+
+            zsigI  = 0.5_wp *    ( psgmf(ji,jj,1) + psgmf(ji,jj,2) ) ! sigI: normal stress aka first invariant
+            zsigII = sigmaII_sclr( psgmf(ji,jj,1) , psgmf(ji,jj,2), psgmt(ji,jj,3) )
+
+            z1_zsigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
+            z1_zsigI = MERGE( 0._wp , z1_zsigI,  zsigI==0._wp )
+
+            ! As opposed to Olason et al 2022, for which we would simply have `zPmax = zPmax_f(ji,jj)`,
+            ! we want Pmax to be (zPmax_t) when PURE compression but decreases as shearing becomes
+            ! increasingly important w.r.t to compression:
+            zc0   = zsigII * z1_zsigI
+            !zang  = ATAN( zc0 )
+            !zmul  = COS( zang )
+            !zmul  = 1._wp / SQRT( 1._wp + zc0*zc0 )   ! COS( ARCTAN(x) ) == 1/SQRT(1 + x**2)
+            zmul  = 1._wp / ( 1._wp + 0.1_wp*zc0*zc0 )
+            zPmax = zPmax_f(ji,jj) * zmul ! `-P_max` (for sigI<0)
+
+            zc0 = MERGE( 1._wp, 0._wp,  zsigI<-epsi20 )
+
+            zPtld = -zc0 * MIN( zPmax*z1_zsigI , 1._wp )
+
+            zmul = MIN( zL/(zL + pdt*(1._wp + zPtld)) , 1._wp ) ! Multiplicator term [Eq.32]

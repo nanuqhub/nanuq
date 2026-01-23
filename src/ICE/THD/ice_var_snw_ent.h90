@@ -1,0 +1,52 @@
+               !============= BEGIN inlining of `snw_ent` for ice enthalpy ============
+               !! ==> input : zh_s, ze_s,
+               !! ==> output: e_s(ji,jj,1:nlay_s,jl)
+               !-------------------------------------------------------------------------------
+               !  1) Cumulative integral of snow enthalpy * thickness and layers interfaces
+               !--------------------------------------------------------------------------
+               zes_cum0(0) = 0._wp
+               zhs_cum0(0) = 0._wp
+               !$acc loop seq
+               DO jk0 = 1, nlay_s+1
+                  zes_cum0(jk0) = zes_cum0(jk0-1) + ze_s(jk0-1) * zh_s(jk0-1)
+                  zhs_cum0(jk0) = zhs_cum0(jk0-1) + zh_s(jk0-1)
+               END DO
+               !------------------------------------
+               !  2) Interpolation on the new layers
+               !------------------------------------
+               ! new layer thickesses
+               zhnew = 0._wp
+               !$acc loop seq
+               DO jk1 = 0, nlay_s
+                  zhnew = zhnew + zh_s(jk1)
+               END DO
+               zhnew = zhnew * r1_nlay_s
+               ! new layers interfaces
+               zhs_cum1(0) = 0._wp
+               zes_cum1(0) = 0._wp
+               !$acc loop seq
+               DO jk1 = 1, nlay_s
+                  zhs_cum1(jk1) = zhs_cum1(jk1-1) + zhnew
+                  zes_cum1(jk1) = 0._wp
+               END DO
+               ! new cumulative q*h => linear interpolation
+               !$acc loop seq
+               DO jk0 = 1, nlay_s+1
+                  !$acc loop seq
+                  DO jk1 = 1, nlay_s-1
+                     IF( zhs_cum1(jk1) <= zhs_cum0(jk0) .AND. zhs_cum1(jk1) > zhs_cum0(jk0-1) )   THEN
+                        zes_cum1(jk1) = ( zes_cum0(jk0-1) * ( zhs_cum0(jk0) - zhs_cum1(jk1  ) ) +  &
+                           &              zes_cum0(jk0  ) * ( zhs_cum1(jk1) - zhs_cum0(jk0-1) ) )  &
+                           &            / ( zhs_cum0(jk0) - zhs_cum0(jk0-1) )
+                     ENDIF
+                  END DO
+               END DO
+               ! to ensure that total heat content is strictly conserved, set:
+               zes_cum1(nlay_s) = zes_cum0(nlay_s+1)
+               ! new enthalpies
+               zdum = 1._wp / MAX( zhnew, epsi20 )
+               !$acc loop seq
+               DO jk1 = 1, nlay_s
+                  e_s(ji,jj,jk1,jl_cat) = MAX( 0._wp, zes_cum1(jk1) - zes_cum1(jk1-1) ) * zdum ! max for roundoff error
+               END DO
+               !============= END inlining of `snw_ent` for ice emthalpy ============

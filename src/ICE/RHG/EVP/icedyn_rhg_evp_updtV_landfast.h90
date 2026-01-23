@@ -1,0 +1,65 @@
+            !$acc parallel loop collapse(2) present( vtau_ice, av_i, V_oce, ff_v, ztauy_base, ztauy_bi )
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  !
+                  zmask = REAL(kmsk01y(ji,jj),wp)
+                  zA    = av_i(ji,jj)
+                  zVi   = v_ice(ji,jj)   ! V ice @ v-points!
+                  zUi   = uVice(ji,jj)   ! U ice @ v-points!
+                  zVo   = V_oce(ji,jj,2) ! V oce @ v-points
+                  zUo   = V_oce(ji,jj,3) ! U oce @ v-points
+                  zM_dt = zmV_dt(ji,jj)  ! M/dt
+                  !
+                  ztau_ai = 0.5_wp*( vtau_ice(ji,jj) + vtau_ice(ji,jj+1) ) * (2._wp-vmask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji,jj+1))
+                  ztau_ai = zA * ztau_ai
+                  !
+                  !                 !--- tau_io/(v_oce - v_ice)
+                  zt1 = zVi - zVo
+                  zt2 = zUi - zUo
+                  zTauO = zA * zrhoco * SQRT( zt1*zt1 + zt2*zt2 )
+                  !
+                  !                 !--- Ocean-to-Ice stress
+                  ztauy_oi = zTauO * ( zVo - zVi )
+                  !
+                  !                 !--- tau_bottom/v_ice
+                  zvel  = 5.e-05_wp + SQRT( v_ice(ji,jj) * v_ice(ji,jj) + uVice(ji,jj) * uVice(ji,jj) )
+                  zTauB = ztauy_base(ji,jj) / zvel
+                  !                 !--- OceanBottom-to-Ice stress
+                  ztauy_bi(ji,jj) = zTauB * v_ice(ji,jj)
+                  !
+                  !                 !--- Coriolis at V-points
+                  zcorio = -ff_v(ji,jj) * zUi
+                  !
+                  !                 !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
+                  zRHS = zfV(ji,jj) + ztau_ai + ridlzd*(zcorio + zspgV(ji,jj)) + ztauy_oi
+                  !
+                  !--- ice velocity using aEVP (Kimmritz et al 2016 & 2017)
+                  zbetav = MAX( zbeta(ji,jj), zbeta(ji,jj+1) )
+                  v_ice(ji,jj) = ( ( (  v_ice_b(ji,jj) + v_ice(ji,jj) * MAX( 0._wp, zbetav - zdtevp * rn_lf_relax ) & ! static friction => slow decrease to v=0
+                     &                                    ) / ( zbetav + 1._wp )                                    &
+                     &             ) * zmask + zVo * 0.01_wp * (1._wp - zmask)           & ! v_ice = v_oce/100 if mass < rmass_min & conc < rconc_min
+                     &           ) * REAL(kmsk00y(ji,jj),wp)
+                  !
+               END DO
+            END DO
+            !$acc end parallel loop
+
+# if defined _OPENACC
+            IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', v_ice )
+            IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', v_ice )
+# else
+            CALL lbc_lnk( 'icedyn_rhg_evp', v_ice,'V',-1._wp )
+# endif
+
+            ! Since we have just updated `v_ice` it is now time to update `vUice`:
+            !      energy conserving formulation:
+            !$acc parallel loop collapse(2)
+            DO jj=Njs0-nn_hls+1, Nje0+nn_hls
+               DO ji=Nis0-nn_hls, Nie0+nn_hls-1
+                  vUice(ji,jj) = 0.25_wp * r1_e1u(ji,jj) * umask(ji,jj,1) &
+                     &           * ( e1v(ji,jj)*v_ice(ji,jj) + e1v(ji,jj-1)*v_ice(ji,jj-1) + e1v(ji+1,jj)*v_ice(ji+1,jj) + e1v(ji+1,jj-1)*v_ice(ji+1,jj-1) )
+               END DO
+            END DO
+            !$acc end parallel loop
+
+            !LOLOfixme lbc_lnk ? Probably of for now with `nn_hls=3` !

@@ -1,0 +1,20 @@
+            !
+            zmW1 = REAL(pmlbc(ji,jj,1,3),wp) ; zmW2 = REAL(pmlbc(ji,jj,2,3),wp) ; zmW = MAX(zmW1,zmW2)
+            zmE1 = REAL(pmlbc(ji,jj,1,1),wp) ; zmE2 = REAL(pmlbc(ji,jj,2,1),wp) ; zmE = MAX(zmE1,zmE2)
+            zOL  = REAL(pmlbc(ji+1,jj,1,3),wp) ; ! => 1 if `ji` is the first land point of a western boundary
+            !
+            zF(1) = (1._wp-zOL) * ( (1._wp-zmW)  * pf(ji-2,jj) + zmW1 * pf(ji+1,jj) + zmW2 * pf(ji-1,jj) ) + zOL * pf(ji+3,jj)
+            !
+            zF(2) = (1._wp-zOL) * ( (1._wp-zmW1) * pf(ji-1,jj) + zmW1 * pf(ji,jj)                        ) + zOL * pf(ji+2,jj)
+            !
+            zF(3) = (1._wp-zOL) *                pf(ji,jj)                                                 + zOL * pf(ji+1,jj)
+            !
+            zF(4) = (1._wp-zmE1) * pf(ji+1,jj) + zmE1 * pf(ji,jj)
+            !
+            zF(5) = (1._wp-zmE)  * pf(ji+2,jj) + zmE1 * pf(ji-1,jj) + zmE2 * pf(ji+1,jj)
+            !
+            ! From biased WENO7:
+            zmE3 = REAL(pmlbc(ji,jj,3,1),wp)
+            zmE  = MAX(zmE1,zmE2,zmE3)
+            zF(6) = (1._wp-zmE ) * pf(ji+3,jj) + zmE1 * pf(ji-2,jj) + zmE2 * pf(ji,jj) + zmE3 * pf(ji+2,jj)
+            !

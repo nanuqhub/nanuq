@@ -1,0 +1,19 @@
+
+            !! Strain rate components at F-points
+            !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            zmul = 0.5_wp * r1_e1e2f(ji,jj)
+            zmsk = zmul * fmask(ji,jj,1)        ! actual mask containing right values for shear boundary conditions
+            zmul = zmul * xmskf(ji,jj)
+
+            !! Divergence at cgt-points, `dU/dx + dV/dy` :
+            zE1 = (   e2v(ji+1,jj)*pV4(ji+1,jj,3) - e2v(ji,jj)*pV4(ji,jj,3) &
+               &    + e1u(ji,jj+1)*pV4(ji,jj+1,4) - e1u(ji,jj)*pV4(ji,jj,4) )
+
+            !! Tension at cgt-points, `dU/dx - dV/dy` :
+            zE2 = (  ( pV4(ji+1,jj,3)/e2v(ji+1,jj) - pV4(ji,jj,3)/e2v(ji,jj) ) * e2f2(ji,jj) &
+               &    -( pV4(ji,jj+1,4)/e1u(ji,jj+1) - pV4(ji,jj,4)/e1u(ji,jj) ) * e1f2(ji,jj) )
+
+            ze11f = zmul * ( zE1 + zE2 )
+            ze22f = zmul * ( zE1 - zE2 )
+            ze12f = zmsk * (  ( pV4(ji,jj+1,1)/e1u(ji,jj+1) - pV4(ji,jj,1)/e1u(ji,jj) ) * e1f2(ji,jj) &
+               &            + ( pV4(ji+1,jj,2)/e2v(ji+1,jj) - pV4(ji,jj,2)/e2v(ji,jj) ) * e2f2(ji,jj)  )

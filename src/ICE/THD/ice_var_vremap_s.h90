@@ -1,0 +1,52 @@
+               !============= BEGIN inlining of `ice_var_vremap` for ice salt content ============
+               !! ==> input : zh_i_o, zs_i_o,
+               !! ==> output: sz_i(ji,jj,1:nlay_i,jl_cat)
+               !-------------------------------------------------------------------------------
+               !  1) Cumulative integral of old salt * thickness and layers interfaces
+               !-------------------------------------------------------------------------------
+               zxi_cum0(0) = 0._wp
+               zhi_cum0(0) = 0._wp
+               !$acc loop seq
+               DO jk0 = 1, nlay_i+2
+                  zxi_cum0(jk0) = zxi_cum0(jk0-1) + zs_i_o(jk0-1)
+                  zhi_cum0(jk0) = zhi_cum0(jk0-1) + zh_i_o(jk0-1)
+               END DO
+               !------------------------------------
+               !  2) Interpolation on the new layers
+               !------------------------------------
+               ! new layer thickesses
+               zhnew = 0._wp
+               !$acc loop seq
+               DO jk1=0, nlay_i+1
+                  zhnew = zhnew + zh_i_o(jk1)
+               END DO
+               zhnew = zhnew * r1_nlay_i
+               ! new layers interfaces
+               zhi_cum1(0) = 0._wp
+               zxi_cum1(0) = 0._wp
+               !$acc loop seq
+               DO jk1 = 1, nlay_i
+                  zhi_cum1(jk1) = zhi_cum1(jk1-1) + zhnew
+                  zxi_cum1(jk1) = 0._wp
+               END DO
+               ! new cumulative q*h => linear interpolation
+               !$acc loop seq
+               DO jk0 = 1, nlay_i+2
+                  !$acc loop seq
+                  DO jk1 = 1, nlay_i-1
+                     IF( zhi_cum1(jk1) <= zhi_cum0(jk0) .AND. zhi_cum1(jk1) > zhi_cum0(jk0-1) ) THEN
+                        zdum = 1._wp / ( zhi_cum0(jk0) - zhi_cum0(jk0-1) )
+                        zxi_cum1(jk1) = ( zxi_cum0(jk0-1) * ( zhi_cum0(jk0) - zhi_cum1(jk1  ) ) +  &
+                           &              zxi_cum0(jk0  ) * ( zhi_cum1(jk1) - zhi_cum0(jk0-1) ) ) * zdum
+                     ENDIF
+                  END DO
+               END DO
+               ! to ensure that total salt content is strictly conserved, set:
+               zxi_cum1(nlay_i) = zxi_cum0(nlay_i+2)
+               ! new salinities
+               zdum = 1._wp / MAX( zhnew, epsi20 )
+               !!%acc loop seq
+               !DO jk1 = 1, nlay_i
+               !   sz_i(ji,jj,jk1,jl_cat) = MAX( 0._wp, zxi_cum1(jk1) - zxi_cum1(jk1-1) ) * zdum ! max for roundoff error
+               !END DO
+               !============= END inlining of `ice_var_vremap` for ice salt content ============

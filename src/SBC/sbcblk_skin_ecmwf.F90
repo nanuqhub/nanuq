@@ -1,0 +1,255 @@
+MODULE sbcblk_skin_ecmwf
+   !!======================================================================
+   !!                   ***  MODULE  sbcblk_skin_ecmwf  ***
+   !!
+   !!   Module that gathers the cool-skin and warm-layer parameterization used
+   !!   by the IFS at ECMWF (recoded from scratch =>
+   !!   https://github.com/brodeau/aerobulk)
+   !!
+   !!  Mainly based on Zeng & Beljaars, 2005 with the more recent add-up from
+   !!  Takaya et al., 2010 when it comes to the warm-layer parameterization
+   !!  (contribution of extra mixing due to Langmuir circulation)
+   !!
+   !!  - Zeng X., and A. Beljaars, 2005: A prognostic scheme of sea surface skin
+   !!    temperature for modeling and data assimilation. Geophysical Research
+   !!    Letters, 32 (14) , pp. 1-4.
+   !!
+   !!  - Takaya, Y., J.-R. Bildot, A. C. M. Beljaars, and P. A. E. M. Janssen,
+   !!    2010: Refinements to a prognostic scheme of skin sea surface
+   !!    temperature. J. Geophys. Res., 115, C06009, doi:10.1029/2009JC005985
+   !!
+   !!   Most of the formula are taken from the documentation of IFS of ECMWF
+   !!            (cycle 40r1) (avaible online on the ECMWF's website)
+   !!
+   !!   Routine 'sbcblk_skin_ecmwf' also maintained and developed in AeroBulk (as
+   !!            'mod_skin_ecmwf')
+   !!    (https://github.com/brodeau/aerobulk)
+   !!
+   !! ** Author: L. Brodeau, November 2019 / AeroBulk (https://github.com/brodeau/aerobulk)
+   !!----------------------------------------------------------------------
+   !! History :  4.0  ! 2019-11  (L.Brodeau)   Original code
+   !!            4.2  ! 2020-12  (L. Brodeau) Introduction of various air-ice bulk parameterizations + improvements
+   !!----------------------------------------------------------------------
+   USE dom_oce         ! ocean space and time domain
+   USE phycst          ! physical constants
+   USE sbc_oce         ! Surface boundary condition: ocean fields
+
+   USE sbc_phy         ! Catalog of functions for physical/meteorological parameters in the marine boundary layer
+
+   USE oss_nnq , ONLY : ssst, dT_cs, dT_wl, Hz_wl
+   
+   USE lib_mpp         ! distribued memory computing library
+   USE in_out_manager  ! I/O manager
+   USE lib_fortran     ! to use key_nosignedzero
+
+   IMPLICIT NONE
+
+   PRIVATE
+
+   PUBLIC :: CS_ECMWF, WL_ECMWF
+
+   REAL(wp), PARAMETER         :: zRhoCp_w = rho0_w*rCp0_w
+   !
+   REAL(wp), PARAMETER         :: rNuwl0 = 0.5  !: Nu (exponent of temperature profile) Eq.11
+   !                                            !: (Zeng & Beljaars 2005) !: set to 0.5 instead of
+   !                                            !: 0.3 to respect a warming of +3 K in calm
+   !                                            !: condition for the insolation peak of +1000W/m^2
+   !!----------------------------------------------------------------------
+
+CONTAINS
+
+   SUBROUTINE CS_ECMWF( pQsw, pQnsol, pustar, pSST,  pdT_cs )
+      !!---------------------------------------------------------------------
+      !!
+      !! Cool-skin parameterization, based on Fairall et al., 1996:
+      !!
+      !!  - Zeng X., and A. Beljaars, 2005: A prognostic scheme of sea surface
+      !!    skin temperature for modeling and data assimilation. Geophysical
+      !!    Research Letters, 32 (14) , pp. 1-4.
+      !!
+      !!------------------------------------------------------------------
+      !!
+      !!  **   INPUT:
+      !!     *pQsw*       surface net solar radiation into the ocean     [W/m^2] => >= 0 !
+      !!     *pQnsol*     surface net non-solar heat flux into the ocean [W/m^2] => normally < 0 !
+      !!     *pustar*     friction velocity u*                           [m/s]
+      !!     *pSST*       bulk SST (taken at depth h_sst)          [K]
+      !!------------------------------------------------------------------
+      !%acc routine
+      REAL(wp), INTENT(in) :: pQsw   ! net solar a.k.a shortwave radiation into the ocean (after albedo) [W/m^2]
+      REAL(wp), INTENT(in) :: pQnsol ! non-solar heat flux to the ocean [W/m^2]
+      REAL(wp), INTENT(in) :: pustar ! friction velocity, temperature and humidity (u*,t*,q*)
+      REAL(wp), INTENT(in) :: pSST   ! bulk SST [K]
+      REAL(wp), INTENT(out):: pdT_cs !: dT due to cool-skin effect => temperature difference between
+      !!                             !: air-sea interface (z=0) and right below viscous layer (z=delta)
+      !!---------------------------------------------------------------------
+      INTEGER  :: jc
+      REAL(wp) :: zQabs, zdelta, zfr
+      !!---------------------------------------------------------------------
+      zQabs = pQnsol ! first guess of heat flux absorbed within the viscous sublayer of thicknes delta,
+      !              !   => we DO not miss a lot assuming 0 solar flux absorbed in the tiny layer of thicknes zdelta...
+
+      zdelta = delta_skin_layer_sclr( alpha_sw(pSST), zQabs, pustar )
+
+      DO jc = 1, 4 ! because implicit in terms of zdelta...
+         ! Solar absorption, Eq.(5) Zeng & Beljaars, 2005:
+         zfr = MAX( 0.065_wp + 11._wp*zdelta - 6.6E-5_wp/zdelta*(1._wp - EXP(-zdelta/8.E-4_wp)) , 0.01_wp )
+         !              =>  (WARNING: 0.065 rather than 0.137 in Fairal et al. 1996)
+         zQabs = pQnsol + zfr*pQsw
+         zdelta = delta_skin_layer_sclr( alpha_sw(pSST), zQabs, pustar )
+      END DO
+
+      pdT_cs = zQabs*zdelta/rk0_w   ! temperature increment, yes dT_cs can actually > 0, if Qabs > 0 (rare but possible!)
+
+   END SUBROUTINE CS_ECMWF
+
+
+   SUBROUTINE WL_ECMWF( ki, kj, pQsw, pQnsol, pustar, pSST, ph_sst ) !,  pustk )
+      !!---------------------------------------------------------------------
+      !!
+      !!  Warm-Layer scheme according to Zeng & Beljaars, 2005 (GRL)
+      !!  " A prognostic scheme of sea surface skin temperature for modeling and data assimilation "
+      !!
+      !!  STIL NO PROGNOSTIC EQUATION FOR THE DEPTH OF THE WARM-LAYER!
+      !!
+      !!    As included in IFS Cy45r1   /  E.C.M.W.F.
+      !!     ------------------------------------------------------------------
+      !!
+      !!  **   INPUT:
+      !!     *pQsw*       surface net solar radiation into the ocean     [W/m^2] => >= 0 !
+      !!     *pQnsol*     surface net non-solar heat flux into the ocean [W/m^2] => normally < 0 !
+      !!     *pustar*     friction velocity u*                           [m/s]
+      !!     *pSST*       bulk SST  (taken at depth ph_sst)         [K]
+      !!     *ph_sst*              [m]
+      !!---------------------------------------------------------------------
+      !%acc routine
+      INTEGER , INTENT(in) :: ki, kj
+      REAL(wp), INTENT(in) :: pQsw     ! surface net solar radiation into the ocean [W/m^2]     => >= 0 !
+      REAL(wp), INTENT(in) :: pQnsol   ! surface net non-solar heat flux into the ocean [W/m^2] => normally < 0 !
+      REAL(wp), INTENT(in) :: pustar   ! friction velocity [m/s]
+      REAL(wp), INTENT(in) :: pSST     ! bulk SST at depth ph_sst [K]
+      REAL(wp), INTENT(in) :: ph_sst ! measurement depht of bulk SST [m]      
+      !!
+      !REAL(wp), OPTIONAL, INTENT(in) :: pustk ! surface Stokes velocity [m/s]
+      !
+      INTEGER :: jc
+      !
+      REAL(wp) :: &
+         & zHwl,    &  !: thickness of the warm-layer [m]
+         & ztcorr,  &  !: correction of dT w.r.t measurement depth of bulk SST (first T-point)
+         & zalpha, & !: thermal expansion coefficient of sea-water [1/K]
+         & zdTwl_b, zdTwl_n, & ! temp. diff. between "almost surface (right below viscous layer) and bottom of WL
+         & zfr, zeta, &
+         & zusw, zusw2, &
+         & zLa, zfLa, &
+         & flg, zwf, zQabs, &
+         & zA, zB, zL1, zL2, &
+         &  zcst0, zcst1, zcst2, zcst3
+      !!
+      !LOGICAL :: l_pustk_known
+      !!---------------------------------------------------------------------
+      !l_pustk_known = ( PRESENT(pustk) )
+
+      zHwl = Hz_wl(ki,kj) ! first guess for warm-layer depth, and final choice because `Hz_wl` fixed in present ECMWF algo (as opposed to COARE)
+      !!                  ! it is constant! => `rdwl0` == 3m ! Zeng & Beljaars....
+
+      !! Previous value of dT / warm-layer, adapted to depth:
+      flg = 0.5_wp + SIGN( 0.5_wp , ph_sst-zHwl )               ! => 1 when ph_sst>zHwl (dT_wl(ki,kj) = zdTwl) | 0 when z_s$
+      ztcorr = flg + (1._wp - flg)*ph_sst/zHwl
+      zdTwl_b = MAX ( dT_wl(ki,kj) / ztcorr , 0._wp )
+      ! zdTwl is the difference between "almost surface (right below viscous layer) and bottom of WL (here zHwl)
+      ! pdT         "                          "                                    and depth of bulk SST (here ph_sst)!
+      !! => but of course in general the bulk SST is taken shallower than zHwl !!! So correction less pronounced!
+      !! => so here since pdT is difference between surface and ph_sst, need to increase fof zdTwl !
+
+      zalpha = alpha_sw( pSST ) ! thermal expansion coefficient of sea-water (SST accurate enough!)
+
+
+      ! *** zfr = Fraction of solar radiation absorbed in warm layer (-)
+      zfr = 1._wp - 0.28_wp*EXP(-71.5_wp*zHwl) - 0.27_wp*EXP(-2.8_wp*zHwl) - 0.45_wp*EXP(-0.07_wp*zHwl)  !: Eq. 8.157
+
+      zQabs = zfr*pQsw + pQnsol       ! tot heat absorbed in warm layer
+
+      zusw  = MAX( pustar, 1.E-4_wp ) * sq_radrw    ! u* in the water
+      zusw2 = zusw*zusw
+
+      ! Langmuir:
+      !IF ( l_pustk_known ) THEN
+      !   zLa = SQRT(zusw/MAX(pustk,1.E-6))
+      !ELSE
+      zla = 0.3_wp
+      !END IF
+      zfLa = MAX( zla**(-2._wp/3._wp) , 1._wp )   ! Eq.(6)
+
+      zwf = 0.5_wp + SIGN(0.5_wp, zQabs)  ! zQabs > 0. => 1.  / zQabs < 0. => 0.
+
+      zcst1 = vkarmn*grav*zalpha
+
+      ! 1/L when zQabs > 0 :
+      zL2 = zcst1*zQabs / (zRhoCp_w*zusw2*zusw)
+
+      zcst2 = zcst1 / ( 5._wp*zHwl*zusw2 )  !OR: zcst2 = zcst1*rNuwl0 / ( 5._wp*zHwl*zusw2 ) ???
+
+      zcst0 = rdt * (rNuwl0 + 1._wp) / zHwl
+
+      zA = zcst0 * zQabs / ( rNuwl0 * zRhoCp_w )
+
+      zcst3 = -zcst0 * vkarmn * zusw * zfLa
+
+      !! Sorry about all these constants ( constant w.r.t zdTwl), it's for
+      !! the sake of optimizations... So all these operations are not done
+      !! over and over within the iteration loop...
+
+      !! T R U L L Y   I M P L I C I T => needs itteration
+      !! => have to itterate just because the 1/(Obukhov length), zL1, uses zdTwl when zQabs < 0..
+      !!    (without this term otherwize the implicit analytical solution is straightforward...)
+      zdTwl_n = zdTwl_b
+      !%acc loop seq
+      DO jc = 1, 10
+         
+         zdTwl_n = 0.5_wp * ( zdTwl_n + zdTwl_b ) ! semi implicit, for faster convergence
+         
+         ! 1/L when zdTwl > 0 .AND. zQabs < 0 :
+         zL1 =         SQRT( zdTwl_n * zcst2 ) ! / zusw !!! Or??? => vkarmn * SQRT( zdTwl_n*grav*zalpha/( 5._wp*zHwl ) ) / zusw
+         !zL1 = vkarmn*SQRT( zdTwl_n       *grav*zalpha        / ( 5._wp*zHwl ) ) / zusw   ! => vkarmn outside, not inside zcst1 (just for this particular line) ???
+         
+         ! Stability parameter (z/L):
+         zeta =  (1._wp - zwf) * zHwl*zL1   +   zwf * zHwl*zL2
+         
+         zB = zcst3 / PHI(zeta)
+
+         zdTwl_n = MAX ( zdTwl_b + zA + zB*zdTwl_n , 0._wp )  ! Eq.(6)
+
+      END DO
+
+      !! Update:
+      dT_wl(ki,kj) = zdTwl_n * ztcorr
+
+   END SUBROUTINE WL_ECMWF
+
+
+   FUNCTION PHI( pzeta)
+      !!---------------------------------------------------------------------
+      !!
+      !! Takaya et al., 2010
+      !!  Eq.(5)
+      !! L. Brodeau, october 2019
+      !!---------------------------------------------------------------------
+      !%acc routine
+      REAL(wp)                :: PHI
+      REAL(wp), INTENT(in)    :: pzeta    ! stability parameter
+      !!---------------------------------------------------------------------
+      REAL(wp) :: ztf, zzt2
+      !!---------------------------------------------------------------------
+      !
+      zzt2 = pzeta*pzeta
+      !
+      ztf = 0.5_wp + SIGN(0.5_wp, pzeta)  ! zeta > 0 => ztf = 1
+      !                                   ! zeta < 0 => ztf = 0
+      PHI =      ztf     * ( 1. + (5.*pzeta + 4.*zzt2)/(1. + 3.*pzeta + 0.25*zzt2) ) &   ! zeta > 0
+         &  + (1. - ztf) * 1./SQRT( 1. - 16.*(-ABS(pzeta)) )                             ! zeta < 0
+      !
+   END FUNCTION PHI
+
+   !!======================================================================
+END MODULE sbcblk_skin_ecmwf

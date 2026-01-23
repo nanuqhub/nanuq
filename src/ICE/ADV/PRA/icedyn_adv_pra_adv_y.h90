@@ -1,0 +1,178 @@
+   ! in order to avoid lbc_lnk (communications):
+   !    ji loop must be 1:jpi   if adv_y is called first
+   !                and 2:jpi-1 if adv_y is called second
+   ki0 = NINT(pcrh)
+
+   ! Limitation of moments.
+   !$acc parallel loop collapse(2)
+   DO jj=Njs0-1, Nje0+1
+      DO ji=Nis0-ki0, Nie0+ki0
+         !! => whole domain for `jj` !
+         !
+         zmask = pmsk(ji,jj)
+         zV    = pV(ji,jj)
+         !
+         ze1e2 = pe1e2(ji,jj) * 1.E-6_wp  ! needs to be in km
+         zpsm  = zpm (ji,jj) ! optimization
+         zps0  = zfld(ji,jj)
+         zpsx  = zpx (ji,jj)
+         zpsxx = zpxx(ji,jj)
+         zpsy  = zpy (ji,jj)
+         zpsyy = zpyy(ji,jj)
+         zpsxy = zpxy(ji,jj)
+
+         !  Initialize volumes of boxes (=area if adv_y first called, =zpm otherwise)
+         zpsm = MAX( pcrh * ze1e2  +  ( 1._wp - pcrh ) * zpsm , epsi20 )
+         !
+         zslpmax = MAX( 0._wp, zps0 )
+         zs1max  = 1.5_wp * zslpmax
+         zs1new  = MIN( zs1max, MAX( -zs1max, zpsy ) )
+         zs2new  = MIN( 2._wp * zslpmax - 0.3334_wp * ABS( zs1new ), MAX( ABS( zs1new ) - zslpmax, zpsyy ) )
+         !zswitch = ( 1._wp - MAX( 0._wp, SIGN( 1._wp, -zslpmax) ) ) * zmask ! Case of empty boxes & Apply mask
+         zswitch = ( 1._wp - MERGE( 1._wp, 0._wp,  zslpmax<0._wp )  ) * zmask ! Case of empty boxes & Apply mask
+
+         zps0  = zslpmax
+         zpsy  = zs1new * zswitch
+         zpsyy = zs2new * zswitch
+         zpsx  = zpsx   * zswitch
+         zpsxx = zpsxx  * zswitch
+         zpsxy = MIN( zslpmax, MAX( -zslpmax, zpsxy ) ) * zswitch
+
+         !  Calculate fluxes and moments between boxes j<-->j+1
+         !                                !  Flux from j to j+1 WHEN v GT 0
+         !zbet(ji,jj)  =  MAX( 0._wp, SIGN( 1._wp, zV ) )
+         zbet(ji,jj)  =  MERGE( 1._wp, 0._wp,  zV>0._wp )
+         zalf         =  MAX( 0._wp, zV ) * pdt / zpsm
+         zalfq        =  zalf * zalf
+         zalf1        =  1._wp - zalf
+         zalf1q       =  zalf1 * zalf1
+         !
+         zfm (ji,jj)  =  zalf  * zpsm
+         zf0 (ji,jj)  =  zalf  * ( zps0 + zalf1 * ( zpsy + (zalf1 - zalf) * zpsyy ) )
+         zfy (ji,jj)  =  zalfq * ( zpsy + 3._wp * zalf1 * zpsyy )
+         zfyy(ji,jj)  =  zalf  * zalfq * zpsyy
+         zfx (ji,jj)  =  zalf  * ( zpsx + zalf1 * zpsxy )
+         zfxy(ji,jj)  =  zalfq * zpsxy
+         zfxx(ji,jj)  =  zalf  * zpsxx
+         !                                !  Readjust moments remaining in the box.
+         zpsm  =  zpsm  - zfm(ji,jj)
+         zps0  =  zps0  - zf0(ji,jj)
+         zpsy  =  zalf1q * ( zpsy - 3._wp * zalf * zpsyy )
+         zpsyy =  zalf1 * zalf1q * zpsyy
+         zpsx  =  zpsx  - zfx(ji,jj)
+         zpsxx =  zpsxx - zfxx(ji,jj)
+         zpsxy =  zalf1q * zpsxy
+         !
+         zpm (ji,jj) = zpsm ! optimization
+         zfld(ji,jj) = zps0
+         zpx (ji,jj) = zpsx
+         zpxx(ji,jj) = zpsxx
+         zpy (ji,jj) = zpsy
+         zpyy(ji,jj) = zpsyy
+         zpxy(ji,jj) = zpsxy
+         !
+      END DO
+   END DO
+   !$acc end parallel loop
+
+   !$acc parallel loop collapse(2)
+   DO jj=Njs0-1, Nje0
+      DO ji=Nis0-ki0, Nie0+ki0
+         !! Only `jj+1` needed
+         !! => [0:jpj-1] for `jj` !
+         zV = pV(ji,jj)
+         !                                !  Flux from j+1 to j when v LT 0.
+         zalf          = MAX( 0._wp, -zV ) * pdt / zpm(ji,jj+1)
+         zalg  (ji,jj) = zalf
+         zalfq         = zalf * zalf
+         zalf1         = 1._wp - zalf
+         zalg1 (ji,jj) = zalf1
+         zalf1q        = zalf1 * zalf1
+         zalg1q(ji,jj) = zalf1q
+         !
+         zfm   (ji,jj) = zfm (ji,jj) + zalf  *     zpm(ji,jj+1)
+         zf0   (ji,jj) = zf0 (ji,jj) + zalf  * (  zfld(ji,jj+1) &
+            &            - zalf1 * (zpy(ji,jj+1) - (zalf1 - zalf ) * zpyy(ji,jj+1) ) )
+         zfy   (ji,jj) = zfy (ji,jj) + zalfq * (  zpy (ji,jj+1) - 3._wp * zalf1 * zpyy(ji,jj+1) )
+         zfyy  (ji,jj) = zfyy(ji,jj) + zalf  *    zpyy(ji,jj+1) * zalfq
+         zfx   (ji,jj) = zfx (ji,jj) + zalf  * (  zpx (ji,jj+1) - zalf1 * zpxy(ji,jj+1) )
+         zfxy  (ji,jj) = zfxy(ji,jj) + zalfq *    zpxy(ji,jj+1)
+         zfxx  (ji,jj) = zfxx(ji,jj) + zalf  *    zpxx(ji,jj+1)
+      END DO
+   END DO
+   !$acc end parallel loop
+
+   !$acc parallel loop collapse(2)
+   DO jj=Njs0, Nje0+1
+      DO ji=Nis0-ki0, Nie0+ki0
+         !! Only `jj-1` needed
+         !! => [2:jpj] for `jj` !
+         !                                !  Readjust moments remaining in the box.
+         zbt  =         zbet(ji,jj-1)
+         zbt1 = 1._wp - zbet(ji,jj-1)
+         !
+         zpsm  = zpm (ji,jj) ! optimization
+         zps0  = zfld(ji,jj)
+         zpsx  = zpx (ji,jj)
+         zpsxx = zpxx(ji,jj)
+         zpsy  = zpy (ji,jj)
+         zpsyy = zpyy(ji,jj)
+         zpsxy = zpxy(ji,jj)
+         !
+         zpsm  = zbt * zpsm + zbt1 * ( zpsm - zfm(ji,jj-1) )
+         zps0  = zbt * zps0 + zbt1 * ( zps0 - zf0(ji,jj-1) )
+         zpsy  = zalg1q(ji,jj-1) * ( zpsy + 3._wp * zalg(ji,jj-1) * zpsyy )
+         zpsyy = zalg1 (ji,jj-1) * zalg1q(ji,jj-1) * zpsyy
+         zpsx  = zbt * zpsx  + zbt1 * ( zpsx  - zfx (ji,jj-1) )
+         zpsxx = zbt * zpsxx + zbt1 * ( zpsxx - zfxx(ji,jj-1) )
+         zpsxy = zalg1q(ji,jj-1) * zpsxy
+
+         !   Put the temporary moments into appropriate neighboring boxes.
+         !                                !   Flux from j to j+1 IF v GT 0.
+         zbt   =       zbet(ji,jj-1)
+         zbt1  = 1._wp - zbet(ji,jj-1)
+         zpsm  = zbt * ( zpsm + zfm(ji,jj-1) ) + zbt1 * zpsm
+         zalf  = zbt * zfm(ji,jj-1) / zpsm
+         zalf1 = 1._wp - zalf
+         ztemp = zalf * zps0 - zalf1 * zf0(ji,jj-1)
+         !
+         zps0  =  zbt  * ( zps0 + zf0(ji,jj-1) ) + zbt1 * zps0
+         zpsy  =  zbt  * ( zalf * zfy(ji,jj-1) + zalf1 * zpsy + 3._wp * ztemp ) + zbt1 * zpsy
+         zpsyy =  zbt  * ( zalf * zalf * zfyy(ji,jj-1) + zalf1 * zalf1 * zpsyy                           &
+            &            + 5._wp * ( zalf * zalf1 * ( zpsy - zfy(ji,jj-1) ) - ( zalf1 - zalf ) * ztemp ) ) &
+            &            + zbt1 * zpsyy
+         zpsxy =  zbt  * ( zalf * zfxy(ji,jj-1) + zalf1 * zpsxy            &
+            &            + 3._wp * (- zalf1 * zfx(ji,jj-1) + zalf * zpsx ) )  &
+            &            + zbt1 * zpsxy
+         zpsx  =  zbt * ( zpsx  + zfx (ji,jj-1) ) + zbt1 * zpsx
+         zpsxx =  zbt * ( zpsxx + zfxx(ji,jj-1) ) + zbt1 * zpsxx
+
+         !                                !  Flux from j+1 to j IF v LT 0.
+         zbt   =       zbet(ji,jj)
+         zbt1  = 1._wp - zbet(ji,jj)
+         zpsm  = zbt * zpsm + zbt1 * ( zpsm + zfm(ji,jj) )
+         zalf  = zbt1 * zfm(ji,jj) / zpsm
+         zalf1 = 1._wp - zalf
+         ztemp = - zalf * zps0 + zalf1 * zf0(ji,jj)
+         !
+         zps0  = zbt * zps0  + zbt1 * ( zps0 + zf0(ji,jj) )
+         zpsy  = zbt * zpsy  + zbt1 * ( zalf * zfy(ji,jj) + zalf1 * zpsy + 3._wp * ztemp )
+         zpsyy = zbt * zpsyy + zbt1 * ( zalf * zalf * zfyy(ji,jj) + zalf1 * zalf1 * zpsyy &
+            &                         + 5._wp * ( zalf * zalf1 * ( - zpsy + zfy(ji,jj) )     &
+            &                         + ( zalf1 - zalf ) * ztemp ) )
+         zpsxy = zbt * zpsxy + zbt1 * ( zalf * zfxy(ji,jj) + zalf1 * zpsxy  &
+            &                         + 3._wp * ( zalf1 * zfx(ji,jj) - zalf * zpsx ) )
+         zpsx  = zbt * zpsx  + zbt1 * ( zpsx  + zfx (ji,jj) )
+         zpsxx = zbt * zpsxx + zbt1 * ( zpsxx + zfxx(ji,jj) )
+         !
+         zpm (ji,jj) = zpsm  ! optimization
+         zfld(ji,jj) = zps0
+         zpx (ji,jj) = zpsx
+         zpxx(ji,jj) = zpsxx
+         zpy (ji,jj) = zpsy
+         zpyy(ji,jj) = zpsyy
+         zpxy(ji,jj) = zpsxy
+         !
+      END DO
+   END DO
+   !$acc end parallel loop

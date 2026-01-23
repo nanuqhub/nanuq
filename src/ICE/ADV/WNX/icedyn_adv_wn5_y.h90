@@ -1,0 +1,76 @@
+   SUBROUTINE wn5_y( ksgn, pmlbc, pf, pfy )
+      !!----------------------------------------------------------------------
+      !%acc routine
+      !!----------------------------------------------------------------------
+      INTEGER                     ,       INTENT(in)  :: ksgn  ! => +1 if velocity is positive along y / -1 if negative
+      INTEGER(1), DIMENSION(jpi,jpj,nn_hls,4), INTENT(in)  :: pmlbc      ! masks for solid LBCs
+      REAL(wp),   DIMENSION(jpi,jpj),     INTENT(in)  :: pf   ! field to advect
+      REAL(wp),   DIMENSION(jpi,jpj),     INTENT(out) :: pfy
+      !!----------------------------------------------------------------------
+      REAL(wp), DIMENSION(kp_weno)  :: zStncl, zW, zIS, zAl
+      REAL(wp), DIMENSION(nn_WNx) :: zF
+      REAL(wp) :: zm, zp ! masks
+      REAL(wp) :: ztau5, z1_S
+      REAL(wp) :: zFm, zFp
+      REAL(wp) :: zmS, zmN, zmS1, zmS2, zmN1, zmN2
+      INTEGER  :: kpw
+      INTEGER  :: kpos, ji, jj, jl0, jl, kl
+      !!----------------------------------------------------------------------
+      kpw = kp_weno    ! order of each of the `kp_weno`th stencils used in the recosntruction
+
+      kpos = (ksgn + 1)/2    ! => +1 if velocity is positive along y / 0 otherwize
+      zp   = REAL( kpos , wp )  ! => +1. if velocity is positive along y / 0. otherwize
+      zm   = 1._wp - zp        ! => 1. if velocity is negative along y / 0. otherwize
+      jl0  = kpos * kpw ! which is the first `l` row ?
+
+
+      !%acc data copyin( zCoeff ) present(pmlbc, pf, pfy, weno_lw_t_y, weno_ow_t_y)
+
+      !%acc parallel loop collapse(2)
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+
+            ! Get the required elements of `pf` for relevant stencils
+            ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#           include "icedyn_adv_wn5_y_stncl.h90"
+
+            !! Smoothness indicator
+            DO jl = 1, kpw
+               kl = jl-1
+               !
+               zFm = SUM( weno_lw_t_y(ji,jj,jl,    1+kl:kpw+kl) * zF(1+kl:kpw+kl) ) ! `p`-th order estimate of F @ j-1/2
+               zFp = SUM( weno_lw_t_y(ji,jj,jl+kpw,1+kl:kpw+kl) * zF(1+kl:kpw+kl) ) ! `p`-th order estimate of F @ j+1/2
+               !
+               zIS(jl) = weno5_ISx_G( zF(kpw), zFm, zFp ) ! zF(kpw) is always the central value of zF, i.e it should be F(i) !!!
+               !
+               zStncl(jl) = zm * zFm  +  zp * zFp
+               !
+            END DO
+
+            zW(:) = weno_ow_t_y(ji,jj,jl0+1:jl0+kpw)    !! optimal weights !!!
+
+            ! Compute the alphas
+            ! ~~~~~~~~~~~~~~~~~~
+            ztau5 = ABS( zIs(1) - zIs(kpw) )
+            !zalfa1 = zd1 * ( 1._wp + ztau5 / MAX(zbeta1, epsi20) )
+            zAl(:) = zW(:) * ( 1._wp + ztau5 / MAX(zIS(:), epsi20) )
+
+            ! Compute the WENO weights
+            ! ~~~~~~~~~~~~~~~~~~~~~~~~
+            !z1_S = 1._wp / MAX( zalfa1 + zalfa2 + zalfa3 , epsi20 )
+            z1_S = 1._wp / MAX( SUM(zAl(:)), epsi20 )
+            ! zw1 = zalfa1 * z1_S
+            zW(:) = zAl(:) * z1_S
+
+            ! Solution
+            ! ~~~~~~~~
+            ! centered about j-1/2==j_u-1 (when `ksgn<0`) or j+1/2==j_u (when `ksgn>0`):
+            pfy(ji,jj) = SUM( zW(:) * zStncl(:) )
+            !
+         ENDDO
+      ENDDO
+      !%acc end parallel loop
+      !
+      !%acc end data
+      !
+   END SUBROUTINE wn5_y

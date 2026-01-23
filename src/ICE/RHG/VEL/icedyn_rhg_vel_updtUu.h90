@@ -1,0 +1,26 @@
+               !
+               zmsk = REAL(pm01x(ji,jj),wp)
+               zA   = pAu(ji,jj)
+               zUi  = pV(ji,jj,1)  ! U at u-points!
+               zVi  = pV(ji,jj,4)  ! V at u-points!
+               zM_dt =  pmu_dt(ji,jj)  ! M/dt
+               zUo  =  pV_oce(ji,jj,1)  ! u ocean current at u-points!
+               !
+               ! i-component of air-ice wind stress at U-point:
+               ztau_ai = 0.5_wp*(putau_i(ji,jj) + putau_i(ji+1,jj) )* (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
+               !
+               !                 !--- tau_io/(u_oce - zUi)
+               zt1   = zUi - zUo
+               zt2   = zVi - pV_oce(ji,jj,4)
+               zTauO = zA * rho0*rn_Cd_io * SQRT( zt1*zt1 + zt2*zt2 )  ! MIND: the actual stress is `zTauO * (zUi - zUo)` !!!
+               !
+               !                 !--- Coriolis at Uu-points (no interpolation needed here)
+               zcorio =   zM_dt * pdt * ff_u(ji,jj) * zVi  !`zM_dt*pdt` => get mass, not mass*dt !
+               !
+               !                 !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
+               zRHS = zdivSx_t + zA*ztau_ai + ridlzd*(zcorio + pgrdSH(ji,jj,1)) + zTauO*zUo        ! unit is [Pa] = [kg.m-1.s-2]
+               !
+               pV(ji,jj,1) = ( (          ( zM_dt * zUi + zRHS )                                &
+                  &                                      / MAX( epsi20, zM_dt + zTauO )           &
+                  &             ) * zmsk + zUo * 0.01_wp * ( 1._wp - zmsk ) &
+                  &           )   * REAL(pm00x(ji,jj),wp)

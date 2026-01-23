@@ -1,0 +1,24 @@
+            !! T-centric cell
+            !! ~~~~~~~~~~~~~~
+            zE  = rn_E0 * p1mdt(ji,jj) * pxpCt(ji,jj)
+
+            zdx = res_grd_loc_t(ji,jj)
+
+            zrr   = pSclH_t(ji,jj)    ! this is `SQRT( rn_l_ref/dx ) * h_f`
+            zCohe = rn_c_ref * zrr
+            zNlim = rn_Nref  * zrr    ! `N` of [Eq.29]
+
+            zsqrtE = SQRT(MAX(zE,epsi06))                               ! `sqrt(E)` (damaged ice)...
+            zTd    = MAX( zdx * rsqrt_nu_rhoi / zsqrtE , epsi06 )       ! characteristic time for damage [s] |  (we shall divide by it)...
+
+            zsigI  = 0.5_wp * (zs11t + zs22t)
+            zsigII = sigmaII_sclr(zs11t, zs22t, zs12t)
+
+            zrr = mc_incrmt( zsigI, zsigII, zNlim, zCohe, zTd )
+
+            zrr = zrr * pdt
+
+            p1mdt(ji,jj)   = MIN( MAX( p1mdt(ji,jj) - p1mdt(ji,jj) * zrr , r_dmd_min ) , 1._wp )
+            psgmt(ji,jj,1) =               zs11t    -     zs11t    * zrr
+            psgmt(ji,jj,2) =               zs22t    -     zs22t    * zrr
+            psgmf(ji,jj,3) =               zs12t    -     zs12t    * zrr

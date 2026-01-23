@@ -1,0 +1,20 @@
+            !! Fill required F-point arrays:
+            zs11 = psgmf(ji,jj,1)
+            zs22 = psgmf(ji,jj,2)
+            zs12 = psgmt(ji,jj,3)
+            !
+            zE = rn_E0 * p1mdf(ji,jj) * pxpCf(ji,jj)
+            !
+            zdx = res_grd_loc_f(ji,jj)
+            !
+            zsqrtE = SQRT(MAX(zE,epsi06))                               ! `sqrt(E)` (damaged ice)...
+            zTd_f(ji,jj) = MAX( zdx * rsqrt_nu_rhoi / zsqrtE , epsi06 )       ! characteristic time for damage [s] |  (we shall divide by it)...
+            !
+            zrr          = pSclH_f(ji,jj)
+            zCh_f(ji,jj) = rn_c_ref * zrr
+            zNl_f(ji,jj) = rn_Nref  * zrr
+            !
+            zSI_h_f(ji,jj)  = 0.5_wp * (zs11 + zs22)  !#LOLOsh rm `* h`
+            zrr   =           zs11 - zs22
+            zSII_h_f(ji,jj) = SQRT( 0.25_wp*zrr*zrr +  zs12*zs12 )  !#LOLOsh rm `* h`
+            !

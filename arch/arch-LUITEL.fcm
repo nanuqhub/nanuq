@@ -1,0 +1,43 @@
+# LUITEL / Debian - intel 2020 -- NANUQ standalone
+
+%NCDF_HOME           /opt/hdf5_netcdf4_intel_par
+%HDF5_HOME           %NCDF_HOME
+%XIOS_HOME           /opt/xios_trunk_2685_intel
+%OASIS_HOME          
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L%HDF5_HOME/lib -lhdf5_hl -lhdf5
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+%FC                  mpiifx
+
+%FCFLAGS             -i4 -r8 -O3 -xHOST -init=zero -init=arrays -fp-model strict
+
+###%FCFLAGS          -i4 -r8 -O0 -xHOST -g -traceback -init=zero -init=arrays -fp-model strict -CB
+###%FCFLAGS          -i4 -r8 -O1 -check all -warn all -debug extended -C -g -traceback -init=zero -init=arrays -fp-model precise -ftrapuv -fpe0
+#%FCFLAGS            -i4 -r8 -O0 -CB -g -traceback -init=zero -init=arrays -fp-model precise -fpe0
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+
+##%FPPFLAGS            -P  -traditional
+%FPPFLAGS            -P  -traditional -Dthd_orig
+##%FPPFLAGS            -P  -traditional -Dthd_2d
+##%FPPFLAGS            -P  -traditional -Dthd_dbg2
+
+%LD                  mpiifx
+
+%LDFLAGS             -lstdc++
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  mpiicx
+%CFLAGS              -O3

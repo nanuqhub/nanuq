@@ -1,0 +1,29 @@
+               !! A) Make a T-centric interpolated version of `F-centric stress tensor * h`
+               !!
+               !!  A.1/ F2T ! `F-located components of stress tensor * h` interpolated at T-point:
+               i2=ji-1; j2=jj; i3=ji-1; j3=jj-1; i4=ji; j4=jj-1
+               zms = xmskf(ji,jj) + xmskf(i2,j2) + xmskf(i3,j3) + xmskf(i4,j4)
+               zrc = xmskt(ji,jj) / e1e2t(ji,jj)
+               zml = zrc * MIN( zms , 1._wp ) / MAX( zms , 1.E-12_wp )
+               zr1 = xmskf(ji,jj)*e1e2f(ji,jj)
+               zr2 = xmskf(i2,j2)*e1e2f(i2,j2)
+               zr3 = xmskf(i3,j3)*e1e2f(i3,j3)
+               zr4 = xmskf(i4,j4)*e1e2f(i4,j4)
+               zs11x = ( pS_f(ji,jj,1)*zr1 + pS_f(i2,j2,1)*zr2 + pS_f(i3,j3,1)*zr3 + pS_f(i4,j4,1)*zr4 ) * zml ! @T
+               zs22x = ( pS_f(ji,jj,2)*zr1 + pS_f(i2,j2,2)*zr2 + pS_f(i3,j3,2)*zr3 + pS_f(i4,j4,2)*zr4 ) * zml ! @T
+               !!
+               !! A.2/ T2F ! `T-located components of stress tensor * h` interpolated at F-point:
+               i2=ji+1; j2=jj; i3=ji; j3=jj+1; i4=ji+1; j4=jj+1
+               zms = xmskt(ji,jj) + xmskt(i2,j2) + xmskt(i3,j3) + xmskt(i4,j4)
+               zrc = xmskf(ji,jj) / e1e2f(ji,jj)
+               zml = zrc * MIN( zms , 1._wp ) / MAX( zms , 1.E-12_wp )
+               zr1 = xmskt(ji,jj)*e1e2t(ji,jj)
+               zr2 = xmskt(i2,j2)*e1e2t(i2,j2)
+               zr3 = xmskt(i3,j3)*e1e2t(i3,j3)
+               zr4 = xmskt(i4,j4)*e1e2t(i4,j4)
+               zs12x = ( pS_f(ji,jj,3)*zr1 + pS_f(i2,j2,3)*zr2 + pS_f(i3,j3,3)*zr3 + pS_f(i4,j4,3)*zr4 ) * zml ! @F
+               !!
+               !! B) Cross-nudging (Only T-centric stress comp. are corrected w.r.t F-centric stress comp.)
+               pS_t(ji,jj,1) = pS_t(ji,jj,1) - rCNC_eff  * ( pS_t(ji,jj,1) - zs11x )
+               pS_t(ji,jj,2) = pS_t(ji,jj,2) - rCNC_eff  * ( pS_t(ji,jj,2) - zs22x )
+               pS_t(ji,jj,3) = pS_t(ji,jj,3) - rCNC_eff  * ( pS_t(ji,jj,3) - zs12x )
