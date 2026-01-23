@@ -21,14 +21,11 @@
 !------------------------------------------------------------------------------
 &nampar         !   Generic parameters
 !------------------------------------------------------------------------------
-   jpl              =   5                ! 1 ice category!
+   jpl              =   5                ! 5 ice categories
    ln_virtual_itd   =   .false.          !  virtual ITD mono-category parameterization (jpl=1 only)
    !                                     !     i.e. enhanced thermal conductivity & virtual thin ice melting
    ln_icethd        = .true.             !  ice thermo   (T) or not (F)
    rn_amax          =   0.999999         !  maximum tolerated ice concentration
-   cn_icerst_in     = ''   !  suffix of ice restart name (input)
-   cn_icerst_indir  = ''  !  directory to read   input ice restarts
-   cn_icerst_outdir = '.' !  directory to write output ice restarts
    !
    ! E-grid stuff (relevant when `ln_damage=T`):
    ln_damage        = .true.          !  existance of the "ice damage" tracer in the code?
@@ -53,7 +50,7 @@
 !------------------------------------------------------------------------------
 &namdyn         !   Ice dynamics
 !------------------------------------------------------------------------------
-   ln_dynALL        = .true.  !lolo   !  dyn.: full ice dynamics                  (rheology + advection + ridging/rafting + correction)
+   ln_dynALL        = .true.          !  dyn.: full ice dynamics                  (rheology + advection + ridging/rafting + correction)
    ln_dynRHGADV     = .false.         !  dyn.: no ridge/raft & no corrections     (rheology + advection)
    rn_ishlat        =   2.            !  lbc : free slip (0) ; partial slip (0-2) ; no slip (2) ; strong slip (>2)
 /
@@ -67,7 +64,7 @@
 !------------------------------------------------------------------------------
 &namdyn_rhg     !   Ice rheology
 !------------------------------------------------------------------------------
-   ln_idealized     = .false.         ! if set to true: Coriolis and SSH tilt terms will be disregarded in the momentum eq.
+   ln_idealized  = .false.            ! Idealized test-case: `true` => Coriolis and SSH tilt terms disregarded in the momentum eq.
    !
    ln_rhg_EVP       = .false.         !  EVP rheology
    !                                  !
@@ -85,31 +82,24 @@
       nn_d_adv      = 1               !     advection of damage @T & @F at big time step
       !                               !        = 0 no advection at all!
       !                               !        = 1 advection of damage only at big time step
-      !                               !        = 2 advection of damage + stress tensor components at big time step
-      !                               !        = 3 advection of damage + stress tensor components + consider "lower-convected" terms in tensor advection
-      !                               !        = 4 advection of damage + stress tensor components + consider "upper-convected" terms in tensor advection
       ln_adv_d_pra = .true.           !      use Prather advection scheme to advect damage (and stress components)
       ln_adv_d_wnx = .false.          !      use  WENO order X advection scheme to advect damage (and stress components)
-      ln_adv_d_mix = .false.          !      use Prather & WENOX advection schemes to advect damage and stress components, respectively
       !                               !
-      rn_crndg      = 1.              ! Cross-Nudging coefficient [-]
+      rn_crndg      = 1.0             ! Cross-Nudging coefficient [-]
       !                               !
       rn_dmg_max     = 0.999999       !     upper-bound value to cap the damage to ! (~ 1 - eps )
       rn_C0          = -20.           ! compaction parameter "C" (Hibler's exponential)                              =  -20.
-      rn_alrlx       =   5.           ! `alpha` inherent to viscosity, Eq.10 of [Olason al.2022], used by Dansereau  =   5.
-      rn_btrlx       =   5.           ! `beta`: sort of an `alpha` to go in the exp[] of `lambda`, used by Olason Boutin =   5.
+      nn_alrlx       =   5            ! `alpha` inherent to viscosity, Eq.10 of [Olason al.2022], used by Dansereau  =   5.
+      nn_btrlx       =   5            ! `beta`: sort of an `alpha` to go in the exp[] of `lambda`, used by Olason Boutin =   5.
       !
-      ! Ice cohesion:
-      rn_c_ref       = 2.E6           ! cohesion value at the reference scale                      = 2.E6
-      rn_l_ref       = 0.1            !     scaling parameter for cohesion (`l_ref` in Olason et al.,2022)
 /
 !------------------------------------------------------------------------------
 &namdyn_adv     !   Ice advection
 !------------------------------------------------------------------------------
    ln_adv_Pra       = .true.          !  Advection scheme (Prather)
    ln_adv_WNx       = .false.         !  Advection scheme (WENO)
-      nn_WNx        =   5             !     order of the scheme for WENO (5 or 7)
-      cn_weno_wght  = 'WENO5_weights' !     file in which WENO weights are read
+      nn_WNx        =   7             !     order of the scheme for WENO (5 or 7)
+      cn_weno_wght  = '<WENO_WGHT>'   !     file in which WENO weights are read
 /
 !------------------------------------------------------------------------------
 &namsbc         !   Ice surface boundary conditions
