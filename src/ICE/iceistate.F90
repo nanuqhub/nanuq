@@ -15,7 +15,7 @@ MODULE iceistate
    USE phycst         ! physical constant
    USE oss_nnq , ONLY : sst_m, sss_m
    USE sbc_ice , ONLY : tn_ice, snwice_mass, snwice_mass_b
-   USE eosbn2         ! equation of state
+   USE eosbn2  , ONLY : eos10_fzp_2d
    USE ice            ! sea-ice: variables
    USE icevar  , ONLY : ice_var_salprof, ice_var_itd
    !
@@ -104,7 +104,7 @@ CONTAINS
       !---------------------------
       
       ! basal temperature (considered at freezing point)   [Kelvin]
-      CALL eos_fzp_2d( sss_m(:,:), t_bo(:,:) )
+      CALL eos10_fzp_2d( sss_m(:,:), t_bo(:,:) )
       t_bo(:,:) = ( t_bo(:,:) + rt0 ) * xmskt(:,:)
       !
       ! == reduced arrays == !
@@ -259,7 +259,7 @@ CONTAINS
          ELSE                          ! Read namelist !
             !                          !---------------!
             ! no ice if (sst - Tfreez) >= thresold
-            CALL eos_fzp_2d( sss_m(:,:), ztfrz(:,:) )
+            CALL eos10_fzp_2d( sss_m(:,:), ztfrz(:,:) )
             WHERE( ( sst_m(:,:) - ztfrz(:,:) ) * xmskt(:,:) >= rn_thres_sst )
                zmsk(:,:) = 0._wp
             ELSEWHERE

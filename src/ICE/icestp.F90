@@ -42,7 +42,7 @@ MODULE icestp
    USE ice
    !
    USE phycst         ! Define parameters for the routines
-   USE eosbn2  , ONLY : eos_fzp_2d_gpu, eos_fzp_0d         ! equation of state
+   USE eosbn2  , ONLY : eos10_fzp_2d_gpu
    USE oss_nnq , ONLY : ssu_m, ssv_m, sss_m, sss_s, sst_m, sst_s, ln_prs_oce, ln_cpl_oce, mld_m
    USE ossprs  , ONLY : ln_slab_sst, oss_prs_slab
    USE sbc_oce        ! Surface boundary condition: ocean fields
@@ -137,7 +137,7 @@ CONTAINS
          CALL TRDBG( 'ice_stp 000000000000000000000', 'ssu_m, ssv_m', ssu_m, ssv_m )
 # endif
 
-         CALL eos_fzp_2d_gpu( sss_m, t_bo )   ! -- freezing temperature based on salinity [C]
+         CALL eos10_fzp_2d_gpu( sss_m, t_bo )   ! -- freezing temperature based on salinity [C]
 
 
 
@@ -161,7 +161,7 @@ CONTAINS
          IF( ln_cpl_oce .OR. (ln_prs_oce .AND. (.NOT. ln_slab_sst) ) ) THEN
             !! ==> `sst_s` & `sss_s` default to `sst_m` & `sst_s`:
             !IF(lwp) PRINT *, ' * `sst_s & sss_s` forced to (prescribed) `sst_m & sss_m` ! kt =', kt
-            !$acc parallel loop collapse(2) present( sst_m, ss_m, sst_s, sss_s )
+            !$acc parallel loop collapse(2) present( sst_m, sss_m, sst_s, sss_s )
             DO jj=Njs0-1, Nje0+1
                DO ji=Nis0-1, Nie0+1
                   sst_s(ji,jj) = sst_m(ji,jj)

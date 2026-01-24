@@ -74,7 +74,10 @@ MODULE eosbn2
    PUBLIC   eos_fzp_2d
    PUBLIC   eos_fzp_0d
 
-   
+   PUBLIC   t_eos10_fzp_scl
+   PUBLIC   eos10_fzp_2d   
+   PUBLIC   eos10_fzp_2d_gpu
+
    !                               !!** Namelist nameos **
    LOGICAL , PUBLIC ::   ln_TEOS10
    LOGICAL , PUBLIC ::   ln_EOS80
@@ -721,7 +724,7 @@ CONTAINS
    END SUBROUTINE eos_fzp_2d_t
 
 
-   SUBROUTINE eos_fzp_0d( psal, ptf, pdep )
+   SUBROUTINE eos_fzp_0d( psal, ptf ) !, pdep )
       !!----------------------------------------------------------------------
       !!                 ***  ROUTINE eos_fzp  ***
       !!
@@ -735,7 +738,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       !$acc routine
       REAL(wp), INTENT(in )           ::   psal         ! salinity   [psu]
-      REAL(wp), INTENT(in ), OPTIONAL ::   pdep         ! depth      [m]
+      !REAL(wp), INTENT(in ), OPTIONAL ::   pdep         ! depth      [m]
       REAL(wp), INTENT(out)           ::   ptf          ! freezing temperature [Celsius]
       !
       REAL(wp) :: zs   ! local scalars
@@ -750,14 +753,14 @@ CONTAINS
             &          - 3.12775e-02_wp)*zs+2.07679e-02_wp)*zs-5.87701e-02_wp
          ptf = ptf * psal
          !
-         IF( PRESENT( pdep ) )   ptf = ptf - 7.53e-4 * pdep
+         !IF( PRESENT( pdep ) )   ptf = ptf - 7.53e-4 * pdep
          !
       CASE ( np_eos80 )                !==  PT,SP (UNESCO formulation)  ==!
          !
          ptf = ( - 0.0575_wp + 1.710523e-3_wp * SQRT( psal )   &
             &                - 2.154996e-4_wp *       psal   ) * psal
          !
-         IF( PRESENT( pdep ) )   ptf = ptf - 7.53e-4 * pdep
+         !IF( PRESENT( pdep ) )   ptf = ptf - 7.53e-4 * pdep
          !
       CASE DEFAULT
          WRITE(ctmp1,*) '          bad flag value for neos = ', neos
@@ -766,6 +769,94 @@ CONTAINS
       END SELECT
       !
    END SUBROUTINE eos_fzp_0d
+
+
+   FUNCTION t_eos10_fzp_scl( psal )
+      !!----------------------------------------------------------------------
+      !!                 ***  FUNCTION t_eos10_fzp_scl  ***
+      !!
+      !! ** Purpose :   Compute the freezing point temperature [Celsius]
+      !!
+      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
+      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
+      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
+      !!
+      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
+      !!----------------------------------------------------------------------
+      !$acc routine
+      REAL(wp)              ::   t_eos10_fzp_scl ! freezing temperature [Celsius]
+      REAL(wp), INTENT(in ) ::   psal            ! salinity   [psu]
+      !!----------------------------------------------------------------------
+      REAL(wp) :: zs, zt   ! local scalars
+      !!----------------------------------------------------------------------
+      zs  = SQRT( ABS( psal ) / 35.16504_wp )           ! square root salinity
+      zt = ((((1.46873e-03_wp*zs-9.64972e-03_wp)*zs+2.28348e-02_wp)*zs &
+         &      - 3.12775e-02_wp)*zs+2.07679e-02_wp)*zs-5.87701e-02_wp
+      !
+      t_eos10_fzp_scl = zt * psal
+      !
+   END FUNCTION t_eos10_fzp_scl
+
+
+   SUBROUTINE  eos10_fzp_2d_gpu( psal, ptf )
+      !!----------------------------------------------------------------------
+      !!                 ***  ROUTINE eos10_fzp_2d_gpu  ***
+      !!
+      !! ** Purpose :   Compute the freezing point temperature [Celsius]
+      !!
+      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
+      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
+      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
+      !!
+      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
+      !!----------------------------------------------------------------------
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity   [psu]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: ptf    ! freezing temperature [Celsius]
+      !!----------------------------------------------------------------------
+      INTEGER  ::   ji, jj          ! dummy loop indices
+      REAL(wp) ::   zt, zs, z1_S0   ! local scalars
+      !!----------------------------------------------------------------------
+      !$acc data present( psal, ptf )
+      !
+      z1_S0 = 1._wp / 35.16504_wp
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-1, Nje0+1
+         DO ji=Nis0-1, Nie0+1
+            zs= SQRT( ABS( psal(ji,jj) ) * z1_S0 )           ! square root salinity
+            zt = ((((1.46873e-3_wp*zs-9.64972e-3_wp)*zs+2.28348e-2_wp)*zs &
+               &     - 3.12775e-2_wp)*zs+2.07679e-2_wp)*zs-5.87701e-2_wp
+            ptf(ji,jj) = zt * psal(ji,jj)
+         END DO
+      ENDDO
+      !$acc end parallel loop
+
+      !$acc end data
+   END SUBROUTINE eos10_fzp_2d_gpu
+   
+   !! NON-GPU version:
+   SUBROUTINE  eos10_fzp_2d( psal, ptf )
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity   [psu]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: ptf    ! freezing temperature [Celsius]
+      !!----------------------------------------------------------------------
+      INTEGER  ::   ji, jj          ! dummy loop indices
+      REAL(wp) ::   zt, zs, z1_S0   ! local scalars
+      !!----------------------------------------------------------------------
+      z1_S0 = 1._wp / 35.16504_wp
+      !
+      DO jj=Njs0-1, Nje0+1
+         DO ji=Nis0-1, Nie0+1
+            zs= SQRT( ABS( psal(ji,jj) ) * z1_S0 )           ! square root salinity
+            zt = ((((1.46873e-3_wp*zs-9.64972e-3_wp)*zs+2.28348e-2_wp)*zs &
+               &     - 3.12775e-2_wp)*zs+2.07679e-2_wp)*zs-5.87701e-2_wp
+            ptf(ji,jj) = zt * psal(ji,jj)
+         END DO
+      ENDDO
+      !
+   END SUBROUTINE eos10_fzp_2d
+
+
+   
+
 
 
    SUBROUTINE  eos_fzp_2d_gpu( psal, ptf )

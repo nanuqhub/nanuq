@@ -13,7 +13,7 @@ MODULE ossprs
    USE dom_oce        ! ocean domain: variables
    USE oss_nnq        ! surface module: variables
    USE phycst         ! physical constants
-   USE eosbn2         ! equation of state - Brunt Vaisala frequency
+   USE eosbn2 , ONLY : t_eos10_fzp_scl, eos10_fzp_2d
    USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
    !
    USE in_out_manager ! I/O manager
@@ -37,12 +37,12 @@ MODULE ossprs
    LOGICAL,  PUBLIC   ::   ln_read_frq   ! specify whether we must read `frq` or not
    REAL(wp), PUBLIC   ::   rn_e3t_0, rn_frq_0
    REAL(wp), PUBLIC   ::   rn_mld_0      ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT USED'`
-   LOGICAL,  PUBLIC   ::   ln_ssV_T      ! prescribed sea surface velocities are provided on T grid points (default is U,V!)
+   LOGICAL,  PUBLIC   ::   ln_ssv_T      ! prescribed sea surface velocities are provided on T grid points (default is U,V!)
    LOGICAL,  PUBLIC   ::   ln_ssv_Fgrid  ! also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )
    LOGICAL,  PUBLIC   ::   ln_slab_sst   ! For standalone mode only: if ln_slab_sst=T => correct the prescribed SST based on a slab model approach
    REAL(wp), PUBLIC   ::   rn_ncs_sst    ! nudging coefficient for SLAB bulk SST correction
 
-   !$acc declare create( rn_e3t_0, rn_frq_0, rn_mld_0, rn_ncs_sst )
+   !$acc declare create( rn_e3t_0, rn_frq_0, rn_mld_0, ln_ssv_T, ln_ssv_Fgrid, rn_ncs_sst )
 
    CHARACTER(len=100) ::   cn_dir        ! Root directory for location of ssm files
 
@@ -107,7 +107,7 @@ CONTAINS
          ssv_m(:,:) = sf_ssm_2d(jf_vsp)%fnow(:,:,1) * vmask(:,:,1)    ! v-velocity
          !
          IF( TRIM(sf_ssm_2d(jf_sal)%clrootname)=='NOT USED' )                 sf_ssm_2d(jf_sal)%fnow(:,:,1) = 35._wp
-         IF( TRIM(sf_ssm_2d(jf_tem)%clrootname)=='NOT USED' ) CALL eos_fzp_2d(sf_ssm_2d(jf_sal)%fnow(:,:,1), sf_ssm_2d(jf_tem)%fnow(:,:,1))
+         IF( TRIM(sf_ssm_2d(jf_tem)%clrootname)=='NOT USED' ) CALL eos10_fzp_2d(sf_ssm_2d(jf_sal)%fnow(:,:,1), sf_ssm_2d(jf_tem)%fnow(:,:,1))
          IF( TRIM(sf_ssm_2d(jf_ssh)%clrootname)=='NOT USED' )                 sf_ssm_2d(jf_ssh)%fnow(:,:,1) = 0._wp
          sst_m(:,:) = sf_ssm_2d(jf_tem)%fnow(:,:,1) * xmskt(:,:)    ! temperature
          sss_m(:,:) = sf_ssm_2d(jf_sal)%fnow(:,:,1) * xmskt(:,:)    ! salinity
@@ -143,7 +143,7 @@ CONTAINS
       ELSE
          ! When forcing not read in netCDF file(s), fall back on the following:
          sss_m(:,:) = 35._wp                             ! =35. to obtain a physical value for the freezing point
-         CALL eos_fzp_2d( sss_m(:,:), sst_m(:,:) )          ! sst_m is set at the freezing point
+         CALL eos10_fzp_2d( sss_m(:,:), sst_m(:,:) )     ! sst_m is set at the freezing point
          ssu_m(:,:) = 0._wp
          ssv_m(:,:) = 0._wp
          ssh_m(:,:) = 0._wp
@@ -220,27 +220,26 @@ CONTAINS
       DO jj=Njs0-1, Nje0+1
          DO ji=Nis0-1, Nie0+1
 
-            ldebg = (narea==3).AND.(ji==17).AND.(jj==44)
+            !ldebg = (narea==3).AND.(ji==17).AND.(jj==44)
             !ldebg = .true.
 
             zsss_p = psss_m(ji,jj) ! prescribed/observed SSS as read in netCDF file
             zsst_p = psst_m(ji,jj) ! prescribed/observed SST as read in netCDF file and potentially corrected / `eos_fzp`...
 
-            !IF( (narea==2).AND.(ji==16).AND.(jj==22) ) THEN
-            IF( ldebg ) THEN
-               PRINT *, '---'
-               !PRINT *, '  * glamt   = ', REAL(glamt(ji,jj),4)
-               !PRINT *, '  * gphit   = ', REAL(gphit(ji,jj),4)
-               !PRINT *, '  * qns   = ', REAL(qns(ji,jj),4)
-               PRINT *, ' *-emp_b        = ', REAL(-pemp(ji,jj),4)
-               PRINT *, ' * qns_b        = ', REAL(pqns(ji,jj),4)
-               PRINT *, ' * mld_m        = ', REAL(pmld_m(ji,jj),4)
-               PRINT *, ' * sss_m        = ', REAL(psss_m(ji,jj),4)
-               PRINT *, ' * FPT ==> t_bo = ', REAL( pt_bo(ji,jj),4)
-               PRINT *, ' * sst_m        = ', REAL(psst_m(ji,jj),4)
-               PRINT *, ' * zsst_p       = ', REAL(zsst_p,4)
-               PRINT *, '---'
-            ENDIF
+            !IF( ldebg ) THEN
+            !   PRINT *, '---'
+            !   !PRINT *, '  * glamt   = ', REAL(glamt(ji,jj),4)
+            !   !PRINT *, '  * gphit   = ', REAL(gphit(ji,jj),4)
+            !   !PRINT *, '  * qns   = ', REAL(qns(ji,jj),4)
+            !   PRINT *, ' *-emp_b        = ', REAL(-pemp(ji,jj),4)
+            !   PRINT *, ' * qns_b        = ', REAL(pqns(ji,jj),4)
+            !   PRINT *, ' * mld_m        = ', REAL(pmld_m(ji,jj),4)
+            !   PRINT *, ' * sss_m        = ', REAL(psss_m(ji,jj),4)
+            !   PRINT *, ' * FPT ==> t_bo = ', REAL( pt_bo(ji,jj),4)
+            !   PRINT *, ' * sst_m        = ', REAL(psst_m(ji,jj),4)
+            !   PRINT *, ' * zsst_p       = ', REAL(zsst_p,4)
+            !   PRINT *, '---'
+            !ENDIF
 
             z1_mld  = 1._wp / MAX( pmld_m(ji,jj), 0.1_wp )
 
@@ -248,28 +247,27 @@ CONTAINS
             zinc =  zFWkg/rhow * z1_mld * psss_m(ji,jj) !  zFWkg/rhow ~ volume / m2 = m ; zFWkg/rhow * z1_mld ~ '-'
             zsss_n  = psss_s(ji,jj) + zinc              !  expected new salinity in the MLD...
             !
-            IF( ldebg ) THEN
-               PRINT *, '---'
-               PRINT *, '  ==> zFWkg = ', REAL(zFWkg,4),'kg/m^2, during',REAL(pdt/3600._wp,4),'hours'
-               PRINT *, '            ===> equivalent to', REAL(zFWkg/rhow*1000._wp,4),'mm of water'
-               PRINT *, '  ==> zds_inc = ', REAL(zinc,4),'psu'
-               PRINT *, '  * zsss_n = ', REAL(zsss_n,4)
-            ENDIF
-
-
+            !IF( ldebg ) THEN
+            !   PRINT *, '---'
+            !   PRINT *, '  ==> zFWkg = ', REAL(zFWkg,4),'kg/m^2, during',REAL(pdt/3600._wp,4),'hours'
+            !   PRINT *, '            ===> equivalent to', REAL(zFWkg/rhow*1000._wp,4),'mm of water'
+            !   PRINT *, '  ==> zds_inc = ', REAL(zinc,4),'psu'
+            !   PRINT *, '  * zsss_n = ', REAL(zsss_n,4)
+            !ENDIF
             
-            IF((ji==40).AND.(jj==40)) THEN
-               PRINT *, ''
-               PRINT *, 'LOLO: solar heat flux available and actually counted for SLAB warming with A=',REAL(pA(ji,jj),4)
-               PRINT *, 'LOLO: qsr, qsr_counted:', REAL(pqsr(ji,jj),4), REAL((1._wp -pA(ji,jj))*pqsr(ji,jj),4)
-               PRINT *, ''
-            ENDIF
+            !IF((ji==40).AND.(jj==40)) THEN
+            !   PRINT *, ''
+            !   PRINT *, 'LOLO: solar heat flux available and actually counted for SLAB warming with A=',REAL(pA(ji,jj),4)
+            !   PRINT *, 'LOLO: qsr, qsr_counted:', REAL(pqsr(ji,jj),4), REAL((1._wp -pA(ji,jj))*pqsr(ji,jj),4)
+            !   PRINT *, ''
+            !ENDIF
 
             
             zQjoules = ( pqns(ji,jj) +  (1._wp -pA(ji,jj))*pqsr(ji,jj) ) * pdt   ! Energy received/lost per surface area during `pdt` (J/m2) !#LOLOfixme: consider solar penetration for qsr !?
             zinc =  zQjoules * r1_rho0_rcp * z1_mld   !  rho0_rcp ~ J/K/m3 => rho0_rcp*mld ~ J/K/m2 => zinc = (J/m2) / (J/K/m2) ==> K !
             zsst_n  = psst_s(ji,jj) + zinc                    !  expected new temperature in the MLD...
-            CALL eos_fzp_0d( zsss_n, zdum )
+            !CALL eos_fzp_0d( zsss_n, zdum )
+            zdum = t_eos10_fzp_scl( zsss_n )
             zsst_n = MAX( zsst_n , zdum )  ! slab SST cannot be colder than slab freezing-point temperature.
 
 
@@ -277,41 +275,38 @@ CONTAINS
             !znc = (1._wp - at_i(ji,jj)) + at_i(ji,jj)*rn_ncs_sst
             znc = rn_ncs_sst
 
-            IF( ldebg ) THEN
-               PRINT *, '---'
-               PRINT *, '  ==> zQjoules = ', REAL(zQjoules,4),'J/m^2, during',REAL(pdt/3600._wp,4),'hours'
-               PRINT *, '  ==> zdt_inc = ', REAL(zinc,4),'K'
-               PRINT *, '  * zsst_n = ', REAL(zsst_n,4)
-               PRINT *, ''
-               PRINT *, '  * NDG coeff, znc = ', REAL(znc,4)
-            ENDIF
+            !IF( ldebg ) THEN
+            !   PRINT *, '---'
+            !   PRINT *, '  ==> zQjoules = ', REAL(zQjoules,4),'J/m^2, during',REAL(pdt/3600._wp,4),'hours'
+            !   PRINT *, '  ==> zdt_inc = ', REAL(zinc,4),'K'
+            !   PRINT *, '  * zsst_n = ', REAL(zsst_n,4)
+            !   PRINT *, ''
+            !   PRINT *, '  * NDG coeff, znc = ', REAL(znc,4)
+            !ENDIF
 
             psss_s(ji,jj) = zsss_n - znc * ( zsss_n - zsss_p ) ! nudging towards the prescribed SSS
             psst_s(ji,jj) = zsst_n - znc * ( zsst_n - zsst_p ) ! nudging towards the prescribed SST
-
-            CALL eos_fzp_0d( psss_s(ji,jj), pt_bo(ji,jj) )
+            
+            !CALL eos_fzp_0d( psss_s(ji,jj), pt_bo(ji,jj) )
+            pt_bo(ji,jj) = t_eos10_fzp_scl( psss_s(ji,jj) )
             psst_s(ji,jj) = MAX( psst_s(ji,jj) , pt_bo(ji,jj) )  ! slab SST cannot be colder than slab freezing-point temperature.
 
 
             ! DEBUG:
-            CALL eos_fzp_0d( psss_s(ji,jj), zsst_n )
-            IF(psst_s(ji,jj)<zsst_n) THEN
-               PRINT *, 'LOLO FUCKUP: `sst_s(ji,jj)<zsst_n`!!! icestp.F90'
-               STOP
-            ENDIF
+            !CALL eos_fzp_0d( psss_s(ji,jj), zsst_n )
+            !IF(psst_s(ji,jj)<zsst_n) THEN
+            !   PRINT *, 'LOLO FUCKUP: `sst_s(ji,jj)<zsst_n`!!! icestp.F90'
+            !   STOP
+            !ENDIF
             !DEBUG.
 
-
-            ! eos_fzp_0d( psal, ptf, pdep )
-
-            !IF( (narea==2).AND.(ji==16).AND.(jj==22) ) THEN
-            IF( ldebg ) THEN
-               PRINT *, ' *  NEW t_bo = ', REAL( pt_bo(ji,jj),4)
-               PRINT *, '  * sst_s - sst_m =', REAL(psst_s(ji,jj) - psst_m(ji,jj),4)
-               PRINT *, '  * sss_s - sss_m =', REAL(psss_s(ji,jj) - psss_m(ji,jj),4)
-               PRINT *, '---'
-               PRINT *, ''
-            ENDIF
+            !IF( ldebg ) THEN
+            !   PRINT *, ' *  NEW t_bo = ', REAL( pt_bo(ji,jj),4)
+            !   PRINT *, '  * sst_s - sst_m =', REAL(psst_s(ji,jj) - psst_m(ji,jj),4)
+            !   PRINT *, '  * sss_s - sss_m =', REAL(psss_s(ji,jj) - psss_m(ji,jj),4)
+            !   PRINT *, '---'
+            !   PRINT *, ''
+            !ENDIF
 
          END DO
       END DO
@@ -351,7 +346,7 @@ CONTAINS
       TYPE(FLD_N) ::   sn_ifr, sn_tic, sn_ial
       !!
       NAMELIST/namoss_ssx/ ln_ssxread, ln_3d_uve, ln_read_e3t, rn_e3t_0, ln_read_frq, rn_frq_0, &
-         &                 ln_ssV_T, ln_ssv_Fgrid, ln_slab_sst, rn_mld_0, rn_ncs_sst,           &
+         &                 ln_ssv_T, ln_ssv_Fgrid, ln_slab_sst, rn_mld_0, rn_ncs_sst,           &
          &                 cn_dir, sn_usp, sn_vsp, sn_tem, sn_sal, sn_ssh, sn_mld,              &
          &                 sn_e3t, sn_frq, sn_usf, sn_vsf, sn_ifr, sn_tic, sn_ial
       !!----------------------------------------------------------------------
@@ -378,7 +373,8 @@ CONTAINS
          WRITE(numout,*) '                => prescribed value of `e3t` to fall back on                rn_e3t_0  = ', rn_e3t_0
          WRITE(numout,*) '      Are we reading frq (fraction of qsr absorbed in the 1st T level)   ln_read_frq  = ', ln_read_frq
          WRITE(numout,*) '                => prescribed value of `frq` to fall back on                rn_frq_0  = ', rn_frq_0
-         WRITE(numout,*) '      Prescribed surface velocities provided @T rather than @U,V  points    ln_ssV_T  = ', ln_ssV_T
+         WRITE(numout,*) '      Prescribed surface velocities provided @T rather than @U,V  points    ln_ssv_T  = ', ln_ssv_T
+         WRITE(numout,*) '      Read SSU@V & SSV@U in prescribed OSS                               ln_ssv_Fgrid = ', ln_ssv_Fgrid
          WRITE(numout,*) '      Correction of the prescibed SST based on a "slab model" approach    ln_slab_sst = ', ln_slab_sst
          WRITE(numout,*) '                => prescribed value of `mld` to fall back on                rn_mld_0  = ', rn_mld_0
          WRITE(numout,*) '                => nudging coefficient for SLAB bulk SST correction       rn_ncs_sst  = ', rn_ncs_sst
@@ -529,11 +525,11 @@ CONTAINS
             !
             CALL fld_fill( sf_ssm_2d, slf_2d, cn_dir, 'oss_prs_init', '2D Data in file', 'namoss_ssx' )
             IF( .NOT. ln_3d_uve ) THEN
-               IF( ln_ssV_T ) THEN
+               IF( ln_ssv_T ) THEN
                   sf_ssm_2d(jf_usp)%cltype = 'T'   ;   sf_ssm_2d(jf_usp)%zsgn = -1._wp
                   sf_ssm_2d(jf_vsp)%cltype = 'T'   ;   sf_ssm_2d(jf_vsp)%zsgn = -1._wp
                   IF( ln_ssv_Fgrid ) THEN
-                     CALL ctl_stop( 'oss_prs_init: `ln_ssv_Fgrid=T` prohibited when `ln_ssV_T=T` !!!' )   ;   RETURN
+                     CALL ctl_stop( 'oss_prs_init: `ln_ssv_Fgrid=T` prohibited when `ln_ssv_T=T` !!!' )   ;   RETURN
                   ENDIF
                ELSE
                   sf_ssm_2d(jf_usp)%cltype = 'U'   ;   sf_ssm_2d(jf_usp)%zsgn = -1._wp
@@ -542,7 +538,7 @@ CONTAINS
                      sf_ssm_2d(jf_usf)%cltype = 'V'   ;   sf_ssm_2d(jf_usf)%zsgn = -1._wp
                      sf_ssm_2d(jf_vsf)%cltype = 'U'   ;   sf_ssm_2d(jf_vsf)%zsgn = -1._wp
                   ENDIF
-               ENDIF !IF( ln_ssV_T )
+               ENDIF !IF( ln_ssv_T )
             ENDIF !IF( .NOT. ln_3d_uve )
          ENDIF !IF( nfld_2d > 0 )
          !
@@ -554,8 +550,7 @@ CONTAINS
       CALL oss_prs_rcv( nit000 )   ! need to define ssx_m arrays used in iceistate
       l_initdone = .TRUE.
       !
-      !$acc update device ( rn_e3t_0, rn_frq_0, rn_mld_0, rn_ncs_sst )
-
+      !$acc update device ( rn_e3t_0, rn_frq_0, rn_mld_0, ln_ssv_T, ln_ssv_Fgrid, rn_ncs_sst )
 
    END SUBROUTINE oss_prs_init
 

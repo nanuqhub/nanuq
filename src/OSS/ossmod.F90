@@ -22,7 +22,7 @@ MODULE ossmod
    USE bdy   , ONLY: ln_bdy
    USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
    !
-   USE eosbn2, ONLY: eos_fzp_2d
+   USE eosbn2, ONLY: eos10_fzp_2d
    !
    USE prtctl         ! Print control                    (prt_ctl routine)
    USE iom            ! IOM library
@@ -63,7 +63,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER ::   ios, icpt                         ! local integer
       !!
-      NAMELIST/namoss/ rn_Cd_io, ln_drgice_imp, nn_foss, ln_prs_oce, ln_cpl_oce, ln_ice_embd, ln_ssv_Fgrid
+      NAMELIST/namoss/ rn_Cd_io, ln_drgice_imp, nn_foss, ln_prs_oce, ln_cpl_oce, ln_ice_embd
       !!----------------------------------------------------------------------
       !
       IF(lwp) THEN
@@ -89,7 +89,6 @@ CONTAINS
          WRITE(numout,*) '         ice-ocean coupled formulation           ln_cpl_oce = ', ln_cpl_oce
          WRITE(numout,*) '         OASIS coupling                        lk_oasis_oce = ', lk_oasis_oce
          WRITE(numout,*) '         ice embedded into ocean              ln_ice_embd   = ', ln_ice_embd
-         WRITE(numout,*) '      Read SSU@V & SSV@U in prescribed OSS     ln_ssv_Fgrid = ', ln_ssv_Fgrid
          !WRITE(numout,*) '      Misc. options of oss : '
          !WRITE(numout,*) '         nb of iterations if land-sea-mask applied  nn_lsm        = ', nn_lsm
       ENDIF
@@ -168,7 +167,7 @@ CONTAINS
       CALL oss_prs_init() ! Prescribed sea surface state fields initialization
       !                   ! or initial state in coupled mode
       
-      !$acc update device ( rn_Cd_io, ln_drgice_imp, nn_foss, ln_cpl_oce, ln_ssv_Fgrid, ln_ice_embd )
+      !$acc update device ( rn_Cd_io, ln_drgice_imp, nn_foss, ln_cpl_oce, ln_ice_embd )
 
 
       IF( .NOT. ln_rstart ) THEN
@@ -229,7 +228,7 @@ CONTAINS
       IF( iom_use('frq_m') ) CALL iom_put( 'frq_m', frq_m )
       !
       IF( iom_use('frz_m') ) THEN
-         CALL eos_fzp_2d( sss_m(:,:), zus(:,:) )
+         CALL eos10_fzp_2d( sss_m(:,:), zus(:,:) )
          CALL iom_put( 'frz_m', zus * xmskt )
          zus(:,:) = 0._wp
       ENDIF
