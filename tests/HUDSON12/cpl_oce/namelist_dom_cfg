@@ -55,6 +55,7 @@
    nn_foss     = 1         !  frequency of OSS module call
       !                    !  (control sea-ice & iceberg model call)
       !              ! Type of coupling (Ice/Ocean) :
+   ln_prs_oce  = .false.   !  uses a prescribed surface state of the ocean => standalone mode
    ln_cpl_oce  = .true.    !  ocean coupled   formulation          ( requires key_oasis3 )
       !
    ln_ice_embd = .false.   !  =T embedded sea-ice (pressure + mass and salt exchanges)
