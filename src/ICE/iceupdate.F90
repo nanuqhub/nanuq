@@ -238,110 +238,110 @@ CONTAINS
       !
       ! --- salt fluxes [kg/m2/s] --- !
       !                           ! sfxice =  sfxbog + sfxbom + sfxsum + sfxsni + sfxopw + sfxres + sfxdyn + sfxbri + sfxsub + sfxlam
-      IF( iom_use('sfxice'  ) )   CALL iom_put( 'sfxice', sfx     * 1.e-03 )   ! salt flux from total ice growth/melt
-      IF( iom_use('sfxbog'  ) )   CALL iom_put( 'sfxbog', sfx_bog * 1.e-03 )   ! salt flux from bottom growth
-      IF( iom_use('sfxbom'  ) )   CALL iom_put( 'sfxbom', sfx_bom * 1.e-03 )   ! salt flux from bottom melting
-      IF( iom_use('sfxsum'  ) )   CALL iom_put( 'sfxsum', sfx_sum * 1.e-03 )   ! salt flux from surface melting
-      IF( iom_use('sfxlam'  ) )   CALL iom_put( 'sfxlam', sfx_lam * 1.e-03 )   ! salt flux from lateral melting
-      IF( iom_use('sfxsni'  ) )   CALL iom_put( 'sfxsni', sfx_sni * 1.e-03 )   ! salt flux from snow ice formation
-      IF( iom_use('sfxopw'  ) )   CALL iom_put( 'sfxopw', sfx_opw * 1.e-03 )   ! salt flux from open water formation
-      IF( iom_use('sfxdyn'  ) )   CALL iom_put( 'sfxdyn', sfx_dyn * 1.e-03 )   ! salt flux from ridging rafting
-      IF( iom_use('sfxbri'  ) )   CALL iom_put( 'sfxbri', sfx_bri * 1.e-03 )   ! salt flux from brines
-      IF( iom_use('sfxres'  ) )   CALL iom_put( 'sfxres', sfx_res * 1.e-03 )   ! salt flux from undiagnosed processes
-      IF( iom_use('sfxsub'  ) )   CALL iom_put( 'sfxsub', sfx_sub * 1.e-03 )   ! salt flux from sublimation
+      IF( iom_use("sfxice"  ) )   CALL iom_put( "sfxice", sfx     * 1.e-03 )   ! salt flux from total ice growth/melt
+      IF( iom_use("sfxbog"  ) )   CALL iom_put( "sfxbog", sfx_bog * 1.e-03 )   ! salt flux from bottom growth
+      IF( iom_use("sfxbom"  ) )   CALL iom_put( "sfxbom", sfx_bom * 1.e-03 )   ! salt flux from bottom melting
+      IF( iom_use("sfxsum"  ) )   CALL iom_put( "sfxsum", sfx_sum * 1.e-03 )   ! salt flux from surface melting
+      IF( iom_use("sfxlam"  ) )   CALL iom_put( "sfxlam", sfx_lam * 1.e-03 )   ! salt flux from lateral melting
+      IF( iom_use("sfxsni"  ) )   CALL iom_put( "sfxsni", sfx_sni * 1.e-03 )   ! salt flux from snow ice formation
+      IF( iom_use("sfxopw"  ) )   CALL iom_put( "sfxopw", sfx_opw * 1.e-03 )   ! salt flux from open water formation
+      IF( iom_use("sfxdyn"  ) )   CALL iom_put( "sfxdyn", sfx_dyn * 1.e-03 )   ! salt flux from ridging rafting
+      IF( iom_use("sfxbri"  ) )   CALL iom_put( "sfxbri", sfx_bri * 1.e-03 )   ! salt flux from brines
+      IF( iom_use("sfxres"  ) )   CALL iom_put( "sfxres", sfx_res * 1.e-03 )   ! salt flux from undiagnosed processes
+      IF( iom_use("sfxsub"  ) )   CALL iom_put( "sfxsub", sfx_sub * 1.e-03 )   ! salt flux from sublimation
 
       ! --- mass fluxes [kg/m2/s] --- !
-      CALL iom_put( 'emp_oce', emp_oce )   ! emp over ocean (taking into account the snow blown away from the ice)
-      CALL iom_put( 'emp_ice', emp_ice )   ! emp over ice   (taking into account the snow blown away from the ice)
+      CALL iom_put( "emp_oce", emp_oce )   ! emp over ocean (taking into account the snow blown away from the ice)
+      CALL iom_put( "emp_ice", emp_ice )   ! emp over ice   (taking into account the snow blown away from the ice)
 
       !                           ! vfxice = vfxbog + vfxbom + vfxsum + vfxsni + vfxopw + vfxdyn + vfxres + vfxlam + vfxpnd
-      CALL iom_put( 'vfxice'    , wfx_ice     )   ! mass flux from total ice growth/melt
-      CALL iom_put( 'vfxbog'    , wfx_bog     )   ! mass flux from bottom growth
-      CALL iom_put( 'vfxbom'    , wfx_bom     )   ! mass flux from bottom melt
-      CALL iom_put( 'vfxsum'    , wfx_sum     )   ! mass flux from surface melt
-      CALL iom_put( 'vfxlam'    , wfx_lam     )   ! mass flux from lateral melt
-      CALL iom_put( 'vfxsni'    , wfx_sni     )   ! mass flux from snow-ice formation
-      CALL iom_put( 'vfxopw'    , wfx_opw     )   ! mass flux from growth in open water
-      CALL iom_put( 'vfxdyn'    , wfx_dyn     )   ! mass flux from dynamics (ridging)
-      CALL iom_put( 'vfxres'    , wfx_res     )   ! mass flux from undiagnosed processes
-      CALL iom_put( 'vfxpnd'    , wfx_pnd     )   ! mass flux from melt ponds
-      CALL iom_put( 'vfxsub'    , wfx_ice_sub )   ! mass flux from ice sublimation (ice-atm.)
-      CALL iom_put( 'vfxsub_err', wfx_err_sub )   ! "excess" of sublimation sent to ocean
+      CALL iom_put( "vfxice"    , wfx_ice     )   ! mass flux from total ice growth/melt
+      CALL iom_put( "vfxbog"    , wfx_bog     )   ! mass flux from bottom growth
+      CALL iom_put( "vfxbom"    , wfx_bom     )   ! mass flux from bottom melt
+      CALL iom_put( "vfxsum"    , wfx_sum     )   ! mass flux from surface melt
+      CALL iom_put( "vfxlam"    , wfx_lam     )   ! mass flux from lateral melt
+      CALL iom_put( "vfxsni"    , wfx_sni     )   ! mass flux from snow-ice formation
+      CALL iom_put( "vfxopw"    , wfx_opw     )   ! mass flux from growth in open water
+      CALL iom_put( "vfxdyn"    , wfx_dyn     )   ! mass flux from dynamics (ridging)
+      CALL iom_put( "vfxres"    , wfx_res     )   ! mass flux from undiagnosed processes
+      CALL iom_put( "vfxpnd"    , wfx_pnd     )   ! mass flux from melt ponds
+      CALL iom_put( "vfxsub"    , wfx_ice_sub )   ! mass flux from ice sublimation (ice-atm.)
+      CALL iom_put( "vfxsub_err", wfx_err_sub )   ! "excess" of sublimation sent to ocean
 
-      !IF ( iom_use( 'vfxthin' ) ) THEN   ! mass flux from ice growth in open water + thin ice (<20cm) => comparable to observations
+      !IF ( iom_use( "vfxthin" ) ) THEN   ! mass flux from ice growth in open water + thin ice (<20cm) => comparable to observations
       !   WHERE( hm_i(:,:) < 0.2 .AND. hm_i(:,:) > 0. )
       !      z2d = wfx_bog
       !   ELSEWHERE
       !      z2d = 0._wp
       !   END WHERE
-      !   CALL iom_put( 'vfxthin', wfx_opw + z2d )
+      !   CALL iom_put( "vfxthin", wfx_opw + z2d )
       !ENDIF
 
       !                            ! vfxsnw = vfxsnw_sni + vfxsnw_dyn + vfxsnw_sum
-      CALL iom_put( 'vfxsnw'     , wfx_snw     )   ! mass flux from total snow growth/melt
-      CALL iom_put( 'vfxsnw_sum' , wfx_snw_sum )   ! mass flux from snow melt at the surface
-      CALL iom_put( 'vfxsnw_sni' , wfx_snw_sni )   ! mass flux from snow melt during snow-ice formation
-      CALL iom_put( 'vfxsnw_dyn' , wfx_snw_dyn )   ! mass flux from dynamics (ridging)
-      CALL iom_put( 'vfxsnw_sub' , wfx_snw_sub )   ! mass flux from snow sublimation (ice-atm.)
-      CALL iom_put( 'vfxsnw_pre' , wfx_spr     )   ! snow precip
+      CALL iom_put( "vfxsnw"     , wfx_snw     )   ! mass flux from total snow growth/melt
+      CALL iom_put( "vfxsnw_sum" , wfx_snw_sum )   ! mass flux from snow melt at the surface
+      CALL iom_put( "vfxsnw_sni" , wfx_snw_sni )   ! mass flux from snow melt during snow-ice formation
+      CALL iom_put( "vfxsnw_dyn" , wfx_snw_dyn )   ! mass flux from dynamics (ridging)
+      CALL iom_put( "vfxsnw_sub" , wfx_snw_sub )   ! mass flux from snow sublimation (ice-atm.)
+      CALL iom_put( "vfxsnw_pre" , wfx_spr     )   ! snow precip
 
       ! --- heat fluxes [W/m2] --- !
       !                              ! qt_atm_oi - qt_oce_ai = hfxdhc - ( dihctrp + dshctrp )
 
-      !IF( iom_use('qsr_oce_si') .OR. iom_use('qns_oce_si') .OR. iom_use('qemp_oce_si') .OR. iom_use('qns_atmo') ) THEN
+      !IF( iom_use("qsr_oce_si") .OR. iom_use("qns_oce_si") .OR. iom_use("qemp_oce_si") .OR. iom_use("qns_atmo") ) THEN
       !LB:
       !      !z2d(:,:) = xmskt(:,:)
       !
       !   !! LB: '_si' means we just keep regions where there is sea-ice (field will be 0 where A=0) !
       !   WHERE( at_i_b(:,:) <= 0.01_wp ) z2d(:,:) = 0._wp
-      !   IF( iom_use('qemp_oce_si') ) CALL iom_put( 'qemp_oce_si', qemp_oce                      * z2d ) ! Downward Heat Flux from E-P over ocean
-      !   IF( iom_use('qsr_oce_si' ) ) CALL iom_put( 'qsr_oce_si' , qsr_oce  * ( 1._wp - at_i_b ) * z2d ) !     solar flux at ocean surface
-      !   IF( iom_use('qns_oce_si' ) ) CALL iom_put( 'qns_oce_si' , qns_oce  * ( 1._wp - at_i_b ) * z2d ) ! non-solar flux at ocean surface !LOLO: add `qemp_oce` ??? don't get it...
-      !   IF( iom_use('qns_atmo'   ) ) CALL iom_put( 'qns_atmo'   , ( -SUM( qns_ice * a_i_b, dim=3 ) - qns_oce*( 1._wp - at_i_b ) ) * z2d ) ! Non solar heat flux to the atmosphere
+      !   IF( iom_use("qemp_oce_si") ) CALL iom_put( "qemp_oce_si", qemp_oce                      * z2d ) ! Downward Heat Flux from E-P over ocean
+      !   IF( iom_use("qsr_oce_si" ) ) CALL iom_put( "qsr_oce_si" , qsr_oce  * ( 1._wp - at_i_b ) * z2d ) !     solar flux at ocean surface
+      !   IF( iom_use("qns_oce_si" ) ) CALL iom_put( "qns_oce_si" , qns_oce  * ( 1._wp - at_i_b ) * z2d ) ! non-solar flux at ocean surface !LOLO: add `qemp_oce` ??? don't get it...
+      !   IF( iom_use("qns_atmo"   ) ) CALL iom_put( "qns_atmo"   , ( -SUM( qns_ice * a_i_b, dim=3 ) - qns_oce*( 1._wp - at_i_b ) ) * z2d ) ! Non solar heat flux to the atmosphere
       !   !!
       !   z2d(:,:) = xmskt(:,:)
       !ENDIF
       !LB.
 
-      IF( iom_use('qsr_oce'    ) ) CALL iom_put( 'qsr_oce'    , (qsr_oce * ( 1._wp - at_i_b )                              ) * xmskt ) !     solar flux at ocean surface
-      IF( iom_use('qns_oce'    ) ) CALL iom_put( 'qns_oce'    , (qns_oce * ( 1._wp - at_i_b ) + qemp_oce                   ) * xmskt ) ! non-solar flux at ocean surface
-      !IF( iom_use('qsr_ice'    ) ) CALL iom_put( 'qsr_ice'    , (SUM( qsr_ice * a_i_b, dim=3 )                             ) * xmskt ) !     solar flux at ice surface ! --> moved to `blk_ice_2` of `sbcblk.F90`
+      IF( iom_use("qsr_oce"    ) ) CALL iom_put( "qsr_oce"    , (qsr_oce * ( 1._wp - at_i_b )                              ) * xmskt ) !     solar flux at ocean surface
+      IF( iom_use("qns_oce"    ) ) CALL iom_put( "qns_oce"    , (qns_oce * ( 1._wp - at_i_b ) + qemp_oce                   ) * xmskt ) ! non-solar flux at ocean surface
+      !IF( iom_use("qsr_ice"    ) ) CALL iom_put( "qsr_ice"    , (SUM( qsr_ice * a_i_b, dim=3 )                             ) * xmskt ) !     solar flux at ice surface ! --> moved to `blk_ice_2` of `sbcblk.F90`
       !#LOLOFixme: the true `qns_ice` is saved in `blk_ice_2` of `sbcblk.F90`, change the name for this one:
-      !IF( iom_use('qns_ice'    ) ) CALL iom_put( 'qns_ice'    , (SUM( qns_ice * a_i_b, dim=3 ) + qemp_ice                  ) * xmskt ) ! non-solar flux at ice surface
+      !IF( iom_use("qns_ice"    ) ) CALL iom_put( "qns_ice"    , (SUM( qns_ice * a_i_b, dim=3 ) + qemp_ice                  ) * xmskt ) ! non-solar flux at ice surface
       !#LOLOfixme.
-      IF( iom_use('qtr_ice_bot') ) CALL iom_put( 'qtr_ice_bot', (SUM( qtr_ice_bot * a_i_b, dim=3 )                         ) * xmskt ) !     solar flux transmitted thru ice
-      IF( iom_use('qtr_ice_top') ) CALL iom_put( 'qtr_ice_top', (SUM( qtr_ice_top * a_i_b, dim=3 )                         ) * xmskt ) !     solar flux transmitted thru ice surface
-      IF( iom_use('qt_oce'     ) ) CALL iom_put( 'qt_oce'     , (     ( qsr_oce + qns_oce ) * ( 1._wp - at_i_b ) + qemp_oce) * xmskt )
-      IF( iom_use('qt_ice'     ) ) CALL iom_put( 'qt_ice'     , (SUM( ( qns_ice + qsr_ice ) * a_i_b, dim=3 )     + qemp_ice) * xmskt )
-      IF( iom_use('qt_oce_ai'  ) ) CALL iom_put( 'qt_oce_ai'  , qt_oce_ai                                                    * xmskt ) ! total heat flux at the ocean   surface: interface oce-(ice+atm)
-      IF( iom_use('qt_atm_oi'  ) ) CALL iom_put( 'qt_atm_oi'  , qt_atm_oi                                                    * xmskt ) ! total heat flux at the oce-ice surface: interface atm-(ice+oce)
-      IF( iom_use('qemp_oce'   ) ) CALL iom_put( 'qemp_oce'   , (qemp_oce                                                  ) * xmskt ) ! Downward Heat Flux from E-P over ocean
-      IF( iom_use('qemp_ice'   ) ) CALL iom_put( 'qemp_ice'   , (qemp_ice                                                  ) * xmskt ) ! Downward Heat Flux from E-P over ice
+      IF( iom_use("qtr_ice_bot") ) CALL iom_put( "qtr_ice_bot", (SUM( qtr_ice_bot * a_i_b, dim=3 )                         ) * xmskt ) !     solar flux transmitted thru ice
+      IF( iom_use("qtr_ice_top") ) CALL iom_put( "qtr_ice_top", (SUM( qtr_ice_top * a_i_b, dim=3 )                         ) * xmskt ) !     solar flux transmitted thru ice surface
+      IF( iom_use("qt_oce"     ) ) CALL iom_put( "qt_oce"     , (     ( qsr_oce + qns_oce ) * ( 1._wp - at_i_b ) + qemp_oce) * xmskt )
+      IF( iom_use("qt_ice"     ) ) CALL iom_put( "qt_ice"     , (SUM( ( qns_ice + qsr_ice ) * a_i_b, dim=3 )     + qemp_ice) * xmskt )
+      IF( iom_use("qt_oce_ai"  ) ) CALL iom_put( "qt_oce_ai"  , qt_oce_ai                                                    * xmskt ) ! total heat flux at the ocean   surface: interface oce-(ice+atm)
+      IF( iom_use("qt_atm_oi"  ) ) CALL iom_put( "qt_atm_oi"  , qt_atm_oi                                                    * xmskt ) ! total heat flux at the oce-ice surface: interface atm-(ice+oce)
+      IF( iom_use("qemp_oce"   ) ) CALL iom_put( "qemp_oce"   , (qemp_oce                                                  ) * xmskt ) ! Downward Heat Flux from E-P over ocean
+      IF( iom_use("qemp_ice"   ) ) CALL iom_put( "qemp_ice"   , (qemp_ice                                                  ) * xmskt ) ! Downward Heat Flux from E-P over ice
 
       ! heat fluxes from ice transformations
       !                            ! hfxdhc = hfxbog + hfxbom + hfxsum + hfxopw + hfxdif + hfxsnw - ( hfxthd + hfxdyn + hfxres + hfxsub + hfxspr )
-      CALL iom_put ('hfxbog'     , hfx_bog     )   ! heat flux used for ice bottom growth
-      CALL iom_put ('hfxbom'     , hfx_bom     )   ! heat flux used for ice bottom melt
-      CALL iom_put ('hfxsum'     , hfx_sum     )   ! heat flux used for ice surface melt
-      CALL iom_put ('hfxopw'     , hfx_opw     )   ! heat flux used for ice formation in open water
-      CALL iom_put ('hfxdif'     , hfx_dif     )   ! heat flux used for ice temperature change
-      CALL iom_put ('hfxsnw'     , hfx_snw     )   ! heat flux used for snow melt
-      CALL iom_put ('hfxerr'     , hfx_err_dif )   ! heat flux error after heat diffusion
+      CALL iom_put ("hfxbog"     , hfx_bog     )   ! heat flux used for ice bottom growth
+      CALL iom_put ("hfxbom"     , hfx_bom     )   ! heat flux used for ice bottom melt
+      CALL iom_put ("hfxsum"     , hfx_sum     )   ! heat flux used for ice surface melt
+      CALL iom_put ("hfxopw"     , hfx_opw     )   ! heat flux used for ice formation in open water
+      CALL iom_put ("hfxdif"     , hfx_dif     )   ! heat flux used for ice temperature change
+      CALL iom_put ("hfxsnw"     , hfx_snw     )   ! heat flux used for snow melt
+      CALL iom_put ("hfxerr"     , hfx_err_dif )   ! heat flux error after heat diffusion
 
       ! heat fluxes associated with mass exchange (freeze/melt/precip...)
-      CALL iom_put ('hfxthd'     , hfx_thd     )   !
-      CALL iom_put ('hfxdyn'     , hfx_dyn     )   !
-      CALL iom_put ('hfxres'     , hfx_res     )   !
-      CALL iom_put ('hfxsub'     , hfx_sub     )   !
-      CALL iom_put ('hfxspr'     , hfx_spr     )   ! Heat flux from snow precip heat content
+      CALL iom_put ("hfxthd"     , hfx_thd     )   !
+      CALL iom_put ("hfxdyn"     , hfx_dyn     )   !
+      CALL iom_put ("hfxres"     , hfx_res     )   !
+      CALL iom_put ("hfxsub"     , hfx_sub     )   !
+      CALL iom_put ("hfxspr"     , hfx_spr     )   ! Heat flux from snow precip heat content
 
       ! other heat fluxes
-      IF( iom_use('hfxsensib'  ) )   CALL iom_put( 'hfxsensib'  ,      qsb_ice_bot * at_i_b         )   ! Sensible oceanic heat flux
-      IF( iom_use('hfxcndbot'  ) )   CALL iom_put( 'hfxcndbot'  , SUM( qcn_ice_bot * a_i_b, dim=3 ) )   ! Bottom conduction flux
-      IF( iom_use('hfxcndtop'  ) )   CALL iom_put( 'hfxcndtop'  , SUM( qcn_ice_top * a_i_b, dim=3 ) )   ! Surface conduction flux
-      IF( iom_use('hfxmelt'    ) )   CALL iom_put( 'hfxmelt'    , SUM( qml_ice     * a_i_b, dim=3 ) )   ! Surface melt flux
-      IF( iom_use('hfxldmelt'  ) )   CALL iom_put( 'hfxldmelt'  ,      fhld        * at_i_b         )   ! Heat in lead for ice melting
-      IF( iom_use('hfxldgrow'  ) )   CALL iom_put( 'hfxldgrow'  ,      qlead       * r1_Dt_ice      )   ! Heat in lead for ice growth
+      IF( iom_use("hfxsensib"  ) )   CALL iom_put( "hfxsensib"  ,      qsb_ice_bot * at_i_b         )   ! Sensible oceanic heat flux
+      IF( iom_use("hfxcndbot"  ) )   CALL iom_put( "hfxcndbot"  , SUM( qcn_ice_bot * a_i_b, dim=3 ) )   ! Bottom conduction flux
+      IF( iom_use("hfxcndtop"  ) )   CALL iom_put( "hfxcndtop"  , SUM( qcn_ice_top * a_i_b, dim=3 ) )   ! Surface conduction flux
+      IF( iom_use("hfxmelt"    ) )   CALL iom_put( "hfxmelt"    , SUM( qml_ice     * a_i_b, dim=3 ) )   ! Surface melt flux
+      IF( iom_use("hfxldmelt"  ) )   CALL iom_put( "hfxldmelt"  ,      fhld        * at_i_b         )   ! Heat in lead for ice melting
+      IF( iom_use("hfxldgrow"  ) )   CALL iom_put( "hfxldgrow"  ,      qlead       * r1_Dt_ice      )   ! Heat in lead for ice growth
 
       ! controls
       !---------
@@ -407,7 +407,7 @@ CONTAINS
       zflagi = MERGE( 0._wp   ,   1._wp  ,   ln_drgice_imp )
 
       nb = MAX( nn_hls-1, 0 )
-      
+
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nb, Nje0+nb
          DO ji=Nis0-nb, Nie0+nb
@@ -438,14 +438,14 @@ CONTAINS
             !
             zA = u_ice(ji,jj) - V_oce(ji,jj,1) ! u_ice - u_oce @ U
             zB = vUice(ji,jj) - V_oce(ji,jj,4) ! v_ice - v_oce @ U
-            ztmod_io = SQRT( zA*zA + zB*zB )   ! modulus of ice - oce @ U 
+            ztmod_io = SQRT( zA*zA + zB*zB )   ! modulus of ice - oce @ U
             ztaux_ai_u = zrhoco * ztmod_io * ( u_ice(ji,jj) - zflagi * V_oce(ji,jj,1) )
 
             zA = uVice(ji,jj) - V_oce(ji,jj,3) ! u_ice - u_oce @ V
             zB = v_ice(ji,jj) - V_oce(ji,jj,2) ! v_ice - v_oce @ V
-            ztmod_io = SQRT( zA*zA + zB*zB )   ! modulus of ice - oce @ U 
+            ztmod_io = SQRT( zA*zA + zB*zB )   ! modulus of ice - oce @ U
             ztauy_ai_v = zrhoco * ztmod_io * ( v_ice(ji,jj) - zflagi * V_oce(ji,jj,2) )
-            
+
             !#LOLOreview.
             !                                                   ! stresses at the ocean surface
             utau(ji,jj) = ( 1._wp - za_tot_u ) * ztaux_oi_u + za_tot_u * ztaux_ai_u

@@ -359,8 +359,6 @@ CONTAINS
       !                                                ! ---------------------------------------- !
       !                                                !        Outputs and control print         !
       !                                                ! ---------------------------------------- !
-      !IF( .NOT. ln_cpl_oce ) THEN
-      IF( kt == nit000 ) PRINT *, 'LOLO `sbc_write()@sbcmod.F90` => potentially IOMing the liquid ocean SBC fluxes !, kt =', kt
 
       !! LB => when coupled to ocean component via OASIS I rather save the exacts same fields (as saved here)
       !!       right at the place where they are sent to OASIS, so technically in `oss_cpl_snd()@osscpl.F90` !
