@@ -21,6 +21,11 @@ combination with the `_OPENACC` preprocessing key.
 As such, apart from the initialization, restart reading/writing & I/O, all computation is performed on the GPU.
 It has been extensively tested with the `nvfortan` compiler of Nvidia (ex PGI).
 
+<p align="center">
+  <img width="376" src="./tests/doc/figs/cpl_gpu-MPI.svg">
+</p>
+
+
 
 <br>
 
