@@ -22,7 +22,7 @@ As such, apart from the initialization, restart reading/writing & I/O, all compu
 It has been extensively tested with the `nvfortan` compiler of Nvidia (ex PGI).
 
 <p align="center">
-  <img width="376" src="./tests/doc/figs/cpl_gpu-MPI.svg">
+  <img width="750" src="./tests/doc/figs/cpl_gpu-MPI.svg">
 </p>
 
 
