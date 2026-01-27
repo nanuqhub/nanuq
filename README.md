@@ -245,7 +245,7 @@ Regional configuration of the East-Greenland region at 12th of a degree of spati
 
 https://github.com/user-attachments/assets/02d6799b-6e82-47bc-95cd-03e54171d8f8
 
-_Evolution of the sea ice thickness (range: 0 - 4m), 1997-01-01 to 1997-04-25 with the BBM rheology in EGL12 coupled setup (NANUQ - OASIS -NEMO/OCE) with hourly ERA5 surface atmospheric forcing. Initialized 1997-01-01 with GLORYS2v4 reanalysis_
+_Evolution of the sea ice thickness (range: 0 - 4m), 1997-01-01 to 1997-04-25 with the BBM rheology in EGL12 coupled setup (NANUQ - OASIS -NEMO/OCE) with hourly ERA5 surface atmospheric forcing. Initialized 1997-01-01 with GLORYS2v4 reanalysis. White rectangular area are disregarded processors regions (MPI horizontal decomposition)._
 
 See the dedicated [README](./tests/EGL12/standalone/README.md) under `./tests/EGL12/standalone`.
 
