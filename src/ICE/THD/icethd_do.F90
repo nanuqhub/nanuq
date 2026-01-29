@@ -130,10 +130,6 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if defined _TRDBG
-      PRINT *, ' * LOLO `ice_thd_do`: npti =', npti
-# endif
-
       IF( npti > 0 ) THEN
 
          !$acc parallel loop collapse(2)  private( zv_b,za_b,zh_i_o,ze_i_o,zs_i_o, zxi_cum0,zhi_cum0,zxi_cum1,zhi_cum1 )

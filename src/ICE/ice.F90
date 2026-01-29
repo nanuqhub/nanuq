@@ -396,6 +396,23 @@ CONTAINS
          &      hfx_sum    (jpi,jpj) , hfx_bom   (jpi,jpj) , hfx_bog(jpi,jpj) , hfx_dif(jpi,jpj) ,     &
          &      hfx_opw    (jpi,jpj) , hfx_thd   (jpi,jpj) , hfx_dyn(jpi,jpj) , hfx_spr(jpi,jpj) ,     &
          &      hfx_err_dif(jpi,jpj) , wfx_err_sub(jpi,jpj)                   , STAT=ierr(ii) )
+
+      t_bo(:,:)=0._wp ; wfx_snw_sni(:,:)=0._wp
+      wfx_snw(:,:)=0._wp ; wfx_snw_dyn(:,:)=0._wp ; wfx_snw_sum(:,:)=0._wp ; wfx_snw_sub(:,:)=0._wp
+      wfx_ice(:,:)=0._wp ; wfx_sub(:,:)=0._wp ; wfx_ice_sub(:,:)=0._wp ; wfx_lam(:,:)=0._wp
+      wfx_pnd(:,:)=0._wp
+      wfx_bog(:,:)=0._wp ; wfx_dyn(:,:)=0._wp ; wfx_bom(:,:)=0._wp ; wfx_sum(:,:)=0._wp
+      wfx_res(:,:)=0._wp ; wfx_sni(:,:)=0._wp ; wfx_opw(:,:)=0._wp ; wfx_spr(:,:)=0._wp
+      qsb_ice_bot(:,:)=0._wp ; qlead(:,:)=0._wp
+      sfx_res(:,:)=0._wp ; sfx_bri(:,:)=0._wp ; sfx_dyn(:,:)=0._wp ; sfx_sub(:,:)=0._wp ; sfx_lam(:,:)=0._wp
+      sfx_bog(:,:)=0._wp ; sfx_bom(:,:)=0._wp ; sfx_sum(:,:)=0._wp ; sfx_sni(:,:)=0._wp ; sfx_opw(:,:)=0._wp
+      hfx_res(:,:)=0._wp ; hfx_snw(:,:)=0._wp ; hfx_sub(:,:)=0._wp
+      qt_atm_oi(:,:)=0._wp ; qt_oce_ai(:,:)=0._wp ; fhld(:,:)=0._wp
+      hfx_sum(:,:)=0._wp ; hfx_bom(:,:)=0._wp ; hfx_bog(:,:)=0._wp ; hfx_dif(:,:)=0._wp
+      hfx_opw(:,:)=0._wp ; hfx_thd(:,:)=0._wp ; hfx_dyn(:,:)=0._wp ; hfx_spr(:,:)=0._wp
+      hfx_err_dif(:,:)=0._wp ; wfx_err_sub(:,:)=0._wp
+
+
 # if defined _OPENACC
       PRINT *, ' * info GPU: ice_alloc() => adding 2D thermo-only arrays to memory'
       PRINT *, '            => t_bo, wfx_snw_sni, wfx_snw, wfx_snw_dyn, wfx_snw_sum, wfx_snw_sub, wfx_ice, wfx_sub, wfx_ice_sub'

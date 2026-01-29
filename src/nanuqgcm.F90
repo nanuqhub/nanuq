@@ -89,12 +89,6 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER ::   istp   ! time step index
       REAL(wp)::   zstptiming   ! elapsed time for 1 time step
-# if defined _TRDBG && _OPENACC
-      CHARACTER(len=19), PARAMETER :: cfdbg = 'trace_debug_ACC.txt'
-# endif
-# if defined _TRDBG && ! _OPENACC
-      CHARACTER(len=21), PARAMETER :: cfdbg = 'trace_debug_NoACC.txt'
-# endif
       !!----------------------------------------------------------------------
 
       !                            !-----------------------!
@@ -142,10 +136,6 @@ CONTAINS
       IF(lwp) WRITE(numout,*) ''
 #endif
 
-# if defined _TRDBG
-      OPEN( UNIT=numdbg, FILE=cfdbg, FORM='FORMATTED', STATUS='unknown', RECL=512 )
-# endif
-
       !                                               !== set the model time-step  ==!
       !
       istp = nit000
@@ -176,10 +166,6 @@ CONTAINS
       !********************************************************************************************************************
       !*acc end data
       !********************************************************************************************************************
-# if defined _TRDBG
-      CLOSE( UNIT=numdbg )
-# endif
-
 
       !
       !                            !------------------------!

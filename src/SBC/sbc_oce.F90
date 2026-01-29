@@ -130,7 +130,11 @@ CONTAINS
          &      emp    (jpi,jpj) , emp_b(jpi,jpj) ,                        &
          &      sfx    (jpi,jpj) , sfx_b(jpi,jpj), fmmflx(jpi,jpj), STAT=ierr(2) )
       !  , emp_tot(jpi,jpj)
-      !
+      qns_tot(:,:)=0._wp ; qns(:,:)=0._wp ; qns_b(:,:)=0._wp
+      qsr_tot(:,:)=0._wp ; qsr(:,:)=0._wp
+      emp(:,:)=0._wp ; emp_b(:,:)=0._wp
+      sfx(:,:)=0._wp ; sfx_b(:,:)=0._wp ; fmmflx(:,:)=0._wp
+
       ALLOCATE(  fr_i(jpi,jpj), STAT=ierr(3) )
       !
       ALLOCATE( fatm_theta(jpi,jpj), fatm_q(jpi,jpj), fatm_slp(jpi,jpj), fatm_wnd(jpi,jpj), &

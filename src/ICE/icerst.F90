@@ -196,6 +196,7 @@ CONTAINS
       IF(.NOT.lwxios) CALL iom_delay_rst( 'WRITE', 'ICE', numriw )   ! save only ice delayed global communication variables
 
       ! Prognostic variables
+      !$acc update self( v_i, v_s, sv_i, a_i, t_su, u_ice, v_ice, uVice, vUice, oa_i )
       CALL iom_rstput( iter, nitrst, numriw, 'v_i', v_i )
       CALL iom_rstput( iter, nitrst, numriw, 'v_s', v_s )
       CALL iom_rstput( iter, nitrst, numriw, 'sv_i' , sv_i  )
@@ -206,28 +207,31 @@ CONTAINS
       CALL iom_rstput( iter, nitrst, numriw, 'uVice', uVice )
       CALL iom_rstput( iter, nitrst, numriw, 'vUice', vUice )
       CALL iom_rstput( iter, nitrst, numriw, 'oa_i' , oa_i  )
-      CALL iom_rstput( iter, nitrst, numriw, 'a_ip' , a_ip  )
-      CALL iom_rstput( iter, nitrst, numriw, 'v_ip' , v_ip  )
-      CALL iom_rstput( iter, nitrst, numriw, 'v_il' , v_il  )
+      !CALL iom_rstput( iter, nitrst, numriw, 'a_ip' , a_ip  )
+      !CALL iom_rstput( iter, nitrst, numriw, 'v_ip' , v_ip  )
+      !CALL iom_rstput( iter, nitrst, numriw, 'v_il' , v_il  )
+      !
       ! Snow enthalpy
-      DO jk = 1, nlay_s
+      !$acc update self( e_s )
+      DO jk = 1, nlay_s         
          WRITE(zchar1,'(I2.2)') jk
          znam = 'e_s'//'_l'//zchar1
          z3d(:,:,:) = e_s(:,:,jk,:)
          CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
       END DO
       ! Ice enthalpy
+      !$acc update self( e_i )
       DO jk = 1, nlay_i
          WRITE(zchar1,'(I2.2)') jk
          znam = 'e_i'//'_l'//zchar1
          z3d(:,:,:) = e_i(:,:,jk,:)
          CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
       END DO
-      ! fields needed for Met Office (Jules) coupling
-      IF( ln_cpl_atm ) THEN
-         CALL iom_rstput( iter, nitrst, numriw, 'cnd_ice', cnd_ice )
-         CALL iom_rstput( iter, nitrst, numriw, 't1_ice' , t1_ice )
-      ENDIF
+      !! fields needed for Met Office (Jules) coupling
+      !IF( ln_cpl_atm ) THEN
+      !   CALL iom_rstput( iter, nitrst, numriw, 'cnd_ice', cnd_ice )
+      !   CALL iom_rstput( iter, nitrst, numriw, 't1_ice' , t1_ice )
+      !ENDIF
       !
 
       ! close restart file

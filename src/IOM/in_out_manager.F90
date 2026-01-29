@@ -14,10 +14,6 @@ MODULE in_out_manager
    USE par_oce       ! ocean parameter
    USE nc4interface  ! NetCDF4 interface
 
-# if defined _TRDBG   
-   USE par_ice  , ONLY :   jpl
-# endif
-
    IMPLICIT NONE
    PUBLIC
 
@@ -152,14 +148,6 @@ MODULE in_out_manager
    CHARACTER(LEN=:), ALLOCATABLE :: numnam_ice_ref  !: character buffer for ice reference namelist
    CHARACTER(LEN=:), ALLOCATABLE :: numnam_ice_cfg  !: character buffer for ice configuration specific namelist
 
-# if defined _TRDBG
-   INTEGER            ::   numdbg          =   12
-   INTEGER, PARAMETER ::   kdi = 1
-   INTEGER, PARAMETER ::   kdj = 1
-   !INTEGER, PARAMETER ::   kdj = 220
-   !$acc declare create( kdi, kdj )
-#endif
-
    !!----------------------------------------------------------------------
    !!                          Run control
    !!----------------------------------------------------------------------
@@ -194,68 +182,5 @@ MODULE in_out_manager
    !! $Id: in_out_manager.F90 14553 2021-02-26 17:01:43Z gsamson $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!=====================================================================
-
-
-# if defined _TRDBG
-CONTAINS
-
-   SUBROUTINE TRDBG( cnrtn, cnarr, pX,  pX2, pX3, pX4 )
-      !-----------------------------------------------------------
-      CHARACTER(len=*)          , INTENT(in) :: cnrtn, cnarr
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pX
-      REAL(wp), DIMENSION(jpi,jpj), OPTIONAL, INTENT(in) :: pX2, pX3, pX4
-      !-----------------------------------------------------------
-      LOGICAL :: l2, l3, l4
-      !-----------------------------------------------------------
-      l2 = ( PRESENT(pX2) )
-      l3 = ( PRESENT(pX3) )
-      l4 = ( PRESENT(pX4) )
-      !
-      IF(    l4) THEN
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj), pX4(kdi,kdj)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f,f,f,f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj), pX4(kdi,kdj)
-      ELSEIF(l3) THEN
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f,f,f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj)
-      ELSEIF(l2) THEN
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj), pX2(kdi,kdj)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f,f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj), pX2(kdi,kdj)
-      ELSE
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj)
-      ENDIF
-      !
-   END SUBROUTINE TRDBG
-
-   SUBROUTINE TRDBG_3D( cnrtn, cnarr, pX,  pX2, pX3, pX4 )
-      !-----------------------------------------------------------
-      CHARACTER(len=*)                          , INTENT(in) :: cnrtn, cnarr
-      REAL(wp), DIMENSION(jpi,jpj,jpl),           INTENT(in) :: pX
-      REAL(wp), DIMENSION(jpi,jpj,jpl), OPTIONAL, INTENT(in) :: pX2, pX3, pX4
-      !-----------------------------------------------------------
-      LOGICAL :: l2, l3, l4
-      !-----------------------------------------------------------
-      l2 = ( PRESENT(pX2) )
-      l3 = ( PRESENT(pX3) )
-      l4 = ( PRESENT(pX4) )
-      !
-      IF(    l4) THEN
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp), SUM(pX4(kdi,kdj,:))/REAL(jpl,wp)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f,f,f,f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp), SUM(pX4(kdi,kdj,:))/REAL(jpl,wp)
-      ELSEIF(l3) THEN
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f,f,f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp)
-      ELSEIF(l2) THEN
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f,f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp)
-      ELSE
-         !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj,:))/REAL(jpl,wp)
-         WRITE(numdbg,'("* `",a,"`:",a," =>",f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp)
-      ENDIF
-      !
-   END SUBROUTINE TRDBG_3D
-
-# endif
-
 
 END MODULE in_out_manager

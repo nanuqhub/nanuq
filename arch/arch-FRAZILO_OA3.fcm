@@ -29,7 +29,7 @@
 
 # Debug on CPU:
 # ~~~~~~~~~~~~~
-#%FPPFLAGS            -P  -traditional -D_TRDBG
+#%FPPFLAGS            -P  -traditional
 #%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
 
 %CPP	             cpp

@@ -127,29 +127,11 @@ CONTAINS
 
       CASE ( np_dynRHGADV  )       !==  no ridge/raft & no corrections ==!
          !
-# if defined _TRDBG
-         !$acc update self ( u_ice, v_ice )
-         CALL TRDBG( 'ice_dyn(RHG0)', 'u_ice', u_ice(:,:) )
-         CALL TRDBG( 'ice_dyn(RHG0)', 'v_ice', v_ice(:,:) )
-# endif
-
          CALL ice_dyn_rhg( kt )                                     ! -- rheology
          !PRINT *, ' LOLOdyn1' ; CALL test4inf( ' a_i@icedyn 3 ice_dyn  ', a_i )
 
-# if defined _TRDBG
-         !$acc update self ( u_ice, v_ice )
-         CALL TRDBG( 'ice_dyn(ADV0)', 'u_ice', u_ice(:,:) )
-         CALL TRDBG( 'ice_dyn(ADV0)', 'v_ice', v_ice(:,:) )
-# endif
-
          CALL ice_dyn_adv( kt )                                     ! -- advection of ice
          !PRINT *, ' LOLOdyn2' ;  CALL test4inf( ' a_i@icedyn 4 ice_dyn  ', a_i )
-
-# if defined _TRDBG
-         !$acc update self ( u_ice, v_ice )
-         CALL TRDBG( 'ice_dyn(ADV1)', 'u_ice', u_ice(:,:) )
-         CALL TRDBG( 'ice_dyn(ADV1)', 'v_ice', v_ice(:,:) )
-# endif
 
          CALL ice_var_hpiling()                                     ! -- simple pile-up (replaces ridging/rafting)
 

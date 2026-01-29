@@ -294,9 +294,6 @@ CONTAINS
       !                                                              ! => scary, so doing it here...
 
       !! Ice concentration and thickness @F,U,V:
-# if defined _TRDBG
-      CALL TRDBG( '`ice_var_agg` [before `rmpT2F`]', 'at_i, af_i, hm_i_f', at_i, af_i, hm_i_f )
-# endif
       !
       IF( ln_use_weno_rmp ) THEN
          CALL rmpT2F_A_h_wn5s( at_i, hm_i, af_i, hm_i_f )
@@ -304,10 +301,6 @@ CONTAINS
          af_i(:,:)   = MIN( MAX( rmpT2F( at_i,  lconserv=.TRUE. ) , 0._wp ) * xmskf(:,:) , rn_amax )
          hm_i_f(:,:) =      MAX( rmpT2F( hm_i,  lconserv=.TRUE. ) , 0._wp )
       ENDIF
-      !
-# if defined _TRDBG
-      CALL TRDBG( '`ice_var_agg` [after `rmpT2F`]', 'at_i, af_i, hm_i_f', at_i, af_i, hm_i_f )
-# endif
 
       au_i(:,:) = MIN( MAX( rmpT2U( at_i,  lconserv=.TRUE. ) , 0._wp ) * umask(:,:,1) , rn_amax )
       av_i(:,:) = MIN( MAX( rmpT2V( at_i,  lconserv=.TRUE. ) , 0._wp ) * vmask(:,:,1) , rn_amax )
@@ -527,11 +520,6 @@ CONTAINS
       ENDIF !IF( kn > 1 )
 
       !! Ice concentration and thickness @F,U,V:
-# if defined _TRDBG
-      !$acc update self( at_i, af_i, hm_i_f )
-      CALL TRDBG( '`ice_var_agg_GPU` [before `rmpT2F`]', 'at_i, af_i, hm_i_f', at_i, af_i, hm_i_f )
-# endif
-
       IF( ln_use_weno_rmp ) THEN
          CALL rmpT2F_A_h_wn5s( at_i, hm_i, af_i, hm_i_f )
       ELSE
@@ -546,13 +534,7 @@ CONTAINS
          END DO
          !$acc end parallel loop
       ENDIF
-      !
-# if defined _TRDBG
-      !$acc update self( at_i, af_i, hm_i_f )
-      CALL TRDBG( '`ice_var_agg_GPU` [after `rmpT2F`]', 'at_i, af_i, hm_i_f', at_i, af_i, hm_i_f )
-# endif
 
-      !
       CALL do_rmpT2U( at_i, au_i,  lconserv=.TRUE. )
       CALL do_rmpT2V( at_i, av_i,  lconserv=.TRUE. )
       !$acc parallel loop collapse(2)

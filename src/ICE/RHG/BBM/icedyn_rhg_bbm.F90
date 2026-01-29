@@ -144,10 +144,6 @@ CONTAINS
 
       IF( ln_timing )   CALL timing_start('ice_dyn_rhg_bbm')
 
-# if defined _TRDBG
-      CALL TRDBG( 'icedyn_rhg_bbm 0', 'vt_i, vt_s', vt_i, vt_s )
-# endif
-
       IF( kt == nit000 .AND. lwp )   WRITE(numout,*) '-- ice_dyn_rhg_bbm: BBM sea-ice rheology'
 
       !------------------------------------------------------------------------------!
@@ -200,10 +196,6 @@ CONTAINS
       CALL ice_var_sshdyn( ssh_m, snwice_mass_b, zxpCt )
 
       CALL do_rmpT2F( zxpCt, zxpCf )  ! `zxpCf` -> SSH at F-points
-# if defined _TRDBG
-      !$acc update self( zxpCt, zxpCf )
-      CALL TRDBG( 'icedyn_rhg_bbm', 'SSH@T, SSH@F', zxpCt, zxpCf )
-# endif
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
@@ -226,11 +218,6 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
-# if defined _TRDBG
-      !$acc update self( ztmp3, ztmp4 )
-      CALL TRDBG( 'icedyn_rhg_bbm', 'M@U, M@V', ztmp3, ztmp4 )
-# endif
 
       !$acc parallel loop collapse(2) present(umask,vmask)
       DO jj=Njs0, Nje0

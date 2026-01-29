@@ -12,3 +12,5 @@ sleep 2
 rm -rf ${list_clean}
 
 rm -f ./mk/full_key_list.txt
+
+rm -f ./mk/arch_nemo.fcm

@@ -22,7 +22,6 @@
 %CPP	             cpp
 
 %FPPFLAGS            -P -traditional
-#  -D_TRDBG
 
 ###%FPPFLAGS            -P -traditional -Dkey_mpi_off -D_OPENACC
 

@@ -17,27 +17,25 @@
 
 %PROD_FFLAGS          -O3 -xHOST
 
-%DEV_FFLAGS           -O0 -g -traceback -CB -fpe0 -debug -ftrapuv
+%DEV_FFLAGS           -O0 -g -traceback -CB -fpe0 -ftrapuv
 
 #######################################################
 
 # Production on CPU only:
 # ~~~~~~~~~~~~~~~~~~~~~~~
-%FPPFLAGS            -P  -traditional
-%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
+#%FPPFLAGS            -P  -traditional
+#%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
 #
 # Debug on CPU only:
 # ~~~~~~~~~~~~~~~~~~
-###%FPPFLAGS            -P  -traditional -D_TRDBG
-#%FPPFLAGS            -P  -traditional
-#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
+%FPPFLAGS            -P  -traditional
+%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
 
 %FFLAGS              %FCFLAGS
 
 %CPP	             cpp
 
 %FPPFLAGS            -P  -traditional
-##%FPPFLAGS            -P  -traditional -D_TRDBG
 
 
 %LD                  mpiifx

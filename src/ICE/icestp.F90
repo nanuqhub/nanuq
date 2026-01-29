@@ -132,10 +132,6 @@ CONTAINS
          ! -- mean surface ocean current
          CALL do_Voce( ssu_m, ssv_m,  V_oce )
          !#LOLO.
-# if defined _TRDBG
-         !$acc update self( ssu_m, ssv_m )
-         CALL TRDBG( 'ice_stp 000000000000000000000', 'ssu_m, ssv_m', ssu_m, ssv_m )
-# endif
 
          CALL eos10_fzp_2d_gpu( sss_m, t_bo )   ! -- freezing temperature based on salinity [C]
 
@@ -180,15 +176,6 @@ CONTAINS
             END DO
          END DO
          !$acc end parallel loop
-# if defined _TRDBG
-         !$acc update self( t_bo, om_i, sst_m, sst_s, sss_m, sss_s )
-         CALL TRDBG( 'ice_stp', 't_bo', t_bo )
-         CALL TRDBG( 'ice_stp', 'om_i', om_i )
-         CALL TRDBG( 'ice_stp', 'sst_m', sst_m )
-         CALL TRDBG( 'ice_stp', 'sst_s', sst_s )
-         CALL TRDBG( 'ice_stp', 'sst_m', sss_m )
-         CALL TRDBG( 'ice_stp', 'sss_s', sss_s )
-# endif
 
       ENDIF !IF( l_normal )
 
@@ -201,11 +188,6 @@ CONTAINS
 
 
       CALL store_fields()             ! Store now ice values
-
-# if defined _TRDBG
-      !$acc update self( h_i, h_s )
-      CALL TRDBG_3D( 'ice_stp', 'h_i, h_s', h_i, h_s )
-# endif
 
 
       !------------------------------------------------!
@@ -229,22 +211,7 @@ CONTAINS
       !------------------------------------------------------!
       IF( l_normal ) THEN
          CALL ice_sbc( kt, ksbc, utau_ice, vtau_ice )
-# if defined _TRDBG
-         !$acc update self ( utau_ice, vtau_ice )
-         CALL TRDBG( 'ice_stp', 'Tau_ai', utau_ice, vtau_ice )
-# endif
       ENDIF
-      !
-# if defined _TRDBG
-      ! => what's been modified by `blk_ice_2`:
-      !$acc update self ( qsr_ice, qla_ice, qns_ice, evap_ice, emp_oce, emp_ice, qemp_oce, qemp_ice, qns_tot, qsr_tot, qprec_ice, qevap_ice )
-      CALL TRDBG( 'ice_stp/ice_sbc/blk_ice_2', 'qsr_ice,qla_ice,qns_ice', qsr_ice, qla_ice, qns_ice )
-      CALL TRDBG( 'ice_stp/ice_sbc/blk_ice_2', 'evap_ice,emp_oce,emp_ice', evap_ice, emp_oce, emp_ice )
-      CALL TRDBG( 'ice_stp/ice_sbc/blk_ice_2', 'qns_tot,qsr_tot,qprec_ice', qns_tot, qsr_tot, qprec_ice )
-      CALL TRDBG( 'ice_stp/ice_sbc/blk_ice_2', 'qevap_ice', qevap_ice )
-# endif
-
-
 
       !PRINT *, ' * LOLO1 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
 
@@ -264,48 +231,12 @@ CONTAINS
       !PRINT *, ' * LOLO2 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
       !CALL test4inf( ' a_i@icestp b ice_dyn  ', a_i )
 
-# if defined _TRDBG
-      !$acc update self ( u_ice, v_ice, uVice, vUice, ato_i, v_i, a_i )
-      CALL TRDBG( 'ice_stp(DYN0)', 'u_ice', u_ice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN0)', 'v_ice', v_ice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN0)', 'uVice', uVice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN0)', 'vUice', vUice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN0)', 'ato_i', ato_i(:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'v_i',   v_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'v_s',   v_s(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'sv_i',   sv_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'oa_i', oa_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)',  'a_i',  a_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'e_i', epsi06*e_i(:,:,1,:), epsi06*e_i(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'e_s', epsi06*e_s(:,:,1,:), epsi06*e_s(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN0)', 'szv_i', szv_i(:,:,1,:), szv_i(:,:,2,:) )
-# endif
 
       IF( ln_icedyn ) CALL ice_dyn( kt )       ! -- Ice dynamics
 
-# if defined _TRDBG
-      !$acc update self ( u_ice, v_ice, uVice, vUice, ato_i, v_i, a_i )
-      CALL TRDBG( 'ice_stp(DYN1)', 'u_ice', u_ice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN1)', 'v_ice', v_ice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN1)', 'uVice', uVice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN1)', 'vUice', vUice(:,:) )
-      CALL TRDBG( 'ice_stp(DYN1)', 'ato_i', ato_i(:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'v_i',   v_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'v_s',   v_s(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'sv_i',   sv_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'oa_i', oa_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)',  'a_i',  a_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'e_i', epsi06*e_i(:,:,1,:), epsi06*e_i(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'e_s', epsi06*e_s(:,:,1,:), epsi06*e_s(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(DYN1)', 'szv_i', szv_i(:,:,1,:), szv_i(:,:,2,:) )
-# endif
 
-      !CALL test4inf( ' a_i@icestp p ice_dyn  ', a_i )
-      !PRINT *, ' * LOLO3 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
-      !CALL ice_var_agg_gpu(1)    !LOLOfixme? I add it here too (because advection has changed A, volume, etc), probably not needed check! => apparently not needed: check without GPU!
-      !PRINT *, ' * LOLO4 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
-
-      !IF( l_do_diags ) CALL diag_trends(1)         ! record dyn trends
+      !IF( l_do_diags ) CALL diag_trends(1)         ! record dyn trends  ! NOT GPU PORTED YET !!!!
+      
 
       !                          !==  lateral boundary conditions  ==!
       IF( ln_icethd .AND. ln_bdy ) THEN
@@ -341,26 +272,6 @@ CONTAINS
       !----------------------------!
       IF( ln_icethd ) THEN
 
-# if defined _TRDBG
-         !$acc update self( t_su, a_i, qlead, v_i, v_s, s_i, t_si, o_i, oa_i, evap_ice, e_i, e_s, t_i, t_s, sz_i, t_bo )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 't_su', t_su(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'a_i',   a_i(:,:,:) )
-         CALL TRDBG   ( 'ice_stp(THD0)', 'qlead', qlead      )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'v_i',   v_i(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'v_s',   v_s(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 's_i',   s_i(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 't_si', t_si(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'o_i', o_i(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'oa_i', oa_i(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'evap_ice', evap_ice(:,:,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'e_i', epsi06*e_i(:,:,1,:), epsi06*e_i(:,:,2,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'e_s', epsi06*e_s(:,:,1,:), epsi06*e_s(:,:,2,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', ' t_i(1),  t_i(2)',  t_i(:,:,1,:),  t_i(:,:,2,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', ' t_s(1),  t_s(2)',  t_s(:,:,1,:),  t_s(:,:,2,:) )
-         CALL TRDBG_3D( 'ice_stp(THD0)', 'sz_i(1), sz_i(2)', sz_i(:,:,1,:), sz_i(:,:,2,:) )
-         CALL TRDBG( 'ice_stp(THD0)', 't_bo', t_bo )
-# endif
-
          CALL ice_thd( kt )            ! -- Ice thermodynamics
          !%acc update zelf( e_i, e_s, szv_i, oa_i, sv_i, v_s, v_i, t_su )
 
@@ -372,12 +283,6 @@ CONTAINS
          ! ==> UPDATES: af_i,at_i,ato_i,au_i,av_i,et_i,et_s,hm_i,hm_i_f,hm_s,kmsk_ice_f,kmsk_ice_t,kmsk_ice_u,kmsk_ice_v,om_i,sm_i,st_i,tm_i,tm_s,tm_si,tm_su,vt_i,vt_s )
 
          CALL ice_update_flx( kt )     ! -- Update ocean surface mass, heat and salt fluxes (calls ice_alb() !!!)
-
-# if defined _TRDBG
-         !$acc update self( alb_ice )
-         CALL TRDBG( 'ice_stp(THD0)', 'alb_ice', alb_ice )
-# endif
-
 
 
       ELSE
@@ -405,57 +310,9 @@ CONTAINS
       !$acc update self( u_ice, v_ice, vt_i, tm_i )
 # endif
 
-
-      !PRINT *, ' * LOLO8 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
-
-
-
-# if defined _TRDBG
-      !$acc update self( at_i, af_i, au_i, av_i, ato_i, vt_i, vt_s, et_i, et_s, st_i, sm_i, tm_i, tm_s, hm_i, hm_i_f, hm_s, om_i, t_su, a_i, v_i, v_s )
-      !$acc update self( h_i, h_s, s_i, o_i, oa_i, evap_ice, e_i, e_s, t_i, t_s, sz_i, t_bo )
-      CALL TRDBG( 'ice_stp(THD1)', 'at_i',at_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'af_i',af_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'au_i',au_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'av_i',av_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'ato_i',ato_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'vt_i',  vt_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'vt_s',  vt_s(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'et_i',  epsi06*et_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'et_s',  epsi06*et_s(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'st_i',  st_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'sm_i',  sm_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'tm_i',  tm_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'tm_s',  tm_s(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'hm_i',  hm_i(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'hm_i_f',  hm_i_f(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'hm_s',  hm_s(:,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 'om_i',  om_i(:,:) )
+      !IF( ln_icediahsb )      CALL ice_dia( kt )            ! -- Diagnostics outputs                    ! NOT GPU PORTED YET !!!!
       !
-      CALL TRDBG_3D( 'ice_stp(THD1)', 't_su', t_su(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'a_i',  a_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'v_i',  v_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'v_s',  v_s(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'h_i',  h_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'h_s',  h_s(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 's_i',  s_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'o_i',  o_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'oa_i', oa_i(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'evap_ice', evap_ice(:,:,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', ' e_i(1),  e_i(2)',  epsi06*e_i(:,:,1,:), epsi06*e_i(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', ' e_s(1),  e_s(2)',  epsi06*e_s(:,:,1,:), epsi06*e_s(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', ' t_i(1),  t_i(2)',  t_i(:,:,1,:),  t_i(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', ' t_s(1),  t_s(2)',  t_s(:,:,1,:),  t_s(:,:,2,:) )
-      CALL TRDBG_3D( 'ice_stp(THD1)', 'sz_i(1), sz_i(2)', sz_i(:,:,1,:), sz_i(:,:,2,:) )
-      CALL TRDBG( 'ice_stp(THD1)', 't_bo', t_bo )
-      !lili
-# endif
-
-
-
-
-      IF( ln_icediahsb )             CALL ice_dia( kt )            ! -- Diagnostics outputs
-      !
-      IF( ln_icediachk )             CALL ice_drift_wri( kt )      ! -- Diagnostics outputs for conservation
+      !IF( ln_icediachk )      CALL ice_drift_wri( kt )      ! -- Diagnostics outputs for conservation   ! NOT GPU PORTED YET !!!
       !
       IF( ln_dynADV2D ) THEN
          CALL ice_wri_adv( kt )        ! -- Ice outputs (minimal set for advection-only tests)
@@ -463,9 +320,9 @@ CONTAINS
          CALL ice_wri( kt )            ! -- Ice outputs
       ENDIF
       !
-      IF( lrst_ice )                 CALL ice_rst_write( kt )      ! -- Ice restart file
+      IF( lrst_ice )           CALL ice_rst_write( kt )      ! -- Ice restart file
       !
-      IF( ln_icectl )                CALL ice_ctl( kt )            ! -- Control checks
+      IF( ln_icectl )          CALL ice_ctl( kt )            ! -- Control checks
       !
 
       !-------------------------!

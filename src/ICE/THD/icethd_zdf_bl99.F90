@@ -17,10 +17,6 @@ MODULE icethd_zdf_BL99
    USE ice
    USE sbc_ice , ONLY : qns_ice, dqns_ice, qcn_ice, qtr_ice_top, qsr_ice
 
-# if defined _TRDBG
-   USE in_out_manager, ONLY : kdi, kdj !debug
-# endif
-
    IMPLICIT NONE
    PRIVATE
 

@@ -164,10 +164,6 @@ CONTAINS
       ELSE
          CALL ice_alb(     t_su, h_i, h_s,                 alb_ice )
       ENDIF
-# if defined _TRDBG
-      !$acc update self( alb_ice )
-      CALL TRDBG( 'ice_sbc_flx', 'alb_ice', alb_ice )
-# endif
 
       !
       !SELECT CASE( ksbc )   !== fluxes over sea ice ==!
