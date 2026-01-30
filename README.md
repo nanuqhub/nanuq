@@ -78,7 +78,7 @@ Just as for NEMO, compilers, compilation flags, MPI paths, as well as the path t
 
 ### For standalone simulations
 
-This will compile a `nanuq.exe` executable that will require a prescribed surface (liquid) ocean state to be provided as netCDF files.
+Compilation of a `nanuq.exe` executable that will require a prescribed surface (liquid) ocean state to be provided as netCDF files.
 
 To compile the executable:
 
@@ -89,7 +89,7 @@ Executable created: `cfgs/generic/BLD/bin/nanuq.exe`
 
 ### For coupled simulations with OASIS-MCT
 
-This will compile a `nanuq.exe` executable that is intended to receive the prognostic surface (liquid) ocean computed by an OGCM and send back surface boundary conditions to this OGCM.
+Compilation of a `nanuq.exe` executable that is intended to receive the prognostic surface (liquid) ocean computed by an OGCM and send back surface boundary conditions to this OGCM.
 
 First, you need to have a XIOS2 installation that has been compiled with OASIS-MCT support. So the first thing to compile is OASIS-MCT!
 
