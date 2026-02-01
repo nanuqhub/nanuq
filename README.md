@@ -229,6 +229,12 @@ Regional configuration of the HUDSON bay at 12th of a degree of spatial resoluti
 </p>
 -->
 
+https://github.com/user-attachments/assets/08c848fe-4d7a-4f3a-93f5-6dd61db39f01
+
+_Evolution of the sea ice thickness (range: 0 - 3m), 1996-11-01 to 1997-05-20 with the aEVP (left) and the BBM (right) rheologies in the HUDSON12 coupled setup (NANUQ - OASIS -NEMO/OCE) with hourly ERA5 surface atmospheric forcing. Initialized 1996-11-01 with GLORYS2v4 reanalysis.
+
+
+
 https://github.com/user-attachments/assets/5507bdc9-aee2-4ba9-bc75-115abc1fac31
 
 _Evolution of the sea ice damage during 60 days with the BBM rheology (January & February 1997) in HUDSON12 with hourly ERA5 surface atmospheric forcing._
@@ -245,7 +251,7 @@ Regional configuration of the East-Greenland region at 12th of a degree of spati
 
 https://github.com/user-attachments/assets/02d6799b-6e82-47bc-95cd-03e54171d8f8
 
-_Evolution of the sea ice thickness (range: 0 - 4m), 1997-01-01 to 1997-04-25 with the BBM rheology in EGL12 coupled setup (NANUQ - OASIS -NEMO/OCE) with hourly ERA5 surface atmospheric forcing. Initialized 1997-01-01 with GLORYS2v4 reanalysis. White rectangular area are disregarded processors regions (MPI horizontal decomposition)._
+_Evolution of the sea ice thickness (range: 0 - 4m), 1997-01-01 to 1997-04-25 with the BBM rheology in the EGL12 coupled setup (NANUQ - OASIS -NEMO/OCE) with hourly ERA5 surface atmospheric forcing. Initialized 1997-01-01 with GLORYS2v4 reanalysis. White rectangular area are disregarded processors regions (MPI horizontal decomposition)._
 
 See the dedicated [README](./tests/EGL12/standalone/README.md) under `./tests/EGL12/standalone`.
 
