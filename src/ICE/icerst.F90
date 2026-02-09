@@ -213,7 +213,7 @@ CONTAINS
       !
       ! Snow enthalpy
       !$acc update self( e_s )
-      DO jk = 1, nlay_s         
+      DO jk = 1, nlay_s
          WRITE(zchar1,'(I2.2)') jk
          znam = 'e_s'//'_l'//zchar1
          z3d(:,:,:) = e_s(:,:,jk,:)
@@ -318,7 +318,7 @@ CONTAINS
          CALL iom_get( numrir, jpdom_auto, 'v_ice', v_ice, cd_type = 'V', psgn = -1._wp )
          CALL iom_get( numrir, jpdom_auto, 'uVice', uVice, cd_type = 'V', psgn = -1._wp )
          CALL iom_get( numrir, jpdom_auto, 'vUice', vUice, cd_type = 'U', psgn = -1._wp )
-         
+
          ! Snow enthalpy
          DO jk = 1, nlay_s
             WRITE(zchar1,'(I2.2)') jk

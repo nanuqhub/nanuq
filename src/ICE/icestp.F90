@@ -236,7 +236,7 @@ CONTAINS
 
 
       !IF( l_do_diags ) CALL diag_trends(1)         ! record dyn trends  ! NOT GPU PORTED YET !!!!
-      
+
 
       !                          !==  lateral boundary conditions  ==!
       IF( ln_icethd .AND. ln_bdy ) THEN

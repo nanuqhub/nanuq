@@ -191,7 +191,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER,                      INTENT(in)    ::   kt   ! ocean time-step
       REAL(wp),                     INTENT(in)    :: pdt  ! time step
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pA   ! sea-ice concentration      
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pA   ! sea-ice concentration
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: psst_m, psss_m, pmld_m
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pqsr   ! solar heat flux to (with liquid ocean albedo decrease considered)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pqns, pemp
@@ -211,7 +211,7 @@ CONTAINS
       !
       ! A/ temperature increment for the whole mixed layer based on the flux received by the liquid
       !    ocean during the previous time step
-      
+
       IF( ln_rstart ) THEN
          PRINT *, 'FIX `sst_s` & `sss_s` for restarts!!!'; STOP
       ENDIF
@@ -254,7 +254,7 @@ CONTAINS
             !   PRINT *, '  ==> zds_inc = ', REAL(zinc,4),'psu'
             !   PRINT *, '  * zsss_n = ', REAL(zsss_n,4)
             !ENDIF
-            
+
             !IF((ji==40).AND.(jj==40)) THEN
             !   PRINT *, ''
             !   PRINT *, 'LOLO: solar heat flux available and actually counted for SLAB warming with A=',REAL(pA(ji,jj),4)
@@ -262,7 +262,7 @@ CONTAINS
             !   PRINT *, ''
             !ENDIF
 
-            
+
             zQjoules = ( pqns(ji,jj) +  (1._wp -pA(ji,jj))*pqsr(ji,jj) ) * pdt   ! Energy received/lost per surface area during `pdt` (J/m2) !#LOLOfixme: consider solar penetration for qsr !?
             zinc =  zQjoules * r1_rho0_rcp * z1_mld   !  rho0_rcp ~ J/K/m3 => rho0_rcp*mld ~ J/K/m2 => zinc = (J/m2) / (J/K/m2) ==> K !
             zsst_n  = psst_s(ji,jj) + zinc                    !  expected new temperature in the MLD...
@@ -286,7 +286,7 @@ CONTAINS
 
             psss_s(ji,jj) = zsss_n - znc * ( zsss_n - zsss_p ) ! nudging towards the prescribed SSS
             psst_s(ji,jj) = zsst_n - znc * ( zsst_n - zsst_p ) ! nudging towards the prescribed SST
-            
+
             !CALL eos_fzp_0d( psss_s(ji,jj), pt_bo(ji,jj) )
             pt_bo(ji,jj) = t_eos10_fzp_scl( psss_s(ji,jj) )
             psst_s(ji,jj) = MAX( psst_s(ji,jj) , pt_bo(ji,jj) )  ! slab SST cannot be colder than slab freezing-point temperature.
