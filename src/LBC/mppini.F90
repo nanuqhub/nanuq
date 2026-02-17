@@ -1074,23 +1074,23 @@ CONTAINS
       LOGICAL, DIMENSION(kicnt,kjcnt), INTENT(  out) ::   ldoce          ! ldoce(i,j) = .true. if the point (i,j) is ocean
       !
       INTEGER                          ::   inumsave                     ! local logical unit
-      REAL(wp), DIMENSION(kicnt,kjcnt) ::   zbot, zbdy
+      REAL(wp), DIMENSION(kicnt,kjcnt) ::   zbat, zbdy
       !!----------------------------------------------------------------------
       !
       inumsave = numout   ;   numout = numnul   !   redirect all print to /dev/null
       !
       IF( numbot /= -1 ) THEN
-         CALL iom_get( numbot, jpdom_unknown, 'bottom_level', zbot, kstart = (/kistr,kjstr/), kcount = (/kicnt, kjcnt/) )
+         CALL iom_get( numbot, jpdom_unknown, 'bathy_metry', zbat, kstart = (/kistr,kjstr/), kcount = (/kicnt, kjcnt/) )
       ELSE
-         zbot(:,:) = 1._wp                      ! put a non-null value
+         zbat(:,:) = 1._wp                      ! put a non-null value
       ENDIF
       !
       IF( numbdy /= -1 ) THEN                   ! Adjust with bdy_msk if it exists
          CALL iom_get ( numbdy, jpdom_unknown,     'bdy_msk', zbdy, kstart = (/kistr,kjstr/), kcount = (/kicnt, kjcnt/) )
-         zbot(:,:) = zbot(:,:) * zbdy(:,:)
+         zbat(:,:) = zbat(:,:) * zbdy(:,:)
       ENDIF
       !
-      ldoce(:,:) = NINT(zbot(:,:)) > 0
+      ldoce(:,:) = zbat(:,:) > 0.001_wp
       numout = inumsave
       !
    END SUBROUTINE read_mask

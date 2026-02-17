@@ -35,13 +35,14 @@ MODULE sbcblk
    USE phycst         ! physical constants
    USE fldread        ! read input fields
    USE sbc_oce        ! Surface boundary condition: ocean fields
-   USE oss_nnq , ONLY : sst_m, ssh_m, ssh_m, ssu_m, ssv_m, ssst, sst_s    ! Bottom boundary condition: ocean fields
+   USE ossprs  , ONLY : ln_slab_sst ! #DEBUG
+   USE oss_nnq , ONLY : ssh_m, ssh_m, ssu_m, ssv_m, ssst, sssq, sst_s
    USE sbcdcy         ! surface boundary condition: diurnal cycle
    USE lib_fortran    ! to use key_nosignedzero and glob_2Dsum
    !
    USE sbc_ice        ! Surface boundary condition: ice fields
-   USE par_ice , ONLY : jpl, rn_cnd_s, nn_qtrice, rcloud_fra
-   USE ice     , ONLY : a_i_b, at_i_b, hfx_err_dif
+   USE par_ice , ONLY : jpl, nn_qtrice, rcloud_fra
+   USE ice     , ONLY : at_i, a_i_b, at_i_b, hfx_err_dif  !#LOLOfixme => WHY USE `a_i_b` & `at_i_b` and not `a_i` & `at_i` ????
    USE icevar         ! for CALL ice_var_snwblow
    !
    USE sbcblk_algo_ice_an05
@@ -50,7 +51,7 @@ MODULE sbcblk
    !
    USE sbcblk_algo_ncar     ! => turb_ncar     : NCAR - (formerly known as CORE, Large & Yeager, 2009)
    USE sbcblk_algo_coare3p0 ! => turb_coare3p0 : COAREv3.0 (Fairall et al. 2003)
-   USE sbcblk_algo_coare3p6 ! => turb_coare3p6 : COAREv3.6 (Fairall et al. 2018 + Edson et al. 2013)
+   !USE sbcblk_algo_coare3p6 ! => turb_coare3p6 : COAREv3.6 (Fairall et al. 2018 + Edson et al. 2013)
    USE sbcblk_algo_ecmwf    ! => turb_ecmwf    : ECMWF (IFS cycle 45r1)
    !
    USE iom            ! I/O manager library
@@ -100,7 +101,7 @@ MODULE sbcblk
    !                           !!* Namelist namsbc_blk : bulk parameters
    LOGICAL  ::   ln_NCAR        ! "NCAR"      algorithm   (Large and Yeager 2008)
    LOGICAL  ::   ln_COARE_3p0   ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   LOGICAL  ::   ln_COARE_3p6   ! "COARE 3.6" algorithm   (Edson et al. 2013)
+   !LOGICAL  ::   ln_COARE_3p6   ! "COARE 3.6" algorithm   (Edson et al. 2013)
    LOGICAL  ::   ln_ECMWF       ! "ECMWF"     algorithm   (IFS cycle 45r1)
    !LOGICAL  ::   ln_ANDREAS     ! "ANDREAS"   algorithm   (Andreas et al. 2015)
    !
@@ -123,8 +124,9 @@ MODULE sbcblk
    !
    INTEGER          :: nn_iter_algo   !  Number of iterations in bulk param. algo ("stable ABL + weak wind" requires more)
 
-   LOGICAL  ::   ln_skin_cs     ! use the cool-skin (only available in ECMWF and COARE algorithms) !LB
-   LOGICAL  ::   ln_skin_wl     ! use the warm-layer parameterization (only available in ECMWF and COARE algorithms) !LB
+   LOGICAL, PUBLIC  ::   ln_skin_cs     ! use the cool-skin (only available in ECMWF and COARE algorithms) !LB
+   LOGICAL, PUBLIC  ::   ln_skin_wl     ! use the warm-layer parameterization (only available in ECMWF and COARE algorithms) !LB
+   LOGICAL, PUBLIC  ::   ll_skin        ! `ll_skin = ln_skin_cs .OR. ln_skin_wl`
    LOGICAL  ::   ln_humi_sph    ! humidity read in files ("sn_humi") is specific humidity [kg/kg] if .true. !LB
    LOGICAL  ::   ln_humi_dpt    ! humidity read in files ("sn_humi") is dew-point temperature [K] if .true. !LB
    LOGICAL  ::   ln_humi_rlh    ! humidity read in files ("sn_humi") is relative humidity     [%] if .true. !LB
@@ -140,7 +142,7 @@ MODULE sbcblk
    !                            ! associated indices:
    INTEGER, PARAMETER ::   np_NCAR      = 1   ! "NCAR" algorithm        (Large and Yeager 2008)
    INTEGER, PARAMETER ::   np_COARE_3p0 = 2   ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   INTEGER, PARAMETER ::   np_COARE_3p6 = 3   ! "COARE 3.6" algorithm   (Edson et al. 2013)
+   !INTEGER, PARAMETER ::   np_COARE_3p6 = 3   ! "COARE 3.6" algorithm   (Edson et al. 2013)
    INTEGER, PARAMETER ::   np_ECMWF     = 4   ! "ECMWF" algorithm       (IFS cycle 45r1)
    !#LB:
    ! Same, over sea-ice:
@@ -182,7 +184,7 @@ CONTAINS
       TYPE(FLD_N) ::   sn_slp , sn_uoatm, sn_voatm             !       "                        "
       TYPE(FLD_N) ::   sn_cc, sn_hpgi, sn_hpgj                 !       "                        "
       INTEGER     ::   ipka                                    ! number of levels in the atmospheric variable
-      NAMELIST/namsbc_blk/ ln_NCAR, ln_COARE_3p0, ln_COARE_3p6, ln_ECMWF, &   ! bulk algorithm
+      NAMELIST/namsbc_blk/ ln_NCAR, ln_COARE_3p0, ln_ECMWF, &   ! bulk algorithm    | ln_COARE_3p6, 
          &                 rn_zqt, rn_zu, nn_iter_algo, ln_skin_cs, ln_skin_wl,       &
          &                 ln_crt_fbk, rn_stau_a, rn_stau_b,                          &   ! current feedback
          &                 ln_humi_sph, ln_humi_dpt, ln_humi_rlh, ln_tair_pot,        &
@@ -210,16 +212,21 @@ CONTAINS
       IF( ln_COARE_3p0 ) THEN
          nblk =  np_COARE_3p0   ;   ioptio = ioptio + 1
       ENDIF
-      IF( ln_COARE_3p6 ) THEN
-         nblk =  np_COARE_3p6   ;   ioptio = ioptio + 1
-      ENDIF
+      !IF( ln_COARE_3p6 ) THEN
+      !   nblk =  np_COARE_3p6   ;   ioptio = ioptio + 1
+      !ENDIF
       IF( ln_ECMWF     ) THEN
          nblk =  np_ECMWF       ;   ioptio = ioptio + 1
       ENDIF
       IF( ioptio /= 1 )   CALL ctl_stop( 'sbc_blk_init: Choose one and only one bulk algorithm' )
 
+
+      ll_skin = ln_skin_cs .OR. ln_skin_wl
+
+      IF(ll_skin) PRINT *, 'LOLO [sbcblk.F90] => ll_skin =', ll_skin
+
       !                             !** initialization of the cool-skin / warm-layer parametrization
-      IF( ln_skin_cs .OR. ln_skin_wl ) THEN
+      IF( ll_skin ) THEN
          !! Some namelist sanity tests:
          IF( ln_NCAR )      &
             & CALL ctl_stop( 'sbc_blk_init: Cool-skin/warm-layer param. not compatible with NCAR algorithm' )
@@ -349,7 +356,7 @@ CONTAINS
          WRITE(numout,*) '   Namelist namsbc_blk (other than data information):'
          WRITE(numout,*) '      "NCAR"      algorithm   (Large and Yeager 2008)      ln_NCAR      = ', ln_NCAR
          WRITE(numout,*) '      "COARE 3.0" algorithm   (Fairall et al. 2003)       ln_COARE_3p0 = ', ln_COARE_3p0
-         WRITE(numout,*) '      "COARE 3.6" algorithm (Fairall 2018 + Edson al 2013) ln_COARE_3p6 = ', ln_COARE_3p6
+         !WRITE(numout,*) '      "COARE 3.6" algorithm (Fairall 2018 + Edson al 2013) ln_COARE_3p6 = ', ln_COARE_3p6
          WRITE(numout,*) '      "ECMWF"     algorithm   (IFS cycle 45r1)             ln_ECMWF     = ', ln_ECMWF
          WRITE(numout,*) '      Air temperature and humidity reference height (m)   rn_zqt       = ', rn_zqt
          WRITE(numout,*) '      Wind vector reference height (m)                    rn_zu        = ', rn_zu
@@ -365,7 +372,7 @@ CONTAINS
          SELECT CASE( nblk )              !* Print the choice of bulk algorithm
          CASE( np_NCAR      )   ;   WRITE(numout,*) '   ==>>>   "NCAR" algorithm        (Large and Yeager 2008)'
          CASE( np_COARE_3p0 )   ;   WRITE(numout,*) '   ==>>>   "COARE 3.0" algorithm   (Fairall et al. 2003)'
-         CASE( np_COARE_3p6 )   ;   WRITE(numout,*) '   ==>>>   "COARE 3.6" algorithm (Fairall 2018+Edson et al. 2013)'
+         !CASE( np_COARE_3p6 )   ;   WRITE(numout,*) '   ==>>>   "COARE 3.6" algorithm (Fairall 2018+Edson et al. 2013)'
          CASE( np_ECMWF     )   ;   WRITE(numout,*) '   ==>>>   "ECMWF" algorithm       (IFS cycle 45r1)'
          END SELECT
          !
@@ -494,13 +501,13 @@ CONTAINS
       fatm_dqsw(:,:)  = sf(jp_qsr )%fnow(:,:,1)
       fatm_dqlw(:,:)  = sf(jp_qlw )%fnow(:,:,1)
       !$acc update device( fatm_slp, fatm_theta, fatm_q, fatm_u, fatm_v, fatm_prcp, fatm_snow, fatm_dqsw, fatm_dqlw )
-      
+
       IF( iom_use('snowpre') ) CALL iom_put( 'snowpre', fatm_prcp )                  ! Snow precipitation
       IF( iom_use('precip' ) ) CALL iom_put( 'precip' , fatm_snow )                  ! Total precipitation
 
 
       !$acc data create( zsen, zlat, zevp ) present( qsr, wndm, utau, vtau, ssst, taum, rhoa, emp, qns, qns_oce, qsr_oce )
-      
+
       ! Specific humidity of air at z=rn_zqt
       SELECT CASE( nhumi )
       CASE( np_humi_dpt )
@@ -537,29 +544,68 @@ CONTAINS
          !$acc end parallel loop
          !
       ENDIF
+
+
+      !DEBUG/SANITY:
+      !IF( .NOT. ln_slab_sst ) THEN
+      !   IF( SUM(ABS(sst_m-sst_s)) > 0.001_wp ) THEN
+      !      PRINT *, 'ERROR: SLAB not used, yet (SSS_s /= sst_m) !!! kt=',kt
+      !      PRINT *, ' ==> `sst_s-sst_m` ='
+      !      PRINT *, sst_s-sst_m
+      !      PRINT *, ''
+      !      STOP
+      !   ENDIF
+      !ENDIF
+      !DEBUG/SANITY.
+
       
+      !DEBUG:
+      !ji=22 ; jj=120
+      !PRINT *, 'BULK INPUT:'
+      !PRINT *, ' * SST   =', sst_m(ji,jj)
+      !PRINT *, ' * t_air =', fatm_theta(ji,jj)-rt0  ! => C
+      !PRINT *, ' * q_air =', fatm_q(ji,jj)*1000._wp ! => g/kg
+      !PRINT *, ' * slp   =', fatm_slp(ji,jj)/100.   ! => hPa
+      !PRINT *, ' * wspd  =', SQRT( fatm_u(ji,jj)*fatm_u(ji,jj) + fatm_v(ji,jj)*fatm_v(ji,jj) )
+      !ENDIF
+
+      !! REMINDER:
+      !! - at this stage, `sst_s` is the SLAB bulk SST if the slab ocean is used, otherwize it is the bulk SST (`sst_m`) !
+      
+
       CALL blk_oce_1( kt, fatm_u, fatm_v, fatm_theta, fatm_q, fatm_slp,       &   !   <<= in
-         &                sst_m, ssu_m, ssv_m,                                &   !   <<= in
+         &                sst_s, ssu_m, ssv_m,                                &   !   <<= in
          &                sf(jp_uoatm)%fnow(:,:,1), sf(jp_voatm)%fnow(:,:,1), &   !   <<= in
          &                fatm_dqsw, fatm_dqlw,                               &   !   <<= in (wl/cs)
-         &                ssst, zsen, zlat, zevp, qsr, wndm, taum, utau, vtau )            !   =>> out
-      !&                ssst, zcd_du, zsen, zlat, zevp )                    !   =>> out
+         &                ssst, sssq, zsen, zlat, zevp, qsr, wndm, taum, utau, vtau ) ! =>> in/out or out
+      !&                 zcd_du, zsen, zlat, zevp )                    !   =>> out
       !!
       !!    ==> updates: qsr, wndm, utau, vtau, ssst, taum, rhoa, zsen, zlat, zevp
 
+      !ji=22 ; jj=120
+      !PRINT *, 'BULK OUTPUT:'
+      !PRINT *, ' * Qsen   =', zsen(ji,jj)
+      !PRINT *, ' * Qlat   =', zlat(ji,jj)
+      !PRINT *, ' * taum   =', taum(ji,jj)*1000. ! => mN/m^2
+      !PRINT *, ' * ssst   =', ssst(ji,jj)
+      !PRINT *, ' * sssq   =', sssq(ji,jj)
+      !PRINT *, ''; PRINT *, ''
+
+
       CALL blk_oce_2( fatm_theta, fatm_dqlw, fatm_prcp, fatm_snow, ssst, zsen, zlat, zevp ) !   <<= in
       !!   ==> updates: emp, qns, qns_oce, qsr_oce
-      
+
       !$acc end data
       IF( ln_timing )   CALL timing_stop('sbc_blk')
       !
    END SUBROUTINE sbc_blk
 
 
-   SUBROUTINE blk_oce_1( kt, pwndi, pwndj, ptair, pqair, pslp, pst, pu, pv, puatm, pvatm, pdqsr, pdqlw, &  ! in
-      &                      ptsk , psen, plat, pevp, pqsr, pwndm, ptaum, putau, pvtau,                 &  ! out
-      &                      pssq )                                                                        ! optional out
-      !&                      ptsk , pcd_du, psen, plat, pevp ) ! out
+   SUBROUTINE blk_oce_1( kt, pwndi, pwndj, ptair, pqair, pslp, psst, pu, pv,     &  ! in
+      &                      puatm, pvatm, pdqsr, pdqlw,                         &  ! in
+      &                      pssst, psssq,                                        &  ! in/out
+      &                      psen, plat, pevp, pqsr, pwndm, ptaum, putau, pvtau  )  ! out
+      !&                             pcd_du, psen, plat, pevp ) ! out
       !!---------------------------------------------------------------------
       !!                     ***  ROUTINE blk_oce_1  ***
       !!
@@ -570,7 +616,7 @@ CONTAINS
       !!                if ln_blk=T, atmospheric fields read in sbc_read
       !!                if ln_abl=T, the ABL model at previous time-step
       !!
-      !! ** Outputs : - pssq    : surface humidity used to compute latent heat flux (kg/kg)
+      !! ** Outputs : - psssq    : surface humidity used to compute latent heat flux (kg/kg)
       !!              - pcd_du  : Cd x |dU| at T-points  (m/s)
       !!              - psen    : sensible heat flux (W/m^2)
       !!              - plat    : latent heat flux   (W/m^2)
@@ -588,14 +634,15 @@ CONTAINS
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pqair  ! specific humidity at T-points            [kg/kg]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   ptair  ! potential temperature at T-points        [Kelvin]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pslp   ! sea-level pressure                       [Pa]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pst    ! surface temperature                      [Celsius]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   psst   ! (always) BULK SST                        [Celsius]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pu     ! surface current at U-point (i-component) [m/s]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pv     ! surface current at V-point (j-component) [m/s]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   puatm  ! surface current seen by the atm at T-point (i-component) [m/s]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pvatm  ! surface current seen by the atm at T-point (j-component) [m/s]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pdqsr  ! downwelling solar (shortwave) radiation at surface [W/m^2]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pdqlw  ! downwelling longwave radiation at surface [W/m^2]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   ptsk   ! skin temp. (or SST if CS & WL not used)  [Celsius]
+      REAL(wp), INTENT(inout), DIMENSION(jpi,jpj) ::   pssst   ! SKIN SST (or BULK if CS & WL not used)  [Celsius]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   psssq   ! SKIN SSQ (or BULK if CS & WL not used)  [Celsius]
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   psen
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   plat
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pevp
@@ -604,53 +651,53 @@ CONTAINS
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   ptaum
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   putau  !NEW
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pvtau  !NEW
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj), OPTIONAL ::   pssq
       !!---------------------------------------------------------------------
-      LOGICAL  :: l_rtrn_ssq
       INTEGER  ::   ji, jj               ! dummy loop indices
-      REAL(wp) ::   z1_alb, zztmp                ! local variable
+      REAL(wp) ::   zmsk, z1_alb, zztmp  ! local variable
       REAL(wp) ::   zstmax, zstau, zpatm
       !REAL(wp), DIMENSION(jpi,jpj) ::   ztau_i, ztau_j    ! wind stress components at T-point
-      REAL(wp), DIMENSION(jpi,jpj) ::   zssq                      ! specific humidity at pst                 [kg/kg]
       REAL(wp), DIMENSION(jpi,jpj) ::   ztheta_zu, zq_zu, zU_zu   ! bulk wind speed at height zu  [m/s]
       REAL(wp), DIMENSION(jpi,jpj) ::   zcd_oce           ! momentum transfert coefficient over ocean
       REAL(wp), DIMENSION(jpi,jpj) ::   zch_oce           ! sensible heat transfert coefficient over ocean
       REAL(wp), DIMENSION(jpi,jpj) ::   zce_oce           ! latent   heat transfert coefficient over ocean
-      REAL(wp), DIMENSION(jpi,jpj) ::   zsspt             ! potential sea-surface temperature [K]
       REAL(wp), DIMENSION(jpi,jpj) ::   ztabs       ! air pressure [Pa] & absolute temperature [K]
       REAL(wp), DIMENSION(jpi,jpj) ::   zztmp1, zztmp2
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_oce_1')
       !
-      !$acc data present( pwndi,pwndj,ptair,pqair,pslp,pst,pu,pv,pdqsr,pdqlw, ptsk,psen,plat,pevp,ptaum,pqsr,pwndm ) create( zssq,zsspt,zcd_oce,zch_oce,zce_oce,ztheta_zu,zq_zu,zU_zu )
+      !$acc data present( pwndi,pwndj,ptair,pqair,pslp,psst,pu,pv,pdqsr,pdqlw, pssst,psssq,psen,plat,pevp,ptaum,pqsr,pwndm ) create(zcd_oce,zch_oce,zce_oce,ztheta_zu,zq_zu,zU_zu)
       !
-      l_rtrn_ssq = ( PRESENT(pssq) )
 
       z1_alb = 1. - albo
-
-
-
-      ! Need to exit this routine   :  ptsk, zssq,   | pcd_du, psen, plat, pevp
-      ! Entry argument bulk_routines:  zsspt, ptair, zssq, pqair, pwndm
-      ! Dans routine ecmwf: present(T_s, t_zt, q_s, q_zt, U_zu, Cd, Ch, Ce, t_zu, zq_zu, Ubzu)
 
       ! Required so that no funny FP stuff occurs on the halos...
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
-            ptsk(ji,jj)  = 0._wp
-            pwndm(ji,jj) = 0._wp
+            pwndm(ji,jj) = 0._wp !lili
             psen(ji,jj)  = 0._wp
             plat(ji,jj)  = 0._wp
             ptaum(ji,jj) = 0._wp
             pevp(ji,jj)  = 0._wp
             !
             pqsr(ji,jj)  = 0._wp
-            !
-            zssq(ji,jj)  = 0._wp
          END DO
       END DO
       !$acc end parallel loop
+
+
+      !! Probably not needed, but:
+      IF( .NOT. ll_skin ) THEN
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               pssst(ji,jj) = psst(ji,jj)
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
+
+
 
 
 
@@ -660,10 +707,10 @@ CONTAINS
 
             ! local scalars ( place there for vector optimisation purposes)
             !                           ! Temporary conversion from Celcius to Kelvin (and set minimum value far above 0 K)
-            ptsk(ji,jj) = pst(ji,jj) + rt0  ! by default: skin temperature = "bulk SST" (will remain this way if NCAR algorithm used!)
+            !pssst(ji,jj) = psst(ji,jj) + rt0  ! by default: skin temperature = "bulk SST" (will remain this way if NCAR algorithm used!)
 
             ! sea surface potential temperature [K]
-            zsspt(ji,jj) = theta_exner( ptsk(ji,jj), pslp(ji,jj) )
+            !zsspt(ji,jj) = theta_exner( pssst(ji,jj), pslp(ji,jj) )
 
             ! ----------------------------------------------------------------------------- !
             !      0   Wind components and module at T-point relative to the moving ocean   !
@@ -690,65 +737,69 @@ CONTAINS
             !     II   Turbulent FLUXES                                                     !
             ! ----------------------------------------------------------------------------- !
 
-            ! specific humidity at SST
-            zssq(ji,jj) = rdct_qsat_salt * q_sat( ptsk(ji,jj), pslp(ji,jj) )
+            ! specific humidity at SKIN SST (if `ll_skin`) or BULK SST (if `.NOT. ll_skin`):
+            psssq(ji,jj) = rdct_qsat_salt * q_sat( pssst(ji,jj)+rt0 , pslp(ji,jj) )
 
 
          END DO !DO ji=Nis0, Nie0
       END DO !DO jj=Njs0, Nje0
       !$acc end parallel loop
 
-
-      !LOLOfixme:
-      !IF( ln_skin_cs .OR. ln_skin_wl ) THEN
-      !   !! Backup "bulk SST" and associated spec. hum.
-      !   zztmp1(:,:) = zsspt(:,:)
-      !   zztmp2(:,:) = zssq(:,:)
-      !ENDIF
-      !LOLOfixme.
-
       ! transfer coefficients (Cd, Ch, Ce at T-point, and more)
       SELECT CASE( nblk )   ! user-selected bulk parameterization
          !
       CASE( np_NCAR      )
-         CALL turb_ncar    (     rn_zqt, rn_zu, zsspt, ptair, zssq, pqair, pwndm,   &
+         CALL turb_ncar    (     rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm,   &
             &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu ,  &
             &                nb_iter=nn_iter_algo )
          !
       CASE( np_COARE_3p0 )
-         CALL turb_coare3p0( kt, rn_zqt, rn_zu, zsspt, ptair, zssq, pqair, pwndm, &
-            &                ln_skin_cs, ln_skin_wl,                             &
-            &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
-            &                nb_iter=nn_iter_algo,                               &
-            &                Qsw=pqsr(:,:), rad_lw=pdqlw(:,:), slp=pslp(:,:) )
+         STOP'LOLO turb_coare3p0'
+         !CALL turb_coare3p0( kt, rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm, &
+         !   &                ln_skin_cs, ln_skin_wl,                             &
+         !   &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
+         !   &                nb_iter=nn_iter_algo,                               &
+         !   &                Qsw=pqsr(:,:), rad_lw=pdqlw(:,:), slp=pslp(:,:) )
          !
-      CASE( np_COARE_3p6 )
-         CALL turb_coare3p6( kt, rn_zqt, rn_zu, zsspt, ptair, zssq, pqair, pwndm, &
-            &                ln_skin_cs, ln_skin_wl,                             &
-            &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
-            &                nb_iter=nn_iter_algo,                               &
-            &                Qsw=pqsr(:,:), rad_lw=pdqlw(:,:), slp=pslp(:,:) )
+         !CASE( np_COARE_3p6 )
+         !   CALL turb_coare3p6( kt, rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm, &
+         !      &                ln_skin_cs, ln_skin_wl,                             &
+         !      &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
+         !      &                nb_iter=nn_iter_algo,                               &
+         !      &                Qsw=pqsr(:,:), rad_lw=pdqlw(:,:), slp=pslp(:,:) )
          !
       CASE( np_ECMWF     )
-         CALL turb_ecmwf   ( kt, rn_zqt, rn_zu, zsspt, ptair, zssq, pqair, pwndm,  &
+         CALL turb_ecmwf   ( kt, rn_zqt, rn_zu, psst, pssst, ptair, psssq, pqair, pwndm,  &
             &                ln_skin_cs, ln_skin_wl,                             &
             &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
             &                nb_iter=nn_iter_algo ) !LOLOfixme: no WL/CS for now...
          !
-         !CALL turb_ecmwf   ( kt, rn_zqt, rn_zu, zsspt, ptair, zssq, pqair, pwndm, &
+         !CALL turb_ecmwf   ( kt, rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm, &
          !   &                ln_skin_cs, ln_skin_wl,                            &
          !   &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu,  &
          !   &                nb_iter=nn_iter_algo,                              &
          !   &                Qsw=pqsr(:,:), rad_lw=pdqlw(:,:), slp=pslp(:,:) )
          !
          !CASE( np_ANDREAS   )
-         !   CALL turb_andreas (     rn_zqt, rn_zu, zsspt, ptair, zssq, pqair, pwndm, &
+         !   CALL turb_andreas (     rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm, &
          !      &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu , &
          !      &                nb_iter=nn_iter_algo   )
          !
       CASE DEFAULT
          CALL ctl_stop( 'STOP', 'sbc_oce: non-existing bulk parameterizaton selected' )
       END SELECT
+
+
+      !DEBUG:
+      !ji=22 ; jj=120
+      !PRINT *, 'BULK OUTPUT:'
+      !PRINT *, ' * C_D   =', zcd_oce(ji,jj) * 1000.
+      !PRINT *, ' * C_E   =', zce_oce(ji,jj) * 1000.
+      !PRINT *, ' * C_H   =', zch_oce(ji,jj) * 1000.
+      !PRINT *, ' * t_zu  =', ztheta_zu(ji,jj) -rt0
+      !PRINT *, ' * q_zu  =', zq_zu(ji,jj) * 1000.
+      !PRINT *, ''
+      !DEBUG.
 
       !IF( iom_use('Cd_oce') )   CALL iom_put("Cd_oce",   zcd_oce * xmskt(:,:))
       !IF( iom_use('Ce_oce') )   CALL iom_put("Ce_oce",   zce_oce * xmskt(:,:))
@@ -762,15 +813,15 @@ CONTAINS
       !IF( iom_use('wspd_blk') ) CALL iom_put("wspd_blk", zU_zu       * xmskt(:,:)) ! bulk wind speed at z=zu
 
       !LOLOfixme:
-      !IF( ln_skin_cs .OR. ln_skin_wl ) THEN
-      !   !! In the presence of sea-ice we forget about the cool-skin/warm-layer update of zsspt, zssq & ptsk:
-      !   WHERE( fr_i(:,:) > 0.001_wp )
+      !IF( ll_skin ) THEN
+      !   !! In the presence of sea-ice we forget about the cool-skin/warm-layer update of zsspt, zssq & pssst:
+      !   WHERE( at_i(:,:) > 0.001_wp )
       !      ! sea-ice present, we forget about the update, using what we backed up before call to turb_*()
       !      zsspt(:,:) = zztmp1(:,:)
       !      zssq(:,:)  = zztmp2(:,:)
       !   END WHERE
       !   ! apply potential temperature increment to abolute SST
-      !   ptsk(:,:) = ptsk(:,:) + ( zsspt(:,:) - zztmp1(:,:) )
+      !   pssst(:,:) = pssst(:,:) + ( zsspt(:,:) - zztmp1(:,:) )
       !ENDIF
       !LOLOfixme.
 
@@ -798,20 +849,33 @@ CONTAINS
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
+            zmsk = xmskt(ji,jj)
+            
             !zpatm       = pres_temp( zq_zu(ji,jj), pslp(ji,jj), rn_zu, ptpot=ztheta_zu(ji,jj), pta=ztabs(ji,jj) )
             !rhoa(ji,jj) = rho_air( ztabs(ji,jj), zq_zu(ji,jj), zpatm ) !LOLObug: no need as returned by `bulk_formula_sclr` !!!
 
-            CALL bulk_formula_sclr( rn_zu, zsspt(ji,jj), zssq(ji,jj), ztheta_zu(ji,jj), zq_zu(ji,jj), &
+            CALL bulk_formula_sclr( rn_zu, pssst(ji,jj), psssq(ji,jj), ztheta_zu(ji,jj), zq_zu(ji,jj), &
                &                    zcd_oce(ji,jj), zch_oce(ji,jj), zce_oce(ji,jj),               &
                &                    pwndm(ji,jj), zU_zu(ji,jj), pslp(ji,jj),                       &
                &                    pTau=ptaum(ji,jj), pQsen=psen(ji,jj), pQlat=plat(ji,jj),       &
                &                    pEvap=pevp(ji,jj), prhoa=rhoa(ji,jj) )
 
-
-            psen(ji,jj) = psen(ji,jj)* xmskt(ji,jj)
-            plat(ji,jj) = plat(ji,jj)* xmskt(ji,jj)
-            ptaum(ji,jj) = ptaum(ji,jj)* xmskt(ji,jj)
-            pevp(ji,jj) = pevp(ji,jj)* xmskt(ji,jj)
+            !DEBUG:
+            !IF( ji==22 .AND. jj==120 ) THEN
+            !   PRINT *, 'BULK_FORMULA OUTPUT:'
+            !   PRINT *, ' * Rho_air =', rhoa(ji,jj)
+            !   PRINT *, ' * E       =', pevp(ji,jj)
+            !   PRINT *, ' * Qsens   =', psen(ji,jj)
+            !   PRINT *, ' * Qlat    =', plat(ji,jj)
+            !   PRINT *, ''
+            !ENDIF
+            !DEBUG.
+            
+            psen(ji,jj)  = psen(ji,jj)  * zmsk
+            plat(ji,jj)  = plat(ji,jj)  * zmsk
+            ptaum(ji,jj) = ptaum(ji,jj) * zmsk
+            pevp(ji,jj)  = pevp(ji,jj)  * zmsk
+            rhoa(ji,jj)  = rhoa(ji,jj)  * zmsk
             !
          END DO
       END DO
@@ -831,68 +895,42 @@ CONTAINS
 
       ! Saving open-ocean air-water fluxes:
       ! -----------------------------------
-      IF( iom_use('taum_wa' ) ) THEN
+      IF( iom_use('taum_oce' ) ) THEN
          !$acc update self( ptaum )
-         CALL iom_put( "taum_wa",   ptaum(:,:) )   ! output wind stress module
+         CALL iom_put( "taum_oce",   ptaum(:,:) )   ! output wind stress module
       ENDIF
       IF( iom_use('rho_air' ) ) THEN
          !$acc update self( rhoa )
          CALL iom_put( "rho_air"  ,  rhoa )     ! output air density [kg/m^3]
       ENDIF
-      IF( iom_use('evap_wa' ) ) THEN
+      IF( iom_use('evap_oce' ) ) THEN
          !$acc update self( pevp )
-         CALL iom_put( "evap_wa" ,  pevp )     ! evaporation
+         CALL iom_put( "evap_oce" ,  pevp )     ! evaporation
       ENDIF
-      IF( iom_use('qsb_wa' ) ) THEN
+      IF( iom_use('qsb_oce' ) ) THEN
          !$acc update self( psen )
-         CALL iom_put( "qsb_wa"  ,  psen )     ! output downward sensible heat over the ocean
+         CALL iom_put( "qsb_oce"  ,  psen )     ! output downward sensible heat over the ocean
       ENDIF
-      IF( iom_use('qla_wa' ) ) THEN
+      IF( iom_use('qla_oce' ) ) THEN
          !$acc update self( plat )
-         CALL iom_put( "qla_wa"  ,  plat )     ! output downward latent   heat over the ocean
+         CALL iom_put( "qla_oce"  ,  plat )     ! output downward latent   heat over the ocean
       ENDIF
-      IF( iom_use('utau_wa' ) ) THEN
+      IF( iom_use('utau_oce' ) ) THEN
          !$acc update self( putau )
-         CALL iom_put( "utau_wa"  ,  putau )     ! output downward latent   heat over the ocean
+         CALL iom_put( "utau_oce"  ,  putau )     ! output downward latent   heat over the ocean
       ENDIF
-      IF( iom_use('vtau_wa' ) ) THEN
+      IF( iom_use('vtau_oce' ) ) THEN
          !$acc update self( pvtau )
-         CALL iom_put( "vtau_wa"  ,  pvtau )     ! output downward latent   heat over the ocean
+         CALL iom_put( "vtau_oce"  ,  pvtau )     ! output downward latent   heat over the ocean
       ENDIF
 
       IF(sn_cfctl%l_prtctl) THEN
-         CALL prt_ctl( tab2d_1=zssq, clinfo1=' blk_oce_1: zssq   : ', mask1=tmask )
+         CALL prt_ctl( tab2d_1=psssq, clinfo1=' blk_oce_1: sssq    : ', mask1=tmask )
          CALL prt_ctl( tab2d_1=pwndm, clinfo1=' blk_oce_1: pwndm   : ', mask1=tmask )
          CALL prt_ctl( tab2d_1=putau, clinfo1=' blk_oce_1: putau   : ', mask1=umask,   &
             &          tab2d_2=pvtau, clinfo2='            pvtau   : ', mask2=vmask )
-         CALL prt_ctl( tab2d_1=zcd_oce, clinfo1=' blk_oce_1: Cd     : ', mask1=tmask )
+         CALL prt_ctl( tab2d_1=zcd_oce, clinfo1=' blk_oce_1: Cd    : ', mask1=tmask )
       ENDIF
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            ptsk(ji,jj) = ( ptsk(ji,jj) - rt0 )* xmskt(ji,jj)  ! Back to Celsius
-         END DO
-      END DO
-      !$acc end parallel loop
-
-
-      IF( l_rtrn_ssq ) THEN
-         !$acc parallel loop collapse(2) present( pssq )
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               pssq(ji,jj) = zssq(ji,jj)
-            END DO
-         END DO
-         !$acc end parallel loop
-      ENDIF
-
-      !LOLOfixme   + mind K or Celsius !!!!:
-      !IF( ln_skin_cs .OR. ln_skin_wl ) THEN
-      !   CALL iom_put( "ssst" ,  ssst        )  ! SSST in Celsius
-      !   CALL iom_put( "dt_skin" , ptsk - pst  )  ! SSST - SST temperature difference
-      !ENDIF
-      !LOLOfixme.
 
       !$acc end data
       IF( ln_timing )   CALL timing_stop('blk_oce_1')
@@ -900,8 +938,7 @@ CONTAINS
    END SUBROUTINE blk_oce_1
    !qsr, wndm, utau, vtau
 
-   SUBROUTINE blk_oce_2( ptair, pdqlw, pprec, psnow, &   ! <<= in
-      &                   ptsk, psen, plat, pevp ) !!, qlwn     )   ! <<= in
+   SUBROUTINE blk_oce_2( ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevp )   ! <<= in
       !!---------------------------------------------------------------------
       !!                     ***  ROUTINE blk_oce_2  ***
       !!
@@ -917,7 +954,7 @@ CONTAINS
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pdqlw   ! downwelling longwave radiation at surface [W/m^2]
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pprec
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   psnow
-      REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   ptsk   ! SKIN surface temperature   [Celsius]
+      REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pssst   ! SKIN surface temperature   [Celsius]
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   psen
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   plat
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pevp
@@ -930,7 +967,7 @@ CONTAINS
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_oce_2')
       !
-      !$acc data present(ptair, pdqlw, pprec, psnow, ptsk, psen, plat, pevp, emp, qns, qns_oce, qsr_oce) create( zqlw )
+      !$acc data present(ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevp, emp, qns, qns_oce, qsr_oce) create( zqlw )
 
 
       !$acc parallel loop collapse(2)
@@ -942,46 +979,39 @@ CONTAINS
             ! Heat content per unit mass (J/kg)
             zcptrain = (     ptair(ji,jj)        - rt0 ) * rcp  * zmsk
             zcptsnw = ( MIN( ptair(ji,jj), rt0 ) - rt0 ) * rcpi * zmsk
-            zcptn =          ptsk(ji,jj)                 * rcp  * zmsk
+            zcptn =          pssst(ji,jj)                 * rcp  * zmsk
 
             ! ----------------------------------------------------------------------------- !
             !     III    Net longwave radiative FLUX                                        !
             ! ----------------------------------------------------------------------------- !
             !! #LB: now moved after Turbulent fluxes because must use the skin temperature rather than bulk SST
-            !! (ptsk is skin temperature if ln_skin_cs==.TRUE. .OR. ln_skin_wl==.TRUE.)
-            zqlw(ji,jj) = qlw_net( pdqlw(ji,jj), ptsk(ji,jj)+rt0 )
+            !! (pssst is skin temperature if ln_skin_cs==.TRUE. .OR. ln_skin_wl==.TRUE., bulk SST otherwize)
+            zqlw(ji,jj) = qlw_net( pdqlw(ji,jj), pssst(ji,jj)+rt0 ) * zmsk
 
             ! ----------------------------------------------------------------------------- !
             !     IV    Total FLUXES                                                       !
             ! ----------------------------------------------------------------------------- !
             !
-            emp(ji,jj) = ( pevp(ji,jj) - pprec(ji,jj) ) * zmsk      ! mass flux (evap. - precip.)
+            emp(ji,jj) = ( pevp(ji,jj) - pprec(ji,jj) ) * zmsk              ! mass flux (evap. - precip.)
             !
-            qns(ji,jj) = zqlw(ji,jj) + psen(ji,jj) + plat(ji,jj)  &   ! Downward Non Solar
-               &     - psnow(ji,jj) *  rLfus                      &   ! remove latent melting heat for solid precip
-               &     - pevp(ji,jj) * zcptn                        &   ! remove evap heat content at SST
-               &     + ( pprec(ji,jj) - psnow(ji,jj) ) * zcptrain &   ! add liquid precip heat content at Tair
-               &     + psnow(ji,jj) * zcptsnw                         ! add solid  precip heat content at min(Tair,Tsnow)
-            qns(ji,jj) = qns(ji,jj) * zmsk
+            qns(ji,jj) = (   zqlw(ji,jj) + psen(ji,jj) + plat(ji,jj)    &   ! Downward Non Solar
+               &           - psnow(ji,jj) *  rLfus                      &   ! remove latent melting heat for solid precip
+               &           - pevp(ji,jj) * zcptn                        &   ! remove evap heat content at SST
+               &           + ( pprec(ji,jj) - psnow(ji,jj) ) * zcptrain &   ! add liquid precip heat content at Tair
+               &           + psnow(ji,jj) * zcptsnw                     &   ! add solid  precip heat content at min(Tair,Tsnow)
+               &          ) * zmsk
             !
-            qns_oce(ji,jj) = zqlw(ji,jj) + psen(ji,jj) + plat(ji,jj)           ! non solar without emp (only needed by SI3)
-            qsr_oce(ji,jj) = qsr(ji,jj)
-
+            qns_oce(ji,jj) = ( zqlw(ji,jj) + psen(ji,jj) + plat(ji,jj) ) * zmsk ! non solar without emp (only needed by SI3)
+            !
+            qsr_oce(ji,jj) =    qsr(ji,jj)
+            !
          END DO
       END DO
       !$acc end parallel loop
 
-      IF( iom_use('qsr_wa' ) ) THEN
-         !$acc update self( qsr )
-         CALL iom_put( "qsr_wa"  ,  qsr )
-      ENDIF
-      IF( iom_use('qlw_wa' ) ) THEN
+      IF( iom_use('qlw_oce' ) ) THEN
          !$acc update self( zqlw )
-         CALL iom_put( "qlw_wa"  ,  zqlw )
-      ENDIF
-      IF( iom_use('qns_wa' ) ) THEN
-         !$acc update self( qns_oce )
-         CALL iom_put( "qns_wa"  ,  qns_oce )
+         CALL iom_put( "qlw_oce"  ,  zqlw )
       ENDIF
       IF( iom_use('snowpre' ) ) THEN
          !$acc update self( psnow )
@@ -1048,11 +1078,11 @@ CONTAINS
       INTEGER  ::   ji, jj    ! dummy loop indices
       REAL(wp) ::   zootm_su                      ! sea-ice surface mean temperature
       REAL(wp) ::   zztmp1, zztmp2                ! temporary scalars
-      REAL(wp), DIMENSION(jpi,jpj) :: zCDi, ztmp1, ztmp2, ztmp3 ! temporary array
+      REAL(wp), DIMENSION(jpi,jpj) :: zCDi, ztmp1, ztmp3 ! temporary array
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_ice_1')
       ! UPDATES: wndm_ice     , pCHi,pCEi,ptheta_zu_i,pq_zu_i
-      !$acc data present( pwndi,pwndj,ptair,pqair,pslp,puice,pvice,ptsui,pCHi,pCEi,ptheta_zu_i,pq_zu_i,putaui,pvtaui,wndm_ice,rhoa ) create( ztmp1, ztmp2, ztmp3, zCDi )
+      !$acc data present( pwndi,pwndj,ptair,pqair,pslp,puice,pvice,ptsui,pCHi,pCEi,ptheta_zu_i,pq_zu_i,putaui,pvtaui,wndm_ice,rhoa ) create( ztmp1, ztmp3, zCDi )
       !
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
@@ -1062,9 +1092,6 @@ CONTAINS
             !    Wind module relative to the moving ice ( U10m - U_ice )   !
             ! ------------------------------------------------------------ !
             wndm_ice(ji,jj) = SQRT( pwndi(ji,jj) * pwndi(ji,jj) + pwndj(ji,jj) * pwndj(ji,jj) )
-
-            ! potential sea-ice surface temperature [K]
-            ztmp2(ji,jj) = theta_exner( ptsui(ji,jj), pslp(ji,jj) )
 
             IF( nblk_ice>1 ) ztmp1(ji,jj) = q_sat( ptsui(ji,jj), pslp(ji,jj), l_ice=.TRUE. ) ! temporary array for SSQ over ice
 
@@ -1082,8 +1109,6 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-      !
-
       ! sea-ice <-> atmosphere bulk transfer coefficients
       SELECT CASE( nblk_ice )
 
@@ -1098,14 +1123,14 @@ CONTAINS
 # if defined _OPENACC
          CALL ctl_stop( 'blk_ice_1: ADAPT `turb_ice_lu12` for GPU before using it!')
 # endif
-         CALL turb_ice_lu12( rn_zqt, rn_zu, ptsui, ptair, ztmp1, pqair, wndm_ice, fr_i, &
+         CALL turb_ice_lu12( rn_zqt, rn_zu, ptsui, ptair, ztmp1, pqair, wndm_ice, at_i, &
             &                      zCDi, pCHi, pCEi, ptheta_zu_i, pq_zu_i )
          !!
       CASE( np_ice_lg15 )  ! calculate new drag from Lupkes(2015) equations
 # if defined _OPENACC
          CALL ctl_stop( 'blk_ice_1: ADAPT `turb_ice_lg15` for GPU before using it!')
 # endif
-         CALL turb_ice_lg15( rn_zqt, rn_zu, ptsui, ptair, ztmp1, pqair, wndm_ice, fr_i, &
+         CALL turb_ice_lg15( rn_zqt, rn_zu, ptsui, ptair, ztmp1, pqair, wndm_ice, at_i, &
             &                      zCDi, pCHi, pCEi, ptheta_zu_i, pq_zu_i )
          !!
       END SELECT
@@ -1180,7 +1205,7 @@ CONTAINS
       !!
       !! UPDATED ARRAYS:
       !! `devap_ice,dqla_ice,dqns_ice,emp_ice,emp_oce,evap_ice,qemp_ice,qemp_oce,
-      !!  qevap_ice,qla_ice,qsb_ice,qns_ice,qns_tot,qprec_ice,qsr_ice,qlw_ice,qsr_tot,qtr_ice_top`
+      !!  qevap_ice,qla_ice,qsb_ice,qns_ice,qprec_ice,qsr_ice,qlw_ice,qtr_ice_top`
       !!
       !!
       !!---------------------------------------------------------------------
@@ -1289,7 +1314,7 @@ CONTAINS
             zcptn    =        sst_s(ji,jj)                * rcp  * zmsk
 
             ! --- evaporation --- !
-            zevap = emp(ji,jj) + fatm_prcp(ji,jj)   ! evaporation over ocean
+            zevap = emp(ji,jj) + fatm_prcp(ji,jj)   ! evaporation over ocean   !#LOLOfixme WTF??? WHY precip here ???? remove and use evap already computed by bulks!
             !$acc loop seq
             DO jl = 1, jpl                        !  Loop over ice categories  !
                evap_ice (ji,jj,jl) =  qla_ice(ji,jj,jl) * z1_rLsub    ! sublimation
@@ -1309,24 +1334,12 @@ CONTAINS
             !emp_tot(ji,jj) = emp_oce(ji,jj) + emp_ice(ji,jj)
 
             ! --- heat flux associated with emp --- !
-            qemp_oce(ji,jj) = - z1mA_b * zevap * zcptn         & ! evap at sst
-               &              + ( fatm_prcp(ji,jj) - zsnwprc )   *   zcptrain         & ! liquid precip at Tair
-               &              +   zsnwprc * ( 1._wp - zsnw ) * ( zcptsnw - rLfus ) ! solid precip at min(Tair,Tsnow)
-            qemp_ice(ji,jj) =   zsnwprc *           zsnw   * ( zcptsnw - rLfus ) ! solid precip (only)
-
-            ! --- total solar and non solar fluxes --- !
-            zsum = 0._wp
-            !$acc loop seq
-            DO jl = 1, jpl
-               zsum = zsum + a_i_b(ji,jj,jl) * qns_ice(ji,jj,jl)
-            END DO
-            qns_tot(ji,jj) = z1mA_b * qns_oce(ji,jj) + zsum + qemp_ice(ji,jj) + qemp_oce(ji,jj)
-            zsum = 0._wp
-            !$acc loop seq
-            DO jl = 1, jpl
-               zsum = zsum + a_i_b(ji,jj,jl) * qsr_ice(ji,jj,jl)
-            END DO
-            qsr_tot(ji,jj) = z1mA_b * qsr_oce(ji,jj) + zsum
+            qemp_oce(ji,jj) = ( - z1mA_b * zevap * zcptn                             & ! evap at sst !#LOLOfixme => use the real deal !!!
+               &                + ( fatm_prcp(ji,jj) - zsnwprc )   *   zcptrain      & ! liquid precip at Tair
+               &                +   zsnwprc * ( 1._wp - zsnw ) * ( zcptsnw - rLfus ) &  ! solid precip at min(Tair,Tsnow)
+               &                      ) * zmsk
+            
+            qemp_ice(ji,jj) = ( zsnwprc * zsnw * ( zcptsnw - rLfus ) ) * zmsk   ! solid precip (only)
 
             ! --- heat content of precip over ice in J/m3 (to be used in 1D-thermo) --- !
             qprec_ice(ji,jj) = rhos * ( zcptsnw - rLfus )
@@ -1471,14 +1484,14 @@ CONTAINS
 
       IF( ld_virtual_itd ) THEN
          !
-         zfac  = 1._wp /  ( rn_cnd_s + rcnd_i )
+         zfac  = 1._wp /  ( rcnd_s + rcnd_i )
          zfac2 = EXP(1._wp) * 0.5_wp * zepsilon
          zfac3 = 2._wp / zepsilon
          !
          DO jl = 1, jpl
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
-                  zhe = ( rn_cnd_s * phi(ji,jj,jl) + rcnd_i * phs(ji,jj,jl) ) * zfac                            ! Effective thickness
+                  zhe = ( rcnd_s * phi(ji,jj,jl) + rcnd_i * phs(ji,jj,jl) ) * zfac                            ! Effective thickness
                   IF( zhe >=  zfac2 )   zgfac(ji,jj,jl) = MIN( 2._wp, 0.5_wp * ( 1._wp + LOG( zhe * zfac3 ) ) ) ! Enhanced conduction factor
                END DO
             END DO
@@ -1490,14 +1503,14 @@ CONTAINS
       !      II   Surface temperature and conduction flux            !
       ! -------------------------------------------------------------!
       !
-      zfac = rcnd_i * rn_cnd_s
+      zfac = rcnd_i * rcnd_s
       !
       DO jl = 1, jpl
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
                !
                zkeff_h = zfac * zgfac(ji,jj,jl) / &                                    ! Effective conductivity of the snow-ice system divided by thickness
-                  &      ( rcnd_i * phs(ji,jj,jl) + rn_cnd_s * MAX( 0.01, phi(ji,jj,jl) ) )
+                  &      ( rcnd_i * phs(ji,jj,jl) + rcnd_s * MAX( 0.01, phi(ji,jj,jl) ) )
                ztsu    = ptsu(ji,jj,jl)                                                ! Store current iteration temperature
                ztsu0   = ptsu(ji,jj,jl)                                                ! Store initial surface temperature
                zqa0    = qsr_ice(ji,jj,jl) - qtr_ice_top(ji,jj,jl) + qns_ice(ji,jj,jl) ! Net initial atmospheric heat flux
@@ -1526,3 +1539,5 @@ CONTAINS
 
    !!======================================================================
 END MODULE sbcblk
+
+! LocalWords:  sst

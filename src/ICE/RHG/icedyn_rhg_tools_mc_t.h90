@@ -2,7 +2,7 @@
             !! ~~~~~~~~~~~~~~
             zE  = rn_E0 * p1mdt(ji,jj) * pxpCt(ji,jj)
 
-            zdx = res_grd_loc_t(ji,jj)
+            zdx = REAL( res_grd_loc_t(ji,jj) , wp )
 
             zrr   = pSclH_t(ji,jj)    ! this is `SQRT( rn_l_ref/dx ) * h_f`
             zCohe = rn_c_ref * zrr

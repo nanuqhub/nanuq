@@ -10,25 +10,37 @@
 %XIOS_INC            -I%XIOS_HOME/inc 
 %XIOS_LIB            -L%XIOS_HOME/lib -lxios
 
+
 %FC                  mpiifx
 
-%FCFLAGS             -i4 -r8 -O3 -xHOST -init=zero -init=arrays -fp-model strict
+%BASE_FFLAGS          -i4 -r8 -init=zero -init=arrays -fp-model strict
 
-###%FCFLAGS          -i4 -r8 -O0 -xHOST -g -traceback -init=zero -init=arrays -fp-model strict -CB
-###%FCFLAGS          -i4 -r8 -O1 -check all -warn all -debug extended -C -g -traceback -init=zero -init=arrays -fp-model precise -ftrapuv -fpe0
-#%FCFLAGS            -i4 -r8 -O0 -CB -g -traceback -init=zero -init=arrays -fp-model precise -fpe0
+%PROD_FFLAGS          -O3 -xHOST
+
+%DEV_FFLAGS           -O0 -g -traceback -CB -fpe0 -debug -ftrapuv
+
+#######################################################
+
+# Production on CPU only:
+# ~~~~~~~~~~~~~~~~~~~~~~~
+%FPPFLAGS            -P  -traditional
+%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
+#
+# Debug on CPU only:
+# ~~~~~~~~~~~~~~~~~~
+###%FPPFLAGS            -P  -traditional -D_TRDBG
+#%FPPFLAGS            -P  -traditional
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
 
 %FFLAGS              %FCFLAGS
 
 %CPP	             cpp
 
-##%FPPFLAGS            -P  -traditional
-%FPPFLAGS            -P  -traditional -Dthd_orig
-##%FPPFLAGS            -P  -traditional -Dthd_2d
-##%FPPFLAGS            -P  -traditional -Dthd_dbg2
+%FPPFLAGS            -P  -traditional
+##%FPPFLAGS            -P  -traditional -D_TRDBG
+
 
 %LD                  mpiifx
-
 %LDFLAGS             -lstdc++
 
 %AR                  ar

@@ -56,8 +56,7 @@ CONTAINS
       !!              - qns     : sea heat flux: non solar
       !!              - emp     : freshwater budget: volume flux
       !!              - sfx     : salt flux
-      !!              - fr_i    : ice fraction
-      !!              - tn_ice  : sea-ice surface temperature
+      !!              - t_su    : sea-ice surface temperature
       !!              - alb_ice : sea-ice albedo (recomputed only for coupled mode)
       !!
       !! References : Goosse, H. et al. 1996, Bul. Soc. Roy. Sc. Liege, 65, 87-90.
@@ -69,14 +68,14 @@ CONTAINS
       !
       INTEGER  ::   ji, jj, jl, jk   ! dummy loop indices
       REAL(wp) ::   zqsr             ! New solar flux received by the ocean
-      REAL(wp) ::   zsum
+      REAL(wp) ::   zA_b, z1mA_b, zsum, zqns_tot, zqsr_tot
       !REAL(wp), DIMENSION(jpi,jpj) ::   z2d    ! 2D workspace for IOM stuff
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_update_flx')
-      !$acc data present( a_i_b, alb_ice, at_i, at_i_b, emp, emp_ice, emp_oce, fhld, fmmflx, fr_i, frq_m, hfx_bog, hfx_bom, hfx_dif, hfx_dyn, hfx_opw, hfx_res  )
-      !$acc data present( hfx_snw, hfx_spr, hfx_sub, hfx_sum, hfx_thd, h_i, h_s, qemp_ice, qemp_oce, qevap_ice, qns, qns_oce, qns_tot, qsr, qsr_oce, qsr_tot, qt_atm_oi    )
+      !$acc data present( a_i_b, alb_ice, at_i, at_i_b, emp, emp_ice, emp_oce, fhld, fmmflx, frq_m, hfx_bog, hfx_bom, hfx_dif, hfx_dyn, hfx_opw, hfx_res  )
+      !$acc data present( hfx_snw, hfx_spr, hfx_sub, hfx_sum, hfx_thd, h_i, h_s, qemp_ice, qemp_oce, qevap_ice, qns, qns_oce, qsr, qsr_oce, qt_atm_oi    )
       !$acc data present( qt_oce_ai, qtr_ice_bot, sfx, sfx_bog, sfx_bom, sfx_bri, sfx_dyn, sfx_lam, sfx_opw, sfx_res, sfx_sni, sfx_sub, sfx_sum )
-      !$acc data present( snwice_mass_b, tn_ice, t_su, vt_i, vt_s, wfx_bog, wfx_bom, wfx_dyn, wfx_err_sub, wfx_ice, wfx_ice_sub, wfx_lam, wfx_opw, wfx_pnd, wfx_res        )
+      !$acc data present( snwice_mass_b, t_su, vt_i, vt_s, wfx_bog, wfx_bom, wfx_dyn, wfx_err_sub, wfx_ice, wfx_ice_sub, wfx_lam, wfx_opw, wfx_pnd, wfx_res        )
       !$acc data present( wfx_sni, wfx_snw, wfx_snw_dyn, wfx_snw_sni, wfx_snw_sub, wfx_snw_sum, wfx_sub, wfx_sum )
 
       IF( kt == nit000 .AND. lwp ) THEN
@@ -93,20 +92,37 @@ CONTAINS
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
+            zA_b    = at_i_b(ji,jj)
+            z1mA_b  = 1._wp - zA_b
+
             ! Net heat flux on top of the ice-ocean (W.m-2)
             !----------------------------------------------
+            zsum = 0._wp
+            !$acc loop seq
+            DO jl = 1, jpl
+               zsum = zsum + a_i_b(ji,jj,jl) * qns_ice(ji,jj,jl)
+            END DO
+            zqns_tot = z1mA_b * qns_oce(ji,jj) + zsum + qemp_ice(ji,jj) + qemp_oce(ji,jj)
+
+            zsum = 0._wp
+            !$acc loop seq
+            DO jl = 1, jpl
+               zsum = zsum + a_i_b(ji,jj,jl) * qsr_ice(ji,jj,jl)
+            END DO
+            zqsr_tot = z1mA_b * qsr_oce(ji,jj) + zsum
+
             !IF( ln_cndflx ) THEN   ! ice-atm interface = conduction (and melting) fluxes
-            !   qt_atm_oi(ji,jj) = ( 1._wp - at_i_b(ji,jj) ) * ( qns_oce(ji,jj) + qsr_oce(ji,jj) ) + qemp_oce(ji,jj) + &
+            !   qt_atm_oi(ji,jj) = z1mA_b * ( qns_oce(ji,jj) + qsr_oce(ji,jj) ) + qemp_oce(ji,jj) + &
             !      &             SUM( a_i_b(ji,jj,1:jpl) * ( qcn_ice(ji,jj,1:jpl) + qml_ice(ji,jj,1:jpl) + qtr_ice_top(ji,jj,1:jpl) ), dim=3 ) + qemp_ice(ji,jj)
             !ELSE                   ! ice-atm interface = solar and non-solar fluxes
-            qt_atm_oi(ji,jj) = qns_tot(ji,jj) + qsr_tot(ji,jj)
+            qt_atm_oi(ji,jj) = zqns_tot + zqsr_tot
             !ENDIF
 
             ! --- case we bypass ice thermodynamics --- !
             IF( .NOT. ln_icethd ) THEN   ! we suppose ice is impermeable => ocean is isolated from atmosphere
                IF(lwp) PRINT *, 'LOLO: `ice_update_flx@iceupdate.F90`:  qt_oce_ai bypass thermo! ,  kt =', kt
-               qt_atm_oi(ji,jj)   = ( 1._wp - at_i_b(ji,jj) ) * ( qns_oce(ji,jj) + qsr_oce(ji,jj) ) + qemp_oce(ji,jj)
-               qt_oce_ai(ji,jj)   = ( 1._wp - at_i_b(ji,jj) ) *   qns_oce(ji,jj)                    + qemp_oce(ji,jj)
+               qt_atm_oi(ji,jj)   = z1mA_b * ( qns_oce(ji,jj) + qsr_oce(ji,jj) ) + qemp_oce(ji,jj)
+               qt_oce_ai(ji,jj)   = z1mA_b *   qns_oce(ji,jj)                    + qemp_oce(ji,jj)
                emp_ice  (ji,jj)   = 0._wp
                qemp_ice (ji,jj)   = 0._wp
                !$acc loop seq
@@ -119,14 +135,14 @@ CONTAINS
             ! Solar heat flux reaching the ocean (max) = zqsr (W.m-2)
             !---------------------------------------------------
             !IF( ln_cndflx ) THEN   ! ice-atm interface = conduction (and melting) fluxes
-            !   zqsr = ( 1._wp - at_i_b(ji,jj) ) * qsr_oce(ji,jj) + SUM( a_i_b (ji,jj,:) * qtr_ice_bot(ji,jj,:) )
+            !   zqsr = z1mA_b * qsr_oce(ji,jj) + SUM( a_i_b (ji,jj,:) * qtr_ice_bot(ji,jj,:) )
             !ELSE                   ! ice-atm interface = solar and non-solar fluxes
             zsum = 0._wp
             !$acc loop seq
             DO jl=1, jpl
                zsum = zsum + a_i_b(ji,jj,jl) * ( qsr_ice(ji,jj,jl) - qtr_ice_bot(ji,jj,jl) )
             END DO
-            zqsr = qsr_tot(ji,jj) - zsum
+            zqsr = zqsr_tot - zsum
             !ENDIF
 
             ! Total heat flux reaching the ocean = qt_oce_ai (W.m-2)
@@ -158,7 +174,7 @@ CONTAINS
                   zsum = zsum + a_i_b(ji,jj,jl) * qtr_ice_bot(ji,jj,jl)
                END DO
                !                                        solar flux transmitted thru the 1st level of the ocean (i.e. not used by sea-ice)
-               qsr(ji,jj) = ( 1._wp - at_i_b(ji,jj) ) * qsr_oce(ji,jj) * ( 1._wp - frq_m(ji,jj) ) &
+               qsr(ji,jj) = z1mA_b * qsr_oce(ji,jj) * ( 1._wp - frq_m(ji,jj) ) &
                                 !                                   + solar flux transmitted thru ice and the 1st ocean level (also not used by sea-ice)
                   &             + zsum * ( 1._wp - frq_m(ji,jj) )
                !
@@ -208,17 +224,13 @@ CONTAINS
             !ENDIF
             !                                               ! time evolution of snow+ice mass
 
-            ! Storing the transmitted variables
-            !----------------------------------
-            fr_i(ji,jj)   = at_i(ji,jj)             ! Sea-ice fraction
-            !$acc loop seq
-            DO jl=1, jpl
-               tn_ice(ji,jj,jl) = t_su(ji,jj,jl)           ! Ice surface temperature
-            END DO
-
          END DO
       END DO
       !$acc end parallel loop
+
+# if ! defined _OPENACC
+      CALL lbc_lnk( 'ice_update_flx', emp,'T',1._wp )   ! IMPORTANT            
+# endif
 
       ! Snow/ice albedo (only if sent to coupler, useless in forced mode)
       !------------------------------------------------------------------
@@ -303,19 +315,15 @@ CONTAINS
       !ENDIF
       !LB.
 
-      IF( iom_use("qsr_oce"    ) ) CALL iom_put( "qsr_oce"    , (qsr_oce * ( 1._wp - at_i_b )                              ) * xmskt ) !     solar flux at ocean surface
-      IF( iom_use("qns_oce"    ) ) CALL iom_put( "qns_oce"    , (qns_oce * ( 1._wp - at_i_b ) + qemp_oce                   ) * xmskt ) ! non-solar flux at ocean surface
       !IF( iom_use("qsr_ice"    ) ) CALL iom_put( "qsr_ice"    , (SUM( qsr_ice * a_i_b, dim=3 )                             ) * xmskt ) !     solar flux at ice surface ! --> moved to `blk_ice_2` of `sbcblk.F90`
       !#LOLOFixme: the true `qns_ice` is saved in `blk_ice_2` of `sbcblk.F90`, change the name for this one:
       !IF( iom_use("qns_ice"    ) ) CALL iom_put( "qns_ice"    , (SUM( qns_ice * a_i_b, dim=3 ) + qemp_ice                  ) * xmskt ) ! non-solar flux at ice surface
       !#LOLOfixme.
       IF( iom_use("qtr_ice_bot") ) CALL iom_put( "qtr_ice_bot", (SUM( qtr_ice_bot * a_i_b, dim=3 )                         ) * xmskt ) !     solar flux transmitted thru ice
       IF( iom_use("qtr_ice_top") ) CALL iom_put( "qtr_ice_top", (SUM( qtr_ice_top * a_i_b, dim=3 )                         ) * xmskt ) !     solar flux transmitted thru ice surface
-      IF( iom_use("qt_oce"     ) ) CALL iom_put( "qt_oce"     , (     ( qsr_oce + qns_oce ) * ( 1._wp - at_i_b ) + qemp_oce) * xmskt )
       IF( iom_use("qt_ice"     ) ) CALL iom_put( "qt_ice"     , (SUM( ( qns_ice + qsr_ice ) * a_i_b, dim=3 )     + qemp_ice) * xmskt )
       IF( iom_use("qt_oce_ai"  ) ) CALL iom_put( "qt_oce_ai"  , qt_oce_ai                                                    * xmskt ) ! total heat flux at the ocean   surface: interface oce-(ice+atm)
       IF( iom_use("qt_atm_oi"  ) ) CALL iom_put( "qt_atm_oi"  , qt_atm_oi                                                    * xmskt ) ! total heat flux at the oce-ice surface: interface atm-(ice+oce)
-      IF( iom_use("qemp_oce"   ) ) CALL iom_put( "qemp_oce"   , (qemp_oce                                                  ) * xmskt ) ! Downward Heat Flux from E-P over ocean
       IF( iom_use("qemp_ice"   ) ) CALL iom_put( "qemp_ice"   , (qemp_ice                                                  ) * xmskt ) ! Downward Heat Flux from E-P over ice
 
       ! heat fluxes from ice transformations

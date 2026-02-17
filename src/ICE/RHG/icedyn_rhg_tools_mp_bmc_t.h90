@@ -5,7 +5,7 @@
             !
             zE = rn_E0 * p1mdt(ji,jj) * pxpCt(ji,jj)
             !
-            zdx = res_grd_loc_t(ji,jj)
+            zdx = REAL( res_grd_loc_t(ji,jj) , wp )
             !
             zsqrtE = SQRT(MAX(zE,epsi06))                               ! `sqrt(E)` (damaged ice)...
             zTd_t(ji,jj) = MAX( zdx * rsqrt_nu_rhoi / zsqrtE , epsi06 )       ! characteristic time for damage [s] |  (we shall divide by it)...

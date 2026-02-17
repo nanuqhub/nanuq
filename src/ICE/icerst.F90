@@ -15,7 +15,7 @@ MODULE icerst
    USE dom_oce        ! ocean domain
    USE phycst  , ONLY : rt0
    USE sbc_oce , ONLY : nn_fsbc, ln_cpl_atm
-   USE oss_nnq , ONLY : nn_foss, ln_cpl_oce, sst_m, sss_m                ! SAS ss[st]_m init
+   USE oss_nnq , ONLY : nn_foss, ln_cpl_oce
    USE iceistate      ! sea-ice: initial state
    USE icectl         ! sea-ice: control
    !

@@ -56,11 +56,11 @@ MODULE icedyn_rhg_bbm
    PUBLIC   ice_dyn_rhg_bbm       ! called by icedyn_rhg.F90
    PUBLIC   rhg_bbm_rst           ! called by icedyn_rhg.F90
 
-   REAL(wp),  SAVE :: rk0  ! factor to stiffness matrix => 1._wp / ( 1._wp - rnup*rnup)
-   REAL(wp),  SAVE :: rk11, rk22, rk12, rk33 ! elements of stiffness matrix
-   REAL(wp),  SAVE :: rlambda0, rsqrt_E0, rCe0 ! Constant part of Eq.28
-
-   REAL(wp), SAVE :: zdtbbm, z1_dtbbm !: small time step (time splitting) [s] and its inverse [1/s]
+   REAL(wp), SAVE :: rk0  ! factor to stiffness matrix => 1._wp / ( 1._wp - rnup*rnup)
+   REAL(wp), SAVE :: rk11, rk22, rk12, rk33 ! elements of stiffness matrix
+   REAL(wp), SAVE :: rlambda0, rsqrt_E0 ! Constant part of Eq.28
+   REAL(wp), SAVE :: rdtbbm, r1_dtbbm !: small time step (time splitting) [s] and its inverse [1/s]
+   !$acc declare create( rk0, rk11, rk22, rk12, rk33, rlambda0, rsqrt_E0, rdtbbm, r1_dtbbm )
 
 
    INTEGER(1), ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   kmsk01x, kmsk01y                ! dummy arrays
@@ -227,8 +227,8 @@ CONTAINS
             zmassV = ztmp4(ji,jj)
 
             ! m/dt
-            zmU_dt(ji,jj)   = zmassU * z1_dtbbm
-            zmV_dt(ji,jj)   = zmassV * z1_dtbbm
+            zmU_dt(ji,jj)   = zmassU * r1_dtbbm
+            zmV_dt(ji,jj)   = zmassV * r1_dtbbm
 
             ! Surface pressure gradient (- m*g*GRAD(ssh)) at U-V points
             zgrdSH(ji,jj,1) = - zmassU * grav * ( zxpCt(ji+1,jj) - zxpCt(ji,jj)   ) * r1_e1u(ji,jj)
@@ -257,7 +257,7 @@ CONTAINS
             DO ji=Nis0-1, Nie0+1
                zmsk = xmskt(ji,jj)
                zr1 = 1._wp / MAX(at_i(ji,jj),epsi06)
-               zr3 = rcnd_i*vt_s(ji,jj)*zr1 / MAX( rn_cnd_s*vt_i(ji,jj)*zr1, epsi06 ) * zmsk   ! => `C` of the
+               zr3 = rcnd_i*vt_s(ji,jj)*zr1 / MAX( rcnd_s*vt_i(ji,jj)*zr1, epsi06 ) * zmsk   ! => `C` of the
                IF(ln_icethd) THEN ! Thermo is on, normal stuff
                   ztmp1(ji,jj) = (t_bo(ji,jj) - tm_su(ji,jj)) / (1._wp + zr3 ) * zmsk ! temp. difference between bottom and surface
                ELSE
@@ -285,7 +285,7 @@ CONTAINS
       CALL cap_1md( at_i, af_i, dmdt, dmdf ) ! Capping for both  post-healing ("post-advection" is done in `icedyn_adv`):
 
 
-      zravrg = 1._wp/REAL(nn_nbbm) ! going to average (set to 0 before accumulating during the `nn_nbbm` sub time steps)
+      zravrg = 1._wp/REAL(nbbm) ! going to average (set to 0 before accumulating during the `nbbm` sub time steps)
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -295,7 +295,7 @@ CONTAINS
             uVice(ji,jj) = 0._wp
             vUice(ji,jj) = 0._wp
             !
-            ! We do not want to do the following stuff `nn_nbbm` times below because they remain unchanged:
+            ! We do not want to do the following stuff `nbbm` times below because they remain unchanged:
             zzt = EXP( rn_C0*(1._wp - at_i(ji,jj)) )
             zzf = EXP( rn_C0*(1._wp - af_i(ji,jj)) )
             zxpCt(ji,jj) = zzt
@@ -306,28 +306,28 @@ CONTAINS
             zPmax_t(ji,jj)  =  -rn_P0 * zzt * zht(ji,jj) ** 2.5_wp ! `2.5` because working with vertically integrated sigmas => `h^3/2 * h`
             zPmax_f(ji,jj)  =  -rn_P0 * zzf * zhf(ji,jj) ** 2.5_wp !   "               "               "             "
             !
-            zSclH_t(ji,jj)  = SQRT( rn_l_ref/res_grd_loc_t(ji,jj) ) * zht(ji,jj)  ! required for Mohr-Coulomn test (! multiply with `h` "  " ")
-            zSclH_f(ji,jj)  = SQRT( rn_l_ref/res_grd_loc_f(ji,jj) ) * zhf(ji,jj)  ! required for Mohr-Coulomn test (! multiply with `h` "  " ")
+            zSclH_t(ji,jj)  = SQRT( rn_l_ref / REAL(res_grd_loc_t(ji,jj),wp) ) * zht(ji,jj)  ! required for Mohr-Coulomn test (! multiply with `h` "  " ")
+            zSclH_f(ji,jj)  = SQRT( rn_l_ref / REAL(res_grd_loc_f(ji,jj),wp) ) * zhf(ji,jj)  ! required for Mohr-Coulomn test (! multiply with `h` "  " ")
          ENDDO
       ENDDO
       !$acc end parallel loop
 
 
       !$acc loop seq                                  ! ==================== !
-      DO jter = 1 , nn_nbbm                           !    loop over jter    !
+      DO jter = 1 , nbbm                           !    loop over jter    !
          !                                            ! ==================== !
 
          ! ---  Updates the components of the vertically-integrated internal stress tensor and the damage in both T- & F-centric worlds ---
          !           => based on previously computed ice velocities...
 
-         CALL update_sigma_d( kt, jter, zdtbbm, V_ts, at_i, af_i, zxpCt, zxpCf, zht, zhf, SIGMAt, SIGMAf, dmdt, dmdf )
+         CALL update_sigma_d( kt, jter, rdtbbm, V_ts, at_i, af_i, zxpCt, zxpCf, zht, zhf, SIGMAt, SIGMAf, dmdt, dmdf )
          !           => `sigmas` & `d` ok on whole `Nis0-1:Nie0+1,Njs0-1:Nje0+1` ! (provided `V_ts` was fully lbclinked!)
 
          ! --- Computation of ice velocity --- ! (`Nis0:Nie0,Njs0:Nje0`)
-         CALL update_uv_euler_si( jter, zdtbbm, au_i, av_i, zmU_dt, zmV_dt, SIGMAt, SIGMAf, zgrdSH, V_oce, utau_ice, vtau_ice, &
+         CALL update_uv_euler_si( jter, rdtbbm, au_i, av_i, zmU_dt, zmV_dt, SIGMAt, SIGMAf, zgrdSH, V_oce, utau_ice, vtau_ice, &
             &                     kmsk01x, kmsk01y, kmsk00x, kmsk00y,  V_ts )
 
-         !CALL update_uv_rk3( jter, zdtbbm, au_i, av_i, zmU_dt, zmV_dt, SIGMAt, SIGMAf, zgrdSH, V_oce, Tau_ai, kmsk01x, kmsk01y, kmsk00x, kmsk00y,  V_ts )
+         !CALL update_uv_rk3( jter, rdtbbm, au_i, av_i, zmU_dt, zmV_dt, SIGMAt, SIGMAf, zgrdSH, V_oce, Tau_ai, kmsk01x, kmsk01y, kmsk00x, kmsk00y,  V_ts )
          !
 #if defined _OPENACC
          IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', V_ts )
@@ -356,9 +356,9 @@ CONTAINS
          ENDDO
          !$acc end parallel loop
          !
-         !                                                ! ==================== !
-      END DO !DO jter = 1 , nn_nbbm                       !  end loop over jter  !
-      !                                                   ! ==================== !
+         !                                             ! ==================== !
+      END DO !DO jter = 1 , nbbm                       !  end loop over jter  !
+      !                                                ! ==================== !
 
 
       !------------------------------------------------------------------------------!
@@ -391,20 +391,16 @@ CONTAINS
       !!-------------------------------------------------------------------
       !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
       !!-------------------------------------------------------------------
-      INTEGER  :: ierr
-      REAL(wp) :: zdx_m, zce, zdts
-      REAL(wp), DIMENSION(:,:), ALLOCATABLE :: zt1, zt2
+      INTEGER  ::   ierr
+      INTEGER  ::   icycle
+      REAL(wp) ::   ztmp, zdx_m, zce, zdts
+      REAL(wp), DIMENSION(jpi,jpj) :: zt1, zt2
       !!-------------------------------------------------------------------
       IF( lwp ) THEN
          WRITE(numout,*) ''
          WRITE(numout,*) '**********************************************************************'
          WRITE(numout,*) '    *** Initialization of BBM rheology (ice_dyn_rhg_bbm_init) ***'
       ENDIF
-
-      CALL cross_nudging_init()
-
-      zdtbbm   = rdt_ice / REAL( nn_nbbm, wp )
-      z1_dtbbm = 1._wp / zdtbbm
 
       !! Stiffness matrix
       !! ****************
@@ -419,29 +415,39 @@ CONTAINS
 
       rsqrt_E0      = SQRT( rn_E0 )
 
-      ALLOCATE( zt1(jpi,jpj), zt2(jpi,jpj) ,  STAT=ierr )
-      IF( ierr /= 0 )  CALL ctl_stop( 'STOP', 'ice_dyn_rhg_bbm_init: failed to allocate `zt1,zt2`' )
+      ! Find the smallest `dx` of the whole WET domain:
+      zt1(:,:) = REAL( res_grd_loc_t(:,:) , 4 ) ! SQRT(dx*dy)
+      zt1(:,:) = MERGE( zt1(:,:) , 1.E12_wp , (xmskt(:,:) > 0.9_wp) )  ! => stupidly big value over continents...
+      zdx_m = MINVAL( zt1 )                        ! min of dx local
+      CALL mpp_min( 'ice_dyn_rhg_bbm_init', zdx_m) ! min of dx over the whole domain
 
-      !! A typical `dx` for the Arctic:
-      zt1(:,:) = 0._wp
-      WHERE(gphit(:,:) > 55._wp) zt1(:,:) = 1._wp
-      zt1(:,:) = zt1(:,:)*xmskt(:,:)
-      zt2(:,:) = res_grd_loc_t(:,:)  ! Local `dx` of grid cell [m]
-      zdx_m = SUM(zt2(:,:)*zt1(:,:)) / MAX( SUM(zt1(:,:)) , epsi06 ) ; ! => mean `dx` on this proc domain!
-      CALL mpp_sum( 'ice_dyn_rhg_bbm_init', zdx_m)
-      zdx_m = zdx_m / REAL(jpnij)  ; ! => mean `dx` of full computational domain
-
+      ! time step adjusted automatically
+      ! ********************************
+      ! we look at 2) propagation speed of elastic waves (zce), 2) the time step to solve them (zdts)
+      !            3) the number of iterations needed (icycle) to go from t to t+dt
+      !            4) the number of iterations over which u_ice is averaged (nflt)
+      !       then 5) the number of total iterations of the rheology
       zce = rsqrt_E0 / rsqrt_nu_rhoi ! propagation speed of shearing elastic waves based on the mean `dx`
-      zdts = 0.5_wp*(zdx_m/zce)        ! largest possible small time-step to consider...
+      zdts = 0.5_wp*(zdx_m/zce)      ! largest possible small time-step to consider... #LOLO: Clem uses `0.9` rather than `0.5`
+      icycle = CEILING( rDt_ice / zdts )        ! number of iterations (local to init, cf below for nbbm)
+      icycle = icycle + MOD(icycle, 2)          ! + make it an odd number
+      rdtbbm   = rDt_ice / REAL( icycle, wp )   ! small time step used here
+      r1_dtbbm = 1._wp / rdtbbm
+      !
+      nflt = FLOOR( rn_bbm_flt * icycle ) ! number of iterations over which u_ice is averaged
+      nflt = nflt + MOD( nflt, 2)         ! + make it an odd number
+      nbbm = icycle + nflt/2              ! total number of iterations
+
+      CALL cross_nudging_init()
 
       IF( lwp ) THEN
          WRITE(numout,*) '  * Big time step (advection & thermo)  => rdt_ice  =', rdt_ice, ' [s]'
-         WRITE(numout,*) '  * Average `dx` of computational domain north of 55N => ', REAL(zdx_m/1000._wp,4), ' [km]'
+         WRITE(numout,*) '  * Min `dx` of wet computational domain = ', REAL(zdx_m/1000._wp,4), ' [km]'
          WRITE(numout,*) '     ==> propagation speed of shearing elastic waves =>',  zce, '[m/s]'
-         WRITE(numout,*) '     ==> the small time-step should therefore be about or below:', zdts, ' [s]'
-         WRITE(numout,*) '     ==> that would the case with a `nbbm` >',INT(rdt_ice/zdts,2)
-         WRITE(numout,*) '     ==> you have chosen `nbbm` =', nn_nbbm
-         WRITE(numout,*) '  * Small time step (rheology) => zdtbbm =', zdtbbm,  ' [s]'
+         WRITE(numout,*) '     ==> time-step requirement to resolve these waves: dt = 0.5*(dx/c_e) =', zdts, ' [s]'
+         WRITE(numout,*) '     ==> implies a `nbbm` =', INT(nbbm,2)
+         WRITE(numout,*) '     ==> implies a `nflt` =', INT(nflt,2)
+         WRITE(numout,*) '     ==> implies a small time step (rheology) => rdtbbm =', rdtbbm,  ' [s]'
          IF(ln_x_MC_test) WRITE(numout,*) '  * Will perform only 1 Mohr-Coulomb test, at mid-point between T & F points!'
          IF(l_CN) THEN
             WRITE(numout,*) '  * About cross-nudging:'
@@ -451,24 +457,23 @@ CONTAINS
          WRITE(numout,*) ''
       ENDIF
 
-      IF(zdtbbm>zdts) CALL ctl_warn( 'ice_dyn_rhg_bbm_init: `nn_nbbm` is probably to small' )
+      IF(rdtbbm>zdts) CALL ctl_warn( 'ice_dyn_rhg_bbm_init: `nbbm` is probably to small' )
 
       IF( lwp ) THEN
          WRITE(numout,*) '**********************************************************************'
          WRITE(numout,*) ''
       ENDIF
 
-      DEALLOCATE( zt1, zt2 )
-
-      ALLOCATE( kmsk01x(jpi,jpj), kmsk01y(jpi,jpj), kmsk00x(jpi,jpj), kmsk00y(jpi,jpj), zmU_dt(jpi,jpj), zmV_dt(jpi,jpj), &
-         &         ztmp1(jpi,jpj), ztmp2(jpi,jpj), ztmp3(jpi,jpj), ztmp4(jpi,jpj), zht(jpi,jpj), zhf(jpi,jpj),            &
-         &         zxpCt(jpi,jpj), zxpCf(jpi,jpj), zgrdSH(jpi,jpj,4), zPmax_t(jpi,jpj), zPmax_f(jpi,jpj),                 &
-         &         zxpCtbet(jpi,jpj), zxpCfbet(jpi,jpj), zSclH_t(jpi,jpj), zSclH_f(jpi,jpj),      STAT = ierr )
+      ALLOCATE( kmsk01x(jpi,jpj), kmsk01y(jpi,jpj),  kmsk00x(jpi,jpj), kmsk00y(jpi,jpj), zmU_dt(jpi,jpj), zmV_dt(jpi,jpj), &
+         &        ztmp1(jpi,jpj), ztmp2(jpi,jpj),      ztmp3(jpi,jpj), ztmp4(jpi,jpj), zht(jpi,jpj), zhf(jpi,jpj),         &
+         &        zxpCt(jpi,jpj), zxpCf(jpi,jpj),   zgrdSH(jpi,jpj,4), zPmax_t(jpi,jpj), zPmax_f(jpi,jpj),                 &
+         &     zxpCtbet(jpi,jpj), zxpCfbet(jpi,jpj), zSclH_t(jpi,jpj), zSclH_f(jpi,jpj),      STAT = ierr )
 
       CALL mpp_sum( 'ice_dyn_rhg_bbm_init', ierr )
       IF( ierr /= 0 )   CALL ctl_stop('STOP', 'ice_dyn_rhg_bbm_init : unable to allocate work arrays')
 
 # if defined _OPENACC
+      !$acc update device ( nbbm, nflt, rk0, rk11, rk22, rk12, rk33, rlambda0, rsqrt_E0, rdtbbm, r1_dtbbm )
       PRINT *, ' * info GPU: ice_dyn_rhg_bbm_init() => adding work arrays to memory!'
       !$acc enter data copyin( kmsk01x, kmsk01y, kmsk00x, kmsk00y, zmU_dt, zmV_dt, ztmp1, ztmp2, ztmp3, ztmp4, zht, zhf )
       PRINT *, '    ==> kmsk01x, kmsk01y, kmsk00x, kmsk00y, zmU_dt, zmV_dt, ztmp1, ztmp2, ztmp3, ztmp4, zht, zhf'
@@ -742,7 +747,7 @@ CONTAINS
          !
          ! Update onto the GPU:
          !$acc update device( dmdt, dmdf, u_ice, v_ice, uVice, vUice, V_ts, SIGMAt, SIGMAf )
-         
+
          !
          !
          !

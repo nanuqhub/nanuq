@@ -97,9 +97,9 @@ CONTAINS
 
       !! First guess of temperature and humidity at height zu:
       t_zu = MAX( t_zt ,  180._wp )   ! who knows what's given on masked-continental regions...
-      q_zu = MAX( q_zt , 1.e-6_wp )   !               "
+      q_zu = MAX( q_zt ,    0._wp )   !               "
 
-      zz0 = 0.0001 ! "rough" first guess of roughness length of sea surface...
+      zz0 = 0.0001_wp ! "rough" first guess of roughness length of sea surface...
 
       !! Constants:
       zlog_10 = LOG(10._wp)
@@ -110,8 +110,8 @@ CONTAINS
       zc_b = 0.004_wp*zzi0*zBeta0*zBeta0*zBeta0
 
       !! Air-sea differences (and we don't want them to be 0...)
-      zdt = t_zu - psst ;   zdt = SIGN( MAX(ABS(zdt),1.E-6_wp), zdt )
-      zdq = q_zu - pssq ;   zdq = SIGN( MAX(ABS(zdq),1.E-9_wp), zdq )
+      zdt = t_zu - psst ;   zdt = SIGN( MAX(ABS(zdt),1.E-09_wp), zdt )
+      zdq = q_zu - pssq ;   zdq = SIGN( MAX(ABS(zdq),1.E-12_wp), zdq )
 
       zNu_a = visc_air(t_zu) ! Air viscosity (m^2/s) at zt given from temperature in (K)
 
@@ -155,13 +155,12 @@ CONTAINS
       IF( .NOT. l_zt_equal_zu ) THEN
          zzeta_t = zt*zzeta_u/zu
          zprf = LOG(zt/zu) + psi_h_coare(zzeta_u) - psi_h_coare(zzeta_t)
-         t_zu = t_zt - zts/vkarmn*zprf
-         q_zu = q_zt - zqs/vkarmn*zprf
-         q_zu = (0.5_wp + SIGN(0.5_wp,q_zu))*q_zu ! prevents negative humidity...
+         t_zu =      t_zt - zts/vkarmn*zprf
+         q_zu = MAX( q_zt - zqs/vkarmn*zprf , 0._wp )
          !!
          !! Update of theta and q air-sea differences and theta*, q* :
-         zdt = t_zu - psst  ; zdt = SIGN( MAX(ABS(zdt),1.E-6_wp), zdt )
-         zdq = q_zu - pssq  ; zdq = SIGN( MAX(ABS(zdq),1.E-9_wp), zdq )
+         zdt = t_zu - psst  ; zdt = SIGN( MAX(ABS(zdt),1.E-09_wp), zdt )
+         zdq = q_zu - pssq  ; zdq = SIGN( MAX(ABS(zdq),1.E-12_wp), zdq )
          zts = zdt*ztmp
          zqs = zdq*ztmp
       ENDIF

@@ -29,8 +29,7 @@
    ln_icethd        = .false.            !lolo!  ice thermo   (T) or not (F)
    rn_amax          =   0.999999         !  maximum tolerated ice concentration
    !
-   ! E-grid stuff (relevant when `ln_damage=T`):
-   ln_damage        = .true.  ! Yes!  !  existance of the "ice damage" tracer in the code?
+   ln_damage        = .true.          !  existance of the "ice damage" tracer in the code?
    !                                  !   must be used with brittle rheologies
    !                                  !   => set to .true. if `ln_rhg_BBM==.true.` !!!
 /
@@ -64,6 +63,9 @@
 !------------------------------------------------------------------------------
 &namdyn_rdgrft  !   Ice ridging/rafting
 !------------------------------------------------------------------------------
+   rn_delta_ecc     =   2.0           !  eccentricity of the elliptical yield curve to use when computing `delta`
+   !                                  !  => overwritten with `rn_ecc` (&namdyn_rhg) when VP rheologies are used
+   !                                  !  `rn_delta_ecc = 1` implies that `delta` = `total deformation`
 /
 !------------------------------------------------------------------------------
 &namdyn_rhg     !   Ice rheology
@@ -90,7 +92,6 @@
 !------------------------------------------------------------------------------
 &namthd         !   Ice thermodynamics
 !------------------------------------------------------------------------------
-ln_icedA = .false.
 /
 !------------------------------------------------------------------------------
 &namthd_zdf     !   Ice heat diffusion
@@ -111,7 +112,6 @@ ln_icedA = .false.
 !------------------------------------------------------------------------------
 &namthd_pnd     !   Melt ponds
 !------------------------------------------------------------------------------
-ln_pnd = .false.
 /
 !------------------------------------------------------------------------------
 &namini         !   Ice initialization

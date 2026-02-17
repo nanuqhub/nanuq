@@ -43,6 +43,7 @@ MODULE osscpl
    !USE dom_oce, ONLY: rn_Dt, narea, idbg, jdbg !LOLOdbg
    USE dom_oce, ONLY: rn_Dt
    USE sbc_oce        ! Surface boundary condition: ocean fields
+   USE ice    , ONLY: at_i ! sea-ice fraction
    USE oss_nnq        ! Surface boundary condition: ocean fields
    USE cpl_oasis3     ! OASIS3 coupling
    !USE eosbn2
@@ -502,8 +503,8 @@ CONTAINS
 
       ! Sea-ice concentration:
       IF( ssnd(jps_fice2 )%laction ) THEN
-         !$acc update self (fr_i)
-         CALL cpl_snd( jps_fice2,  isec, RESHAPE ( fr_i, (/jpi,jpj,1/) ), info ) ! 8
+         !$acc update self (at_i)
+         CALL cpl_snd( jps_fice2,  isec, RESHAPE ( at_i, (/jpi,jpj,1/) ), info ) ! 8
       ENDIF
 
 
@@ -548,8 +549,8 @@ CONTAINS
       ENDIF
 
       IF( iom_use('fr_i_oa3' ) ) THEN
-         !$acc update self( fr_i )
-         CALL iom_put( "fr_i_oa3", fr_i )
+         !$acc update self( at_i )
+         CALL iom_put( "fr_i_oa3", at_i )
       ENDIF
 
 

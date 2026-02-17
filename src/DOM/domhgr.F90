@@ -125,8 +125,8 @@ CONTAINS
       e1f2(:,:) = e1f(:,:) * e1f(:,:)
       e2f2(:,:) = e2f(:,:) * e2f(:,:)
 
-      res_grd_loc_t(:,:) = SQRT( e1e2t(:,:) )  ! Local mean grid resolution (m) => used by BBM rheology in Mohr-Coulomb test
-      res_grd_loc_f(:,:) = SQRT( e1e2f(:,:) )  ! Local mean grid resolution (m) => used by BBM rheology in Mohr-Coulomb test
+      res_grd_loc_t(:,:) = REAL( SQRT( e1e2t(:,:) ) , 4 )  ! Local mean grid resolution (m) => used by BBM rheology in Mohr-Coulomb test
+      res_grd_loc_f(:,:) = REAL( SQRT( e1e2f(:,:) ) , 4 )  ! Local mean grid resolution (m) => used by BBM rheology in Mohr-Coulomb test
 
       IF( ln_timing )   CALL timing_stop('dom_hgr')
       !

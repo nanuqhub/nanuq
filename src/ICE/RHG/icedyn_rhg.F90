@@ -115,9 +115,9 @@ CONTAINS
       !!  ln_x_MC_test  = .true.          ! Perform only 1 Mohr-Coulomb test, at mid-point between T & F points (implicit smoothing)
       NAMELIST/namdyn_rhg/  ln_idealized, &
          &                  ln_rhg_EVP, rn_creepl, rn_ecc, nn_nevp, rn_relast, nn_rhg_chkcvg,  &  !-- evp
-         &                  ln_rhg_BBM, rn_Nref, rn_E0, rn_eta0, rn_P0, rn_kth, nn_nbbm,                 &
-         &                  nn_d_adv, ln_adv_d_pra, ln_adv_d_wnx, ln_x_MC_test, rn_crndg,  &  !-- bbm
-         &                  rn_dmg_max, rn_C0, nn_alrlx, nn_btrlx, rn_c_ref, rn_l_ref                       !-- bbm
+         &                  ln_rhg_BBM, rn_Nref, rn_E0, rn_eta0, rn_P0, rn_kth, rn_bbm_flt,    &  !-- bbm
+         &                  nn_d_adv, ln_adv_d_pra, ln_adv_d_wnx, ln_x_MC_test, rn_crndg,      &  !-- bbm
+         &                  rn_dmg_max, rn_C0, nn_alrlx, nn_btrlx, rn_c_ref, rn_l_ref             !-- bbm
       !!-------------------------------------------------------------------
       !
       READ_NML_REF(numnam_ice,namdyn_rhg)
@@ -150,7 +150,7 @@ CONTAINS
             WRITE(numout,*) '         viscosity of undamaged ice  [Pa.s]                rn_eta0       = ', rn_eta0  !#bbm
             WRITE(numout,*) '         compression factor "P" at play in "P_max"         rn_P0         = ', rn_P0  !#bbm
             WRITE(numout,*) '         healing constant for damage                       rn_kth        = ', rn_kth  !#bbm
-            WRITE(numout,*) '         number of iterations for subcycling               nn_nbbm       = ', nn_nbbm !#bbm
+            WRITE(numout,*) '         filtering window (multiple of rDt_ice)            rn_bbm_flt    = ', rn_bbm_flt 
             WRITE(numout,*) '         advection of damage and stresses @T & @F          nn_d_adv  = ', nn_d_adv !#bbm
             IF( nn_d_adv==0 ) WRITE(numout,*) '           => no advection at all!' !#bbm
             IF( nn_d_adv==1 ) WRITE(numout,*) '           => advection of damage only' !#bbm
@@ -223,7 +223,7 @@ CONTAINS
       IF( ln_rhg_BBM  ) THEN
          CALL ice_dyn_rhg_bbm_init() !* allocation of BBM-specific arrays (LB: needs to be done before reading restarts...)
          CALL rhg_bbm_rst( 'READ' )  !* read or initialize all required files
-         !$acc update device( ln_rhg_BBM, nn_nbbm, rn_Nref, rn_P0, rn_E0, rn_eta0, rn_kth, nn_d_adv, rn_crndg )
+         !$acc update device( ln_rhg_BBM, rn_Nref, rn_P0, rn_E0, rn_eta0, rn_kth, rn_bbm_flt, nn_d_adv, rn_crndg )
       END IF
 
    END SUBROUTINE ice_dyn_rhg_init

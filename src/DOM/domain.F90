@@ -454,10 +454,10 @@ CONTAINS
       ENDIF
       ! ------- keep compatibility with OLD VERSION... end -------
       !
-      idvar = iom_varid( inum, 'e3t_0', kdimsz = idimsz )   ! use e3t_0, that must exist, to get jp(ijk)glo
+      idvar = iom_varid( inum, 'bathy_metry', kdimsz = idimsz )   ! use `bathy_metry`, that must exist, to get jp(ij)glo
       kpi = idimsz(1)
       kpj = idimsz(2)
-      kpk = idimsz(3)
+      kpk = 1
       !
       CALL iom_getatt( inum, 'Iperio', iatt )   ;   ldIperio = iatt == 1   ! returns      -999 if not found -> default = .false.
       CALL iom_getatt( inum, 'Jperio', iatt )   ;   ldJperio = iatt == 1   ! returns      -999 if not found -> default = .false.

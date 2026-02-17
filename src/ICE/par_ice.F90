@@ -97,18 +97,19 @@ MODULE par_ice
    !
    ! -- bbm
    LOGICAL , PUBLIC ::   ln_rhg_BBM       ! BBM rheology #bbm   
-   INTEGER , PUBLIC ::   nn_nbbm          !: number of iterations for subcycling !#bbm
+   INTEGER , PUBLIC ::   nbbm, nflt       !: number of iterations for subcycling !#bbm
    REAL(wp), PUBLIC ::   rn_Nref          !: Maximum compressive stress at the reference scale [Pa] / neXtSIM => `compr_strength`
    REAL(wp), PUBLIC ::   rn_P0            !: Compression factor "P" at play in P_max, in Eq.8 of [Olason al.2022]
    REAL(wp), PUBLIC ::   rn_E0            !: Elasticity of undamaged ice [Pa]
    REAL(wp), PUBLIC ::   rn_eta0          !: Viscosity of Undamaged ice [Pa.s]
    REAL(wp), PUBLIC ::   rn_kth           !: healing constant [Eq.30 of Olason et al.,2022]
+   REAL(wp), PUBLIC ::   rn_bbm_flt       !: filtering window for ice velocities 
    INTEGER , PUBLIC ::   nn_d_adv         !: advection of damage and stress tensor @T and @F
    LOGICAL,  PUBLIC ::   ln_adv_d_pra     !: use Prather advection scheme to advect damage (and stress components)
    LOGICAL,  PUBLIC ::   ln_adv_d_wnx     !: use  WENO advection scheme to advect damage (and stress components)
    LOGICAL,  PUBLIC ::   ln_x_MC_test     !: Perform only 1 Mohr-Coulomb test, at mid-point between T & F points (implicit smoothing)
    REAL(wp), PUBLIC ::   rn_crndg         !: cross-nudging coefficient ... #bbm
-   !$acc declare create( ln_rhg_BBM, nn_nbbm, rn_Nref, rn_P0, rn_E0, rn_eta0, rn_kth, nn_d_adv, rn_crndg )
+   !$acc declare create( ln_rhg_BBM, nbbm, nflt, rn_Nref, rn_P0, rn_E0, rn_eta0, rn_kth, rn_bbm_flt, nn_d_adv, rn_crndg )
    !
    REAL(wp), PUBLIC ::   rn_dmg_max, r_dmd_min !: max value possible for capping damage (~1-eps)
    REAL(wp), PUBLIC ::   rn_C0            !: compaction parameter "C" (Hibler's exponential)                                         =  -20.

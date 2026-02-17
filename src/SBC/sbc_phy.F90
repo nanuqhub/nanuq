@@ -148,10 +148,6 @@ MODULE sbc_phy
       MODULE PROCEDURE dq_sat_dt_ice_vctr, dq_sat_dt_ice_sclr
    END INTERFACE dq_sat_dt_ice
 
-   INTERFACE L_vap
-      MODULE PROCEDURE L_vap_vctr, L_vap_sclr
-   END INTERFACE L_vap
-
    INTERFACE rho_air
       MODULE PROCEDURE rho_air_vctr, rho_air_sclr
    END INTERFACE rho_air
@@ -469,38 +465,23 @@ CONTAINS
    END FUNCTION visc_air_vctr
 
 
-   FUNCTION L_vap_vctr( psst )
-      !!---------------------------------------------------------------------------------
-      !!                           ***  FUNCTION L_vap_vctr  ***
-      !!
-      !! ** Purpose : Compute the latent heat of vaporization of water from temperature
-      !!
-      !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
-      !!----------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             ::   L_vap_vctr   ! latent heat of vaporization   [J/kg]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) ::   psst   ! water temperature                [K]
-      !!----------------------------------------------------------------------------------
-      !
-      L_vap_vctr = (  2.501_wp - 0.00237_wp * ( psst(:,:) - rt0)  ) * 1.e6_wp
-      !
-   END FUNCTION L_vap_vctr
-
-   FUNCTION L_vap_sclr( psst )
-      !!---------------------------------------------------------------------------------
-      !!                           ***  FUNCTION L_vap_sclr  ***
-      !!
-      !! ** Purpose : Compute the latent heat of vaporization of water from temperature
-      !!
-      !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
-      !!----------------------------------------------------------------------------------
+   FUNCTION L_vap( ptc )
       !$acc routine
-      REAL(wp)             ::   L_vap_sclr   ! latent heat of vaporization   [J/kg]
-      REAL(wp), INTENT(in) ::   psst         ! water temperature                [K]
+      !!---------------------------------------------------------------------------------
+      !!                           ***  FUNCTION L_vap  ***
+      !!
+      !! ** Purpose : Compute the latent heat of vaporization of water based
+      !!              on its temperature.
+      !!
+      !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
+      !!----------------------------------------------------------------------------------
+      REAL(wp)             ::   L_vap   ! latent heat of vaporization   [J/kg]
+      REAL(wp), INTENT(in) ::   ptc     ! water temperature             [deg.C]
       !!----------------------------------------------------------------------------------
       !
-      L_vap_sclr = (  2.501_wp - 0.00237_wp * ( psst - rt0)  ) * 1.e6_wp
+      L_vap = (  2.501_wp - 0.00237_wp * ptc  ) * 1.e6_wp
       !
-   END FUNCTION L_vap_sclr
+   END FUNCTION L_vap
 
 
    FUNCTION cp_air_vctr( pqa )
@@ -556,7 +537,7 @@ CONTAINS
       !!
       zwa = zqa / (1._wp - zqa)   ! w is mixing ratio w = q/(1-q) | q = w/(1+w)
       ziRT = 1._wp / (R_dry*zta)    ! 1/RT
-      zLvap = L_vap_sclr( ptak )
+      zLvap = L_vap( ptak - rt0 )  ! `ptak` is in Kelvin !!!
       !!
       gamma_moist_sclr = grav * ( 1._wp + zLvap*zwa*ziRT ) / ( rCp_dry + zLvap*zLvap*zwa*reps0*ziRT/zta )
       !!
@@ -940,7 +921,7 @@ CONTAINS
       !!----------------------------------------------------------------------------------
       !$acc routine
       REAL(wp), INTENT(in)  :: pzu  ! height above the sea-level where all this takes place (normally 10m)
-      REAL(wp), INTENT(in)  :: pts  ! water temperature at the air-sea interface [K]
+      REAL(wp), INTENT(in)  :: pts  ! water temperature at the air-sea interface [deg.C]
       REAL(wp), INTENT(in)  :: pqs  ! satur. spec. hum. at T=pts   [kg/kg]
       REAL(wp), INTENT(in)  :: pThta ! potential air temperature at z=pzu [K]
       REAL(wp), INTENT(in)  :: pqa  ! specific humidity at z=pzu [kg/kg]
@@ -957,10 +938,11 @@ CONTAINS
       !
       REAL(wp), OPTIONAL, INTENT(out) :: Qlat
       !
-      REAL(wp) :: zdt, zdq, zCd, zCh, zCe, zz0, zQlat, zQsen, zQlw
+      REAL(wp) :: zts, zdt, zdq, zCd, zCh, zCe, zz0, zQlat, zQsen, zQlw
       !!----------------------------------------------------------------------------------
-      zdt = pThta - pts ;  zdt = SIGN( MAX(ABS(zdt),1.E-6_wp), zdt )
-      zdq = pqa - pqs ;  zdq = SIGN( MAX(ABS(zdq),1.E-9_wp), zdq )
+      zts = pts + rt0 ! to Kelvin !
+      zdt = pThta - zts ;  zdt = SIGN( MAX(ABS(zdt),1.E-09_wp), zdt )
+      zdq = pqa   - pqs ;  zdq = SIGN( MAX(ABS(zdq),1.E-12_wp), zdq )
       zz0 = pust/pUb
       zCd = zz0*zz0
       zCh = zz0*ptst/zdt
@@ -970,7 +952,7 @@ CONTAINS
          &                    pwnd, pUb, pslp,                         &
          &                    pTau, zQsen, zQlat )
 
-      zQlw = qlw_net_sclr( prlw, pts ) ! Net longwave flux
+      zQlw = qlw_net_sclr( prlw, zts ) ! Net longwave flux
 
       pQns = zQlat + zQsen + zQlw
 
@@ -986,7 +968,7 @@ CONTAINS
       !! ** Author: L. Brodeau, Sept. 2019 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
       REAL(wp),                     INTENT(in)  :: pzu  ! height above the sea-level where all this takes place (normally 10m)
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pts  ! water temperature at the air-sea interface [K]
+      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pts  ! water temperature at the air-sea interface [deg.C]
       REAL(wp), DIMENSION(:,:), INTENT(in)  :: pqs  ! satur. spec. hum. at T=pts   [kg/kg]
       REAL(wp), DIMENSION(:,:), INTENT(in)  :: pThta  ! potential air temperature at z=pzu [K]
       REAL(wp), DIMENSION(:,:), INTENT(in)  :: pqa  ! specific humidity at z=pzu [kg/kg]
@@ -1030,7 +1012,7 @@ CONTAINS
       !!----------------------------------------------------------------------------------
       !$acc routine
       REAL(wp),                     INTENT(in)  :: pzu  ! height above the sea-level where all this takes place (normally 10m)
-      REAL(wp), INTENT(in)  :: pts  ! water temperature at the air-sea interface [K]
+      REAL(wp), INTENT(in)  :: pts  ! water temperature at the air-sea interface [deg.C]
       REAL(wp), INTENT(in)  :: pqs  ! satur. spec. hum. at T=pts   [kg/kg]
       REAL(wp), INTENT(in)  :: pThta  ! potential air temperature at z=pzu [K]
       REAL(wp), INTENT(in)  :: pqa  ! specific humidity at z=pzu [kg/kg]
@@ -1049,12 +1031,14 @@ CONTAINS
       REAL(wp), INTENT(out), OPTIONAL :: prhoa ! Air density at z=pzu [kg/m^3]
       LOGICAL,  INTENT(in),  OPTIONAL :: l_ice  !: we are above ice
       !!
-      REAL(wp) :: zta, zrho, zUrho, zevap
+      REAL(wp) :: zts, zta, zrho, zUrho, zevap
       LOGICAL  :: lice
       !!----------------------------------------------------------------------------------
       lice = .FALSE.
       IF( PRESENT(l_ice) ) lice = l_ice
 
+      zts = pts + rt0   ! to Kelvin !
+   
       !! Need zta, absolute temperature at pzu (formula to estimate rho_air needs absolute temperature, not the potential temperature "pThta")
       zta  = pThta - rgamma_dry*pzu   ! Absolute temp. is slightly colder...
       zrho = rho_air(zta, pqa, pslp)
@@ -1064,19 +1048,19 @@ CONTAINS
 
       pTau = zUrho * pCd * pwnd ! Wind stress module ( `pwnd` here because `pUb` already in `zUrho`
 
-      zevap = zUrho * pCe * (pqa - pqs)
+      zevap = zUrho * pCe * (  pqa - pqs)
       
-      pQsen = zUrho * pCh * (pThta - pts) * cp_air(pqa)
+      pQsen = zUrho * pCh * (pThta - zts) * cp_air(pqa)
 
       !IF(ABS(pQsen)>1000._wp) THEN
-      !   PRINT *, 'LOLO BULK_FORMULA_SCLR: zUrho, pCh, pThta, pts, cp_air(pqa) =', REAL(zUrho,4), REAL(pCh,4), REAL(pThta,4), REAL(pts,4), REAL(cp_air(pqa),4)
+      !   PRINT *, 'LOLO BULK_FORMULA_SCLR: zUrho, pCh, pThta, zts, cp_air(pqa) =', REAL(zUrho,4), REAL(pCh,4), REAL(pThta,4), REAL(zts,4), REAL(cp_air(pqa),4)
       !   PRINT *, '  ==> pQsen =', pQsen ; PRINT *, ''
       !ENDIF         
-      IF( lice) THEN
+      IF( lice ) THEN
          pQlat =      rLsub * zevap
          IF( PRESENT(pEvap) ) pEvap = MIN( zevap , 0._wp )
       ELSE
-         pQlat = L_vap(pts) * zevap
+         pQlat = L_vap(pts) * zevap   ! `pts` is in Celsius!
          IF( PRESENT(pEvap) ) pEvap = zevap
       END IF
 
@@ -1091,7 +1075,7 @@ CONTAINS
       &                          pEvap, prhoa, l_ice )
       !!----------------------------------------------------------------------------------
       REAL(wp),                     INTENT(in)  :: pzu  ! height above the sea-level where all this takes place (normally 10m)
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pts  ! water temperature at the air-sea interface [K]
+      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pts  ! water temperature at the air-sea interface [deg.C]
       REAL(wp), DIMENSION(:,:), INTENT(in)  :: pqs  ! satur. spec. hum. at T=pts   [kg/kg]
       REAL(wp), DIMENSION(:,:), INTENT(in)  :: pThta  ! potential air temperature at z=pzu [K]
       REAL(wp), DIMENSION(:,:), INTENT(in)  :: pqa  ! specific humidity at z=pzu [kg/kg]
@@ -1193,14 +1177,10 @@ CONTAINS
       !!----------------------------------------------------------------------------------
       lice = .FALSE.
       IF( PRESENT(l_ice) ) lice = l_ice
-      IF( lice ) THEN
-         zemiss = emiss_i
-      ELSE
-         zemiss = emiss_w
-      END IF
+      zemiss = MERGE( emiss_i , emiss_w ,  lice )
       zt2 = pts*pts
       qlw_net_sclr = zemiss*( pdwlw - stefan*zt2*zt2)  ! zemiss used both as the IR albedo and IR emissivity...
-
+      !
    END FUNCTION qlw_net_sclr
 
    FUNCTION qlw_net_vctr( pdwlw, pts,  l_ice )
@@ -1225,6 +1205,7 @@ CONTAINS
 
    !===============================================================================================
    FUNCTION z0_from_Cd_sclr( pzu, pCd,  ppsi )
+      !$acc routine
       REAL(wp)                       :: z0_from_Cd_sclr        !: roughness length [m]
       REAL(wp), INTENT(in)           :: pzu   !: reference height zu [m]
       REAL(wp), INTENT(in)           :: pCd   !: (neutral or non-neutral) drag coefficient []
@@ -1379,6 +1360,7 @@ CONTAINS
 
    !===============================================================================================
    FUNCTION UN10_from_CD( pzu, pUb, pCd, ppsi )
+      !$acc routine
       !!----------------------------------------------------------------------------------
       !!  Provides the neutral-stability wind speed at 10 m
       !!----------------------------------------------------------------------------------

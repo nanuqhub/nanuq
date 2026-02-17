@@ -27,7 +27,7 @@ MODULE ossprs
    IMPLICIT NONE
    PRIVATE
 
-   PUBLIC   oss_prs_init   ! called by sbc_init
+   PUBLIC   oss_prs_init   ! called by `oss_init`
    PUBLIC   oss_prs_rcv    ! called by sbc
    PUBLIC   oss_prs_slab   ! called by ice_stp
 
@@ -175,7 +175,7 @@ CONTAINS
 
 
 
-   SUBROUTINE oss_prs_slab( kt, pdt, pA, psst_m, psss_m, pmld_m, pqsr, pqns, pemp, psst_s, psss_s, pt_bo )
+   SUBROUTINE oss_prs_slab( kt, pdt, psst_m, psss_m, pmld_m, pqsr, pqns, pemp, psst_s, psss_s, pt_bo )
       !!----------------------------------------------------------------------
       !!                  ***  ROUTINE oss_prs_slab  ***
       !!
@@ -191,7 +191,6 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER,                      INTENT(in)    ::   kt   ! ocean time-step
       REAL(wp),                     INTENT(in)    :: pdt  ! time step
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pA   ! sea-ice concentration
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: psst_m, psss_m, pmld_m
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pqsr   ! solar heat flux to (with liquid ocean albedo decrease considered)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pqns, pemp
@@ -233,6 +232,7 @@ CONTAINS
             !   !PRINT *, '  * qns   = ', REAL(qns(ji,jj),4)
             !   PRINT *, ' *-emp_b        = ', REAL(-pemp(ji,jj),4)
             !   PRINT *, ' * qns_b        = ', REAL(pqns(ji,jj),4)
+            !   PRINT *, ' * qsr_b        = ', REAL(pqsr(ji,jj),4)            
             !   PRINT *, ' * mld_m        = ', REAL(pmld_m(ji,jj),4)
             !   PRINT *, ' * sss_m        = ', REAL(psss_m(ji,jj),4)
             !   PRINT *, ' * FPT ==> t_bo = ', REAL( pt_bo(ji,jj),4)
@@ -255,15 +255,8 @@ CONTAINS
             !   PRINT *, '  * zsss_n = ', REAL(zsss_n,4)
             !ENDIF
 
-            !IF((ji==40).AND.(jj==40)) THEN
-            !   PRINT *, ''
-            !   PRINT *, 'LOLO: solar heat flux available and actually counted for SLAB warming with A=',REAL(pA(ji,jj),4)
-            !   PRINT *, 'LOLO: qsr, qsr_counted:', REAL(pqsr(ji,jj),4), REAL((1._wp -pA(ji,jj))*pqsr(ji,jj),4)
-            !   PRINT *, ''
-            !ENDIF
-
-
-            zQjoules = ( pqns(ji,jj) +  (1._wp -pA(ji,jj))*pqsr(ji,jj) ) * pdt   ! Energy received/lost per surface area during `pdt` (J/m2) !#LOLOfixme: consider solar penetration for qsr !?
+            
+            zQjoules = ( pqns(ji,jj) + pqsr(ji,jj) ) * pdt   ! Energy received/lost per surface area during `pdt` (J/m2) !#LOLOfixme: consider solar penetration for qsr !?
             zinc =  zQjoules * r1_rho0_rcp * z1_mld   !  rho0_rcp ~ J/K/m3 => rho0_rcp*mld ~ J/K/m2 => zinc = (J/m2) / (J/K/m2) ==> K !
             zsst_n  = psst_s(ji,jj) + zinc                    !  expected new temperature in the MLD...
             !CALL eos_fzp_0d( zsss_n, zdum )

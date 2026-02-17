@@ -21,7 +21,7 @@
 !------------------------------------------------------------------------------
 &nampar         !   Generic parameters
 !------------------------------------------------------------------------------
-   jpl              =   5                ! 5 ice category!
+   jpl              =   1                ! 1 ice category!
    ln_virtual_itd   =   .false.          !  virtual ITD mono-category parameterization (jpl=1 only)
    !                                     !     i.e. enhanced thermal conductivity & virtual thin ice melting
    ln_icethd        = .false.            !lolo!  ice thermo   (T) or not (F)
@@ -63,7 +63,7 @@
 !------------------------------------------------------------------------------
 &namdyn_rhg     !   Ice rheology
 !------------------------------------------------------------------------------
-   ln_idealized     = .true.          ! if set to true: Coriolis and SSH tilt terms will be disregarded in the momentum eq.
+   ln_idealized     = .true.  ! Yes!  ! if set to true: Coriolis and SSH tilt terms will be disregarded in the momentum eq.
    !
    ln_rhg_EVP       = .false.         !  EVP rheology
    !                                  !
@@ -76,8 +76,6 @@
       !
       rn_kth        = 25.92E6         !     constant for healing of damage [K.s] (Olason et al.,2022 => 15 days for 20 K)
       !                               !     => 15 * 3600s * 24 * 20K
-      nn_nbbm       = 100             !     number of BBM subcycles
-      !
       nn_d_adv      = 1               !     advection of damage @T & @F at big time step
       !                               !        = 0 no advection at all!
       !                               !        = 1 advection of damage only at big time step
@@ -87,14 +85,10 @@
       rn_crndg      = 1.0             ! Cross-Nudging coefficient [-]
       !                               !
       rn_dmg_max     = 0.999999       !     upper-bound value to cap the damage to ! (~ 1 - eps )
-      rn_C0          = -20.           ! compaction parameter "C" (Hibler's exponential)                              =  -20.
-      nn_alrlx       =   5            ! `alpha` inherent to viscosity, Eq.10 of [Olason al.2022], used by Dansereau  =   5.
-      nn_btrlx       =   5            ! `beta`: sort of an `alpha` to go in the exp[] of `lambda`, used by Olason Boutin =   5.
       !
       ! Ice cohesion:
       rn_c_ref       = 2.E6           ! cohesion value at the reference scale                      = 2.E6
       rn_l_ref       = 0.1            !     scaling parameter for cohesion (`l_ref` in Olason et al.,2022)
-      !
 /
 !------------------------------------------------------------------------------
 &namdyn_adv     !   Ice advection

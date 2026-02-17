@@ -42,9 +42,6 @@ MODULE icestp
    USE ice
    !
    USE phycst         ! Define parameters for the routines
-   USE eosbn2  , ONLY : eos10_fzp_2d_gpu
-   USE oss_nnq , ONLY : ssu_m, ssv_m, sss_m, sss_s, sst_m, sst_s, ln_prs_oce, ln_cpl_oce, mld_m
-   USE ossprs  , ONLY : ln_slab_sst, oss_prs_slab
    USE sbc_oce        ! Surface boundary condition: ocean fields
    USE sbc_ice        ! Surface boundary condition: ice   fields
    !
@@ -63,7 +60,7 @@ MODULE icestp
    USE iceitd         ! sea-ice: remapping thickness distribution
    USE icealb         ! sea-ice: albedo
    !
-   USE remap_classic, ONLY : rmpT2F, do_Voce
+   !USE remap_classic, ONLY : rmpT2F, do_Voce
    !
    USE bdy , ONLY : ln_bdy   ! flag for bdy
    USE bdyice         ! unstructured open boundary data for sea-ice
@@ -128,48 +125,9 @@ CONTAINS
 
       IF( l_normal ) THEN
 
-         !#LOLO: mv to OSS !?
-         ! -- mean surface ocean current
-         CALL do_Voce( ssu_m, ssv_m,  V_oce )
-         !#LOLO.
-
-         CALL eos10_fzp_2d_gpu( sss_m, t_bo )   ! -- freezing temperature based on salinity [C]
-
-
-
-         IF( ln_prs_oce ) THEN
-            !! => we use a prescribed surface state of the ocean read into netCDF files,
-            !!    sometimes `sst_m` is not consistent with the equation of state and can
-            !!    be colder than the freezing point (true at least in GLORYS4...)
-            !$acc parallel loop collapse(2) present( sst_m, t_bo )
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  sst_m(ji,jj) = MAX( sst_m(ji,jj) , t_bo(ji,jj) ) ! prescribed/observed SST, cannot be colder than freezing-point temperature.
-               END DO
-            END DO
-            !$acc end parallel loop
-
-            !! Update `sst_s`,  `sss_s` & `t_bo` based on a simplistic slab-ocean model approach:
-            IF( ln_slab_sst )  CALL oss_prs_slab( kt, rDt_ice, at_i, sst_m, sss_m, mld_m, qsr_tot, qns_b, emp_b, sst_s, sss_s, t_bo )
-            !
-         ENDIF !IF( ln_prs_oce .AND. ln_icethd )
-
-         IF( ln_cpl_oce .OR. (ln_prs_oce .AND. (.NOT. ln_slab_sst) ) ) THEN
-            !! ==> `sst_s` & `sss_s` default to `sst_m` & `sst_s`:
-            !IF(lwp) PRINT *, ' * `sst_s & sss_s` forced to (prescribed) `sst_m & sss_m` ! kt =', kt
-            !$acc parallel loop collapse(2) present( sst_m, sss_m, sst_s, sss_s )
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  sst_s(ji,jj) = sst_m(ji,jj)
-                  sss_s(ji,jj) = sss_m(ji,jj)
-               END DO
-            END DO
-            !$acc end parallel loop
-         ENDIF
-
-
          !! * `t_bo` to Kelvin & `=rt0` over land:
-         !$acc parallel loop collapse(2)
+         !!   (`t_bo` has been updated into `oss_blk_ssx()@ossmod.F90` called in `stp()@step.F90` !
+         !$acc parallel loop collapse(2) present( t_bo )
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
                t_bo(ji,jj) = ( t_bo(ji,jj) + rt0 ) * xmskt(ji,jj) + rt0 * ( 1._wp - xmskt(ji,jj) )
@@ -178,13 +136,6 @@ CONTAINS
          !$acc end parallel loop
 
       ENDIF !IF( l_normal )
-
-
-      IF( iom_use( 'sss_s') ) CALL iom_put (  'sss_s' ,  sss_s         *xmskt )
-      IF( iom_use( 'sst_s') ) CALL iom_put (  'sst_s' ,  sst_s         *xmskt )
-      IF( iom_use('dsss_s') ) CALL iom_put ( 'dsss_s' , (sss_s - sss_m)*xmskt )
-      IF( iom_use('dsst_s') ) CALL iom_put ( 'dsst_s' , (sst_s - sst_m)*xmskt )
-
 
 
       CALL store_fields()             ! Store now ice values
@@ -203,7 +154,6 @@ CONTAINS
       !    emp_oce , emp_ice    = E-P over ocean and sea ice                    [Kg/m2/s]
       !    fatm_snow            = solid precipitation                           [Kg/m2/s]
       !    evap_ice             = sublimation                                   [Kg/m2/s]
-      !    qsr_tot , qns_tot    = solar & non solar heat flux (total)           [W/m2]
       !    qsr_ice , qns_ice    = solar & non solar heat flux over ice          [W/m2]
       !    dqns_ice             = non solar  heat sensistivity                  [W/m2]
       !    qemp_oce, qemp_ice,  = sensible heat (associated with evap & precip) [W/m2]
@@ -213,7 +163,6 @@ CONTAINS
          CALL ice_sbc( kt, ksbc, utau_ice, vtau_ice )
       ENDIF
 
-      !PRINT *, ' * LOLO1 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
 
       !-------------------------------------!
       ! --- ice dynamics and advection  --- !
@@ -273,7 +222,6 @@ CONTAINS
       IF( ln_icethd ) THEN
 
          CALL ice_thd( kt )            ! -- Ice thermodynamics
-         !%acc update zelf( e_i, e_s, szv_i, oa_i, sv_i, v_s, v_i, t_su )
 
          IF( l_do_diags ) CALL diag_trends( 2 )         ! record thermo trends
 
@@ -409,9 +357,6 @@ CONTAINS
       !
       CALL ice_drift_init              ! initialization for diags of conservation
       !
-      fr_i  (:,:)   = at_i(:,:)        ! initialisation of sea-ice fraction
-      tn_ice(:,:,:) = t_su(:,:,:)      ! initialisation of surface temp for coupled simu
-      !
       IF( ln_rstart )  THEN
          CALL iom_close( numrir )  ! close input ice restart file
          IF(lrxios) CALL iom_context_finalize(      cr_icerst_cxt         )
@@ -424,8 +369,8 @@ CONTAINS
       !! Time to update initialized arrays into GPU's memory before moving on !
       PRINT *, ''
       PRINT *, ' * info GPU: ice_init() => updating all processed arrays following initial state into GPU !'
-      !$acc update device ( t_bo, cnd_ice, tn_ice, t1_ice, e_i, t_i, szv_i, sz_i, e_s, t_s, a_i, v_i, v_s, sv_i, oa_i, h_i, h_s, s_i, o_i, t_su, u_ice, v_ice, uVice, vUice, snwice_mass, snwice_mass_b )
-      !$acc update device ( vt_i, vt_s, at_i, af_i, fr_i, tm_i, hm_i, ato_i, et_i, et_s, tm_su, st_i, hm_i_f, au_i, av_i, kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v, SIGMAt )
+      !$acc update device ( t_bo, cnd_ice, t1_ice, e_i, t_i, szv_i, sz_i, e_s, t_s, a_i, v_i, v_s, sv_i, oa_i, h_i, h_s, s_i, o_i, t_su, u_ice, v_ice, uVice, vUice, snwice_mass, snwice_mass_b )
+      !$acc update device ( vt_i, vt_s, at_i, af_i, tm_i, hm_i, ato_i, et_i, et_s, tm_su, st_i, hm_i_f, au_i, av_i, kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v, SIGMAt )
       IF( ln_damage ) THEN
          !$acc update device ( dmdt, dmdf, SIGMAf )
       ENDIF

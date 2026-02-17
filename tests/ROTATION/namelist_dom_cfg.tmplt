@@ -17,7 +17,7 @@
       !                          !    = 0 nn_date0 read in namelist ; nn_it000 : read in namelist
       !                          !    = 1 nn_date0 read in namelist ; nn_it000 : check consistancy between namelist and restart
       !                          !    = 2 nn_date0 read in restart  ; nn_it000 : check consistancy between namelist and restart
-   nn_istate   = 1  !  output the initial state (1) or not (0)
+   nn_istate   =       0   !  output the initial state (1) or not (0)
    ln_rst_list = .false.   !  output restarts at list of times using nn_stocklist (T) or at set frequency with nn_stock (F)
    nn_stock    = <NTS>  !  frequency of creation of a restart file (modulo referenced to 1)
    nn_write    = <NTS>   !  frequency of write in the output file   (modulo referenced to nn_it000)
@@ -55,17 +55,17 @@
    nn_foss     = 1         !  frequency of OSS module call
       !                    !  (control sea-ice & iceberg model call)
       !              ! Type of coupling (Ice/Ocean) :
+   ln_prs_oce  = .true.    !  uses a prescribed surface state of the ocean => standalone mode
    ln_cpl_oce  = .false.   !  ocean coupled   formulation          ( requires key_oasis3 )
-   !!
 /
 !!
 !-----------------------------------------------------------------------
-&namoss_ssx    !   Surface ocean state (when coupled=>init and not coupled =>prescibed) 
+&namoss_ssx    !   Surface ocean state (`ln_prs_oce=T` => prescibed sate | `ln_cpl_oce=T`=>initial state)
 !-----------------------------------------------------------------------
-   ln_ssxread   = .true.    !  =T Read in file ;  =F set all to 0. (see ossssm)
-      ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
-      ln_read_frq = .false.   !  specify whether we must read frq or not
+   ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
    !
+   ! Relevant if `ln_prs_oce=T`:
+   ln_ssv_T    = .false.      !  prescribed sea surface velocities are provided on T grid points (default is U,V!)
    ln_ssv_Fgrid = .true.   !  =T also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )   
    !
    cn_dir      = './'      !  root directory for the ocean data location
@@ -87,7 +87,7 @@
 !!
 !!
 !!======================================================================
-!!            ***  Surface Boundary Condition namelists  ***          !!
+!!  ***  Surface Boundary Conditions (ice & ocean) namelists  ***     !!
 !!                                                                    !!
 !!   namsbc          surface boundary condition (ice & ocean) manager   (default: NO selection)
 !!   namsbc_flx      flux               formulation                     (ln_flx     =T)
@@ -105,9 +105,8 @@
 &namsbc_blk    !   namsbc_blk  generic Bulk formula          (ln_blk =T)
 !-----------------------------------------------------------------------
    !                    !  bulk algorithm :
-   ln_NCAR      = .false.     ! "NCAR"      algorithm   (Large and Yeager 2008)
+   ln_NCAR      = .false.    ! "NCAR"      algorithm   (Large and Yeager 2008)
    ln_COARE_3p0 = .false.    ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   ln_COARE_3p6 = .false.    ! "COARE 3.6" algorithm   (Edson et al. 2013)
    ln_ECMWF     = .true.     ! "ECMWF"     algorithm   (IFS cycle 45r1)
       rn_zqt       = 10.     !  Air temperature & humidity reference height (m)
       rn_zu        = 10.     !  Wind vector reference height (m)
@@ -160,7 +159,7 @@
 &nameos        !   ocean Equation Of Seawater                           (default: NO selection)
 !-----------------------------------------------------------------------
 /
-!!
+!
 !-----------------------------------------------------------------------
 &nammpp        !   Massively Parallel Processing
 !-----------------------------------------------------------------------

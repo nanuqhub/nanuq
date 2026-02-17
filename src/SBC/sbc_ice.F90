@@ -28,7 +28,6 @@ MODULE sbc_ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qsb_ice        !: sensible heat flux over ice                   [W/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   dqla_ice       !: latent sensibility over ice                   [W/m2/K]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   dqns_ice       !: non solar heat flux over ice (LW+SEN+LA)      [W/m2/K]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   tn_ice         !: ice surface temperature                          [K]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   alb_ice        !: ice albedo                                       [-]
 
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qml_ice        !: heat available for snow / ice surface melting     [W/m2]
@@ -87,7 +86,7 @@ CONTAINS
       ALLOCATE( wndm_ice(jpi,jpj)     , &
          &      qns_ice (jpi,jpj,jpl) , qsr_ice  (jpi,jpj,jpl) ,     qlw_ice(jpi,jpj,jpl) ,   &
          &      qla_ice (jpi,jpj,jpl) , qsb_ice  (jpi,jpj,jpl) ,   dqla_ice (jpi,jpj,jpl) ,   &
-         &      dqns_ice(jpi,jpj,jpl) , tn_ice   (jpi,jpj,jpl) , alb_ice    (jpi,jpj,jpl) ,   &
+         &      dqns_ice(jpi,jpj,jpl) , alb_ice  (jpi,jpj,jpl) ,   &
          &      qml_ice (jpi,jpj,jpl) , qcn_ice  (jpi,jpj,jpl) , qtr_ice_top(jpi,jpj,jpl) ,   &
          &      evap_ice(jpi,jpj,jpl) , devap_ice(jpi,jpj,jpl) , qprec_ice  (jpi,jpj)     ,   &
          &      qemp_ice(jpi,jpj)     , qevap_ice(jpi,jpj,jpl) , qemp_oce   (jpi,jpj)     ,   &
@@ -103,8 +102,8 @@ CONTAINS
       PRINT *, ' * info GPU: sbc_ice_alloc() => adding SBC-related arrays to memory!'
       PRINT *, '             => utau_ice, vtau_ice'
       !$acc enter data copyin( utau_ice, vtau_ice )
-      PRINT *, '             => qns_ice, qsr_ice, qlw_ice, qla_ice, qsb_ice, dqla_ice, qsb_ice, dqns_ice, tn_ice, alb_ice'
-      !$acc enter data copyin( qns_ice, qsr_ice, qlw_ice, qla_ice, qsb_ice, dqla_ice, qsb_ice, dqns_ice, tn_ice, alb_ice )
+      PRINT *, '             => qns_ice, qsr_ice, qlw_ice, qla_ice, qsb_ice, dqla_ice, qsb_ice, dqns_ice, alb_ice'
+      !$acc enter data copyin( qns_ice, qsr_ice, qlw_ice, qla_ice, qsb_ice, dqla_ice, qsb_ice, dqns_ice, alb_ice )
       PRINT *, '             => qml_ice, qcn_ice, qtr_ice_top, wndm_ice, evap_ice, devap_ice, qprec_ice'
       !$acc enter data copyin( qml_ice, qcn_ice, qtr_ice_top, wndm_ice, evap_ice, devap_ice, qprec_ice )
       PRINT *, '             => qemp_ice, qevap_ice, qemp_oce, qns_oce, qsr_oce, emp_oce, emp_ice'

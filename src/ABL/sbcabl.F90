@@ -20,7 +20,7 @@ MODULE sbcabl
    USE phycst         ! physical constants
    USE fldread        ! read input fields
    USE sbc_oce        ! Surface boundary condition: ocean fields
-   USE oss_nnq , ONLY : sst_m, ssst, ssu_m, ssv_m
+   USE oss_nnq , ONLY : sst_s, ssu_m, ssv_m, ssst, sssq
 
    USE sbcblk         ! Surface boundary condition: bulk formulae
    USE sbc_phy        ! Catalog of functions for physical/meteorological parameters in the marine boundary layer
@@ -341,11 +341,10 @@ CONTAINS
 
          CALL blk_oce_1( kt,  u_abl(:,:,2,nt_n      ),  v_abl(:,:,2,nt_n      ),   &   !   <<= in
             &                tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa),   &   !   <<= in
-            &                sf(jp_slp )%fnow(:,:,1) , sst_m, ssu_m, ssv_m     ,   &   !   <<= in
+            &                sf(jp_slp )%fnow(:,:,1) , sst_s, ssu_m, ssv_m     ,   &   !   <<= in
             &                sf(jp_uoatm)%fnow(:,:,1), sf(jp_voatm)%fnow(:,:,1),   &   !   <<= in
             &                sf(jp_qsr )%fnow(:,:,1) , sf(jp_qlw )%fnow(:,:,1) ,   &   !   <<= in
-            &                ssst, zsen, zlat, zevp, qsr, wndm, taum, utau, vtau,&   !   =>> out
-            &                pssq=zssq              )                                  !   =>> opt. out
+            &                ssst, sssq, zsen, zlat, zevp, qsr, wndm, taum, utau, vtau )   !   =>> out
             !LOLOfixme:&                ssst, zssq, zcd_du, zsen, zlat, zevp                 )   !   =>> out
 
          STOP'FIXME blk_ice_1'

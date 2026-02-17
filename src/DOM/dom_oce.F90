@@ -117,7 +117,7 @@ MODULE dom_oce
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1t2, e2t2
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1f2, e2f2
    !
-   REAL(dp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   res_grd_loc_t, res_grd_loc_f    !: local mean size of the mesh
+   REAL(4),  PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   res_grd_loc_t, res_grd_loc_f    !: local mean size of the mesh
    !
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   ff_u, ff_v                !: Coriolis factor at U- & V-points  [1/s]
 
@@ -230,7 +230,7 @@ CONTAINS
       ALLOCATE(    klbct(jpi,jpj,nn_hls,4), klbcf(jpi,jpj,nn_hls,4), klbcu(jpi,jpj,nn_hls,4),  STAT = ierr(ii) )
       !
       !
-      PRINT *, 'LOLO `dom_oce_alloc@dom_oce.F90` allocating mask arrays with jpk =', jpk, ', proc #', narea
+      !PRINT *, 'LOLO `dom_oce_alloc@dom_oce.F90` allocating mask arrays with jpk =', jpk, ', proc #', narea
       !
       ii = ii+1
       ALLOCATE( tmask(jpi,jpj,jpk), umask(jpi,jpj,jpk), vmask(jpi,jpj,jpk), fmask(jpi,jpj,jpk), tmask_i(jpi,jpj), STAT=ierr(ii) )

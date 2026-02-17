@@ -36,7 +36,7 @@ MODULE sbcblk_skin_ecmwf
 
    USE sbc_phy         ! Catalog of functions for physical/meteorological parameters in the marine boundary layer
 
-   USE oss_nnq , ONLY : ssst, dT_cs, dT_wl, Hz_wl
+   USE ossskin , ONLY : dT_cs, dT_wl, Hz_wl, Qnt_ac, Tau_ac
    
    USE lib_mpp         ! distribued memory computing library
    USE in_out_manager  ! I/O manager

@@ -1,0 +1,71 @@
+# JACKZILLA / brodeau nvidia/NVFORTRAN
+
+%CUDAV                13.0
+%FCMPV                25.9
+%OMPIV                2.24
+
+%NVROOT               /opt/nvidia/hpc_sdk/Linux_x86_64/%FCMPV
+%MPI_ROOT             %NVROOT/comm_libs/%CUDAV/hpcx/hpcx-%OMPIV/ompi
+
+
+%NCDF_HOME           /opt/hdf5_netcdf4_nvidia_par
+%HDF5_HOME           /opt/hdf5_netcdf4_nvidia_par
+%XIOS_HOME           /home/laurent/src/xios2_trunk_nvidia
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+
+%FC                  %MPI_ROOT/bin/mpif90
+
+
+
+## -Minit-real=zero|snan
+##                     Initialize local real variables and arrays to a specific value below:
+##     zero            0.0
+##     snan            signaling NaNs
+
+
+
+#######################################################
+### With OpenACC GPU acceleration:
+%OPT_ACCEL           -acc -Ktrap=fp -Minfo=accel
+%FPPFLAGS_ACCEL      -D_OPENACC -D_TRDBG
+#
+#%OPT_ACCEL           -Ktrap=fp
+#%FPPFLAGS_ACCEL      -D_TRDBG
+#######################################################
+
+%FPPFLAGS            -P  -traditional %FPPFLAGS_ACCEL
+
+%FCFLAGS             -i4 -r8 %OPT_ACCEL -O2 -Kieee -Minit-local-zero -Minit-integer=0
+
+##%FCFLAGS             -i4 -r8 %OPT_ACCEL -O2 -Kieee -Ktrap=fp -Minit-local-zero -Minit-integer=0 -Minfo=accel
+
+##%FCFLAGS             -i4 -r8 %OPT_ACCEL -fast -O2 -Minit-local-zero -Minit-integer=0 -Minfo=accel
+
+# -ffpe-trap=invalid|zero|overflow|underflow|inexact
+#%FCFLAGS             -i4 -r8 %OPT_ACCEL -fast -O2 -Minit-local-zero -Minit-integer=0 -Minfo=accel -g -ffpe-trap=overflow -ffpe-trap=zero -ffpe-trap=invalid -traceback
+
+###%FCFLAGS             %OPT_ACCEL -Bstatic-nvidia  -i4 -r8 -O2 -Minit-local-zero -Minit-integer=0 -Minfo=accel
+
+%FFLAGS              %FCFLAGS
+
+
+%CPP	             cpp
+
+%LD                  %MPI_ROOT/bin/mpif90 %FCFLAGS
+%LDFLAGS             -L%MPI_ROOT/compilers/lib -lacchost
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  %MPI_ROOT/bin/mpicc
+%CFLAGS              -O2

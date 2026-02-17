@@ -62,7 +62,7 @@ CONTAINS
       !%acc update self( wndm_ice, ptaux_ai, ptauy_ai, zCHi, zCEi, ztheta_zu_i, zq_zu_i )
       !
       CALL ice_sbc_flx( kt, ksbc, zCHi, zCEi, ztheta_zu_i, zq_zu_i )
-      !%acc update self( alb_ice,qsr_ice,qla_ice,dqla_ice,qns_ice,dqns_ice,evap_ice,devap_ice,emp_oce,emp_ice,qemp_oce,qemp_ice,qns_tot,qsr_tot,qprec_ice,qevap_ice,qtr_ice_top )
+      !%acc update self( alb_ice,qsr_ice,qla_ice,dqla_ice,qns_ice,dqns_ice,evap_ice,devap_ice,emp_oce,emp_ice,qemp_oce,qemp_ice,qprec_ice,qevap_ice,qtr_ice_top )
       !
       !$acc end data
       IF( ln_timing )   CALL timing_stop('ice_sbc')
@@ -130,7 +130,6 @@ CONTAINS
       !!                emp_oce , emp_ice                        = E-P over ocean and sea ice                    [Kg/m2/s]
       !!                fatm_snow                                = solid precipitation                           [Kg/m2/s]
       !!                evap_ice                                 = sublimation                                   [Kg/m2/s]
-      !!                qsr_tot , qns_tot                        = solar & non solar heat flux (total)           [W/m2]
       !!                qsr_ice , qns_ice                        = solar & non solar heat flux over ice          [W/m2]
       !!                dqns_ice                                 = non solar  heat sensistivity                  [W/m2]
       !!                qemp_oce, qemp_ice, qprec_ice, qevap_ice = sensible heat (associated with evap & precip) [W/m2]

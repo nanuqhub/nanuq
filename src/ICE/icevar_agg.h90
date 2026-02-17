@@ -1,0 +1,197 @@
+   SUBROUTINE ice_var_agg( kn )
+      !!-------------------------------------------------------------------
+      !!                ***  ROUTINE ice_var_agg  ***
+      !!
+      !! ** Purpose :   aggregates ice-thickness-category variables to
+      !!              all-ice variables, i.e. it turns VGLO into VAGG
+      !!
+      !!       full    arrays: vt_i, vt_s, at_i, vt_ip, vt_il, at_ip
+      !!       reduced arrays: the rest
+      !!-------------------------------------------------------------------
+      INTEGER, INTENT( in ) ::   kn     ! =1 state variables only
+      !                                 ! >1 state variables + others
+      !
+      INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
+      REAL(wp) ::   z1_vt_i, z1_at_i
+      !!-------------------------------------------------------------------
+      !
+      ! full    arrays: vt_i, vt_s, at_i, vt_ip, vt_il, at_ip
+      ! reduced arrays: the rest
+      !
+      ! --- integrated values
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            vt_i(ji,jj)  = SUM( v_i (ji,jj,:) )
+            vt_s(ji,jj)  = SUM( v_s (ji,jj,:) )
+            at_i(ji,jj)  = SUM( a_i (ji,jj,:) )
+            !
+            ato_i(ji,jj) = 1._wp - at_i(ji,jj)  ! open water fraction
+            !
+            IF( at_i(ji,jj) <= epsi20 ) THEN
+               hm_i(ji,jj) = 0._wp
+               hm_s(ji,jj) = 0._wp
+            ELSE
+               z1_at_i = 1._wp / at_i(ji,jj)
+               hm_i(ji,jj) = vt_i(ji,jj) * z1_at_i
+               hm_s(ji,jj) = vt_s(ji,jj) * z1_at_i
+            ENDIF
+            !
+         END DO
+      END DO
+
+      CALL lbc_lnk( 'ice_var_agg',  hm_i,'T',1._wp, hm_s,'T',1._wp, ato_i,'T',1._wp, vt_i,'F',1._wp, vt_s,'T',1._wp, at_i,'F',1._wp )
+   
+
+      IF( ln_icethd ) THEN
+   
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               !
+               !at_ip    (ji,jj) = SUM( a_ip    (ji,jj,:) ) ! melt ponds
+               !vt_ip    (ji,jj) = SUM( v_ip    (ji,jj,:) )
+               !vt_il    (ji,jj) = SUM( v_il    (ji,jj,:) )
+               !
+               et_s(ji,jj)  = SUM( SUM( e_s (ji,jj,:,:), dim=2 ) )
+               et_i(ji,jj)  = SUM( SUM( e_i (ji,jj,:,:), dim=2 ) )
+               !
+               !at_ip_eff(ji,jj) = SUM( a_ip_eff(ji,jj,:) * a_i(ji,jj,:) )
+               !
+               !!GS: tm_su always needed by ABL over sea-ice
+               IF( at_i(ji,jj) <= epsi20 ) THEN
+                  tm_su  (ji,jj) = rt0
+               ELSE
+                  z1_at_i = 1._wp / at_i(ji,jj)
+                  tm_su(ji,jj) = SUM( t_su(ji,jj,:) * a_i(ji,jj,:) ) * z1_at_i
+               ENDIF
+            END DO
+         END DO
+         !
+         IF( nn_icesal == 4 ) THEN
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  st_i(ji,jj) = SUM( SUM( szv_i (ji,jj,:,:), dim=2 ) )
+               END DO
+            END DO
+         ELSE
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  st_i(ji,jj) = SUM( sv_i(ji,jj,:) )
+               END DO
+            END DO
+         ENDIF
+   
+         CALL lbc_lnk( 'ice_var_agg',  tm_su,'T',1._wp, et_s,'T',1._wp, et_i,'T',1._wp, st_i,'T',1._wp )
+   
+   
+         ! The following fields are calculated for diagnostics and outputs only
+         ! ==> Do not use them for other purposes
+         IF( kn > 1 ) THEN
+            !
+            tm_si(:,:) = 0._wp
+            om_i (:,:) = 0._wp
+            sm_i (:,:) = 0._wp
+            !
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  IF( at_i(ji,jj) > epsi20 ) THEN
+                     z1_at_i = 1._wp / at_i(ji,jj)
+                  ELSE
+                     z1_at_i = 0._wp
+                  ENDIF
+                  IF( vt_i(ji,jj) > epsi20 ) THEN
+                     z1_vt_i = 1._wp / vt_i(ji,jj)
+                  ELSE
+                     z1_vt_i = 0._wp
+                  ENDIF
+   
+                  ! mean temperature (K), salinity and age
+                  tm_si(ji,jj) = SUM( t_si(ji,jj,:) * a_i(ji,jj,:)  ) * z1_at_i
+                  om_i (ji,jj) = SUM( oa_i(ji,jj,:)                 ) * z1_at_i
+                  sm_i (ji,jj) =      st_i(ji,jj)                     * z1_vt_i
+               END DO
+            END DO
+            !
+            tm_si(:,:) = 0._wp
+            tm_i (:,:) = 0._wp
+            tm_s (:,:) = 0._wp
+            DO jl = 1, jpl
+               DO jj=Njs0, Nje0
+                  DO ji=Nis0, Nie0
+                     DO jk=1, nlay_i
+                        IF( vt_i(ji,jj) > epsi20 ) THEN
+                           tm_i(ji,jj) = tm_i(ji,jj) + r1_nlay_i * t_i (ji,jj,jk,jl) * v_i(ji,jj,jl) / vt_i(ji,jj)
+                        ELSE
+                           tm_i(ji,jj) = rt0
+                        ENDIF
+                     END DO
+                  END DO
+               END DO
+            END DO
+            DO jl = 1, jpl
+               DO jj=Njs0, Nje0
+                  DO ji=Nis0, Nie0
+                     DO jk=1, nlay_s
+                        IF( vt_s(ji,jj) > epsi20 ) THEN
+                           tm_s(ji,jj) = tm_s(ji,jj) + r1_nlay_s * t_s (ji,jj,jk,jl) * v_s(ji,jj,jl) / vt_s(ji,jj)
+                        ELSE
+                           tm_s(ji,jj) = rt0
+                        ENDIF
+                     END DO
+                  END DO
+               END DO
+            END DO
+            !
+            ! put rt0 where there is no ice
+            WHERE( at_i(:,:) <= epsi20 )
+               tm_si(:,:) = rt0
+               tm_i (:,:) = rt0
+               tm_s (:,:) = rt0
+            END WHERE
+
+            CALL lbc_lnk( 'ice_var_agg',  tm_si,'T',1._wp, om_i,'T',1._wp, sm_i,'F',1._wp, tm_i,'T',1._wp, tm_s,'F',1._wp )
+   
+            ! mean melt pond depth
+            !WHERE( at_ip(:,:) > epsi20 )
+            !   hm_ip(:,:) = vt_ip(:,:) / at_ip(:,:)
+            !   hm_il(:,:) = vt_il(:,:) / at_ip(:,:)
+            !ELSEWHERE
+            !   hm_ip(:,:) = 0._wp
+            !   hm_il(:,:) = 0._wp
+            !END WHERE
+            !
+         ENDIF ! IF( kn > 1 )
+   
+   
+      ENDIF !IF( ln_icethd )
+   
+   
+      !! LOLO-2025:
+      !CALL lbc_lnk( 'ice_var_agg',  at_i,'T',1._wp, hm_i,'T',1._wp ) !LOLOfixme: `at_i` or/and `hm_i` LBC_LNKed!
+      !                                                              ! => shows up when `ln_use_weno_rmp` !
+      !                                                              ! => scary, so doing it here...
+   
+      !! Ice concentration and thickness @F,U,V:
+      !
+      IF( ln_use_weno_rmp ) THEN
+         CALL rmpT2F_A_h_wn5s( at_i, hm_i, af_i, hm_i_f )
+      ELSE
+         af_i(:,:)   = MIN( MAX( rmpT2F( at_i,  lconserv=.TRUE. ) , 0._wp ) * xmskf(:,:) , rn_amax )
+         hm_i_f(:,:) =      MAX( rmpT2F( hm_i,  lconserv=.TRUE. ) , 0._wp )
+      ENDIF
+   
+      au_i(:,:) = MIN( MAX( rmpT2U( at_i,  lconserv=.TRUE. ) , 0._wp ) * umask(:,:,1) , rn_amax )
+      av_i(:,:) = MIN( MAX( rmpT2V( at_i,  lconserv=.TRUE. ) , 0._wp ) * vmask(:,:,1) , rn_amax )
+
+      CALL lbc_lnk( 'ice_var_agg',  af_i,'F',1._wp,  hm_i_f,'F',1._wp,  au_i,'U',1._wp,  av_i,'V',1._wp )
+   
+      ! For diagnostics:
+      kmsk_ice_t(:,:) = INT(xmskt(:,:),1) ;   kmsk_ice_f(:,:) = INT(xmskf(:,:),1)
+      WHERE( at_i(:,:) < rAmin_fld ) kmsk_ice_t(:,:) = 0
+      WHERE( af_i(:,:) < rAmin_fld ) kmsk_ice_f(:,:) = 0
+
+      ! For rheology and diags:
+      kmsk_ice_u(:,:) = INT(umask(:,:,1),1) ; kmsk_ice_v(:,:) = INT(vmask(:,:,1),1)
+      WHERE( au_i(:,:) < rAmin_fld ) kmsk_ice_u(:,:) = 0
+      WHERE( av_i(:,:) < rAmin_fld ) kmsk_ice_v(:,:) = 0
+      !
+   END SUBROUTINE ice_var_agg

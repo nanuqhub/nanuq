@@ -151,7 +151,8 @@
       !
       rn_kth        = 25.92E6         !     constant for healing of damage [K.s] (Olason et al.,2022 => 15 days for 20 K)
       !                               !     => 15 * 3600s * 24 * 20K
-      nn_nbbm       = 140             !     number of BBM subcycles
+      !
+      rn_bbm_flt    = 1.              !     filtering window (over rn_bbm_flt*dt) for ice velocities. Range=[0. 1.]
       !
       nn_d_adv      = 1               !     advection of damage @T & @F at big time step
       !                               !        = 0 no advection at all!
@@ -199,7 +200,7 @@
    ln_icedH         = .true.          !  activate ice thickness change from growing/melting (T) or not (F)
    ln_icedA         = .true.          !  activate lateral melting param. (T) or not (F)
    ln_icedO         = .true.          !  activate ice growth in open-water (T) or not (F)
-   ln_leadhfx       = .true.          !  heat in the leads is used to melt sea-ice before warming the ocean
+   ln_leadhfx       = .false.         !  heat in the leads is used to melt sea-ice before warming the ocean
 /
 !------------------------------------------------------------------------------
 &namthd_zdf     !   Ice heat diffusion
@@ -281,17 +282,18 @@
 !------------------------------------------------------------------------------
 &namthd_pnd     !   Melt ponds
 !------------------------------------------------------------------------------
-   ln_pnd            = .true.         !  activate melt ponds or not
+!! ==> not yet available in NANUQ :(
+   ln_pnd            = .false.        !  activate melt ponds or not
       ln_pnd_TOPO    = .false.        !  topographic melt ponds
-      ln_pnd_LEV     = .true.         !  level ice melt ponds
+      ln_pnd_LEV     = .false.        !  level ice melt ponds
          rn_apnd_min =   0.15         !     minimum meltwater fraction contributing to pond growth (TOPO and LEV)
          rn_apnd_max =   0.85         !     maximum meltwater fraction contributing to pond growth (TOPO and LEV)
          rn_pnd_flush=   0.1          !     pond flushing efficiency (tuning parameter) (LEV)
       ln_pnd_CST     = .false.        !  constant  melt ponds
          rn_apnd     =   0.2          !     prescribed pond fraction, at Tsu=0 degC
          rn_hpnd     =   0.05         !     prescribed pond depth,    at Tsu=0 degC
-      ln_pnd_lids    = .true.         !  frozen lids on top of the ponds (only for ln_pnd_LEV)
-      ln_pnd_alb     = .true.         !  effect of melt ponds on ice albedo
+      ln_pnd_lids    = .false.        !  frozen lids on top of the ponds (only for ln_pnd_LEV)
+      ln_pnd_alb     = .false.        !  effect of melt ponds on ice albedo
 /
 !------------------------------------------------------------------------------
 &namini         !   Ice initialization

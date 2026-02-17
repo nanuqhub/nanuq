@@ -129,7 +129,7 @@ CONTAINS
       ! Lateral boundary conditions on velocity (modify fmask)
       ! ---------------------------------------
       ! ==> this is now done in `icedyn.F90` because `rn_ishlat` has yet to be known!
-      
+
 
       !! Masks at T- & F-points for the E-grid-based brittle rheology approach
       !! *********************************************************************
@@ -143,7 +143,7 @@ CONTAINS
       !! Examples:
       !!    * set ice concentration at F-points over land => USE `xmskf` !
       !!    * compute the shear of ice velocity vector => USE `fmask` !
-      
+
       xmskt(:,:) = tmask(:,:,1)
       xmskf(:,:) = 0._wp
       i2dt(:,:) = INT( tmask(:,:,1), 1 )
@@ -168,7 +168,7 @@ CONTAINS
 
       r1_e1e2t(:,:) = r1_e1e2t(:,:) * xmskt(:,:)
       r1_e1e2f(:,:) = r1_e1e2f(:,:) * xmskf(:,:)
-      
+
 
 
       !! Mask for solid lateral boundary conditions
@@ -360,10 +360,9 @@ CONTAINS
       !ENDIF
 
 # if defined _OPENACC
-      PRINT *, ' * info GPU: dom_msk() => adding `*mask`, `xmsk*` & `klbc*` arrays to memory!'
+      PRINT *, ' * info GPU: dom_msk() => adding `umask,vmask,xmskt,xmskf,klbct,klbcf,klbcu` arrays to memory!'
       !$acc enter data copyin( umask,vmask, xmskt,xmskf, klbct,klbcf,klbcu )
 # endif
-
 
    END SUBROUTINE dom_msk
 

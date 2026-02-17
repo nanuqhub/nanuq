@@ -22,7 +22,7 @@ MODULE sbcblk_skin_coare
 
    USE sbcdcy          !#LB: to know hour of dawn and dusk: rdawn_dcy and rdusk_dcy (needed in WL_COARE)
 
-   USE oss_nnq , ONLY : ssst, dT_cs, dT_wl, Hz_wl, Qnt_ac, Tau_ac
+   USE ossskin , ONLY : dT_cs, dT_wl, Hz_wl, Qnt_ac, Tau_ac
    
    USE lib_mpp         ! distribued memory computing library
    USE in_out_manager  ! I/O manager

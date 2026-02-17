@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #DIR_NC_IN="/DATA/IO/INPUT_NANUQ_DISTRIB"
-DIR_NC_IN="/home/laurent/tmp/INPUT_NANUQ_DISTRIB"
+DIR_NC_IN="/data/GCM/INPUT_NANUQ_DISTRIB"
 
 
 if [ "${1}" = "" ]; then

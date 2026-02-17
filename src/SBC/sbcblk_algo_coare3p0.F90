@@ -12,8 +12,16 @@ MODULE sbcblk_algo_coare3p0
    !!       Routine turb_coare3p0 maintained and developed in AeroBulk
    !!                     (https://github.com/brodeau/aerobulk)
    !!
-   !! ** Author: L. Brodeau, June 2019 / AeroBulk (https://github.com/brodeau/aerobulk)
-   !!----------------------------------------------------------------------
+   !!   When using AeroBulk to produce scientific work, please acknowledge with the following citation:
+   !!
+   !!   Brodeau, L., B. Barnier, S. Gulev, and C. Woods, 2016: Climatologically
+   !!   significant effects of some approximations in the bulk parameterizations of
+   !!   turbulent air-sea fluxes. J. Phys. Oceanogr., doi:10.1175/JPO-D-16-0169.1.
+   !!
+   !!
+   !!            Author: Laurent Brodeau, 2016
+   !!
+   !!=====================================================================
    !! History :  4.0  ! 2016-02  (L.Brodeau)   Original code
    !!            4.2  ! 2020-12  (L. Brodeau) Introduction of various air-ice bulk parameterizations + improvements
    !!----------------------------------------------------------------------
@@ -23,22 +31,19 @@ MODULE sbcblk_algo_coare3p0
    !!                   adjusts t_air and q_air from zt to zu m
    !!                   returns the effective bulk wind speed at 10m
    !!----------------------------------------------------------------------
-   USE dom_oce         ! ocean space and time domain
    USE phycst          ! physical constants
-   USE iom             ! I/O manager library
-   USE lib_mpp         ! distribued memory computing library
-   USE in_out_manager  ! I/O manager
-   USE prtctl          ! Print control
-   USE sbc_ice         ! Surface boundary condition: ice fields
-   USE lib_fortran     ! to use key_nosignedzero
-
-   USE sbc_oce         ! Surface boundary condition: ocean fields
+   USE lib_mpp,        ONLY: ctl_stop         ! distribued memory computing library
+   USE in_out_manager, ONLY: nit000, nitend, ln_timing  ! I/O manager
    USE sbc_phy         ! Catalog of functions for physical/meteorological parameters in the marine boundary layer
+   USE sbcblk_coare_util, ONLY : first_guess_coare
    USE sbcblk_skin_coare ! cool-skin/warm layer scheme (CSWL_ECMWF) !LB
+   USE oss_nnq , ONLY : e3t_m
+   USE ossskin , ONLY : oss_skin_alloc, oss_skin_dealloc, dT_cs, dT_wl, Hz_wl
 
-   USE oss_nnq , ONLY : sbcblk_cs_wl_alloc, ssst, dT_cs, dT_wl, Hz_wl !, Qnt_ac, Tau_ac
+   USE timing         ! Timing
 
    IMPLICIT NONE
+
    PRIVATE
 
    PUBLIC :: TURB_COARE3P0
@@ -48,7 +53,6 @@ MODULE sbcblk_algo_coare3p0
    REAL(wp), PARAMETER :: Beta0 =  1.25_wp    ! gustiness parameter
    REAL(wp), PARAMETER :: zeta_abs_max = 50._wp
 
-   !!----------------------------------------------------------------------
 CONTAINS
 
    SUBROUTINE turb_coare3p0( kt, zt, zu, T_s, t_zt, q_s, q_zt, U_zu, l_use_cs, l_use_wl, &

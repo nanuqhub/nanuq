@@ -14,7 +14,7 @@
 
 %BASE_FFLAGS         -i4 -r8 -init=zero -init=arrays -fp-model strict
 
-%PROD_FFLAGS         -O3 -xHOST
+%PROD_FFLAGS         -O2 -xHOST
 
 #%DEV_FFLAGS          -O1 -check all -warn all -debug extended -C -g -traceback -ftrapuv -fpe0
 %DEV_FFLAGS          -O0 -g -traceback -CB -fpe0  -ftrapuv
@@ -27,6 +27,7 @@
 
 # Debug on CPU:
 # ~~~~~~~~~~~~~
+##%FPPFLAGS            -P  -traditional -D_TRDBG
 #%FPPFLAGS            -P  -traditional
 #%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
 
@@ -45,4 +46,4 @@
 %USER_LIB            %XIOS_LIB %NCDF_LIB
 
 %CC                  mpiicx
-%CFLAGS              -O3
+%CFLAGS              -O2

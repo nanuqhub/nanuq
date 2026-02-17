@@ -304,22 +304,22 @@
       <!-- Fluxes between water and air (regardless of the rpesence of ice, like if no ice was present!) -->
       <field id="rho_air"     long_name="Air density at 10m above sea surface"         standard_name="rho_air_10m"                                        unit="kg/m3" />
       <field id="dt_skin"     long_name="SSST-SST temperature difference"              standard_name="SSST-SST"                                           unit="K"   />
-      <field id="qsr_wa"      long_name="Shortwave Downward Heat Flux over open ocean" standard_name="surface_net_shortwave_longwave_flux"                unit="W/m2"  />
-      <field id="qlw_wa"      long_name="Longwave Downward Heat Flux over open ocean"  standard_name="surface_net_downward_longwave_flux"                 unit="W/m2"  />
-      <field id="qsb_wa"      long_name="Sensible Downward Heat Flux over open ocean"  standard_name="surface_downward_sensible_heat_flux"                unit="W/m2"  />
-      <field id="qla_wa"      long_name="Latent Downward Heat Flux over open ocean"    standard_name="surface_downward_latent_heat_flux"                  unit="W/m2"  />
-      <field id="qns_wa"      long_name="Non Solar Heat Flux over open ocean (qlw+qla+qsen)" standard_name="surface_downward_non_solar_heat_flux"         unit="W/m2"  />
-      <field id="evap_wa"     long_name="Evaporation over open ocean"                  standard_name="evaporation_open_oce"                               unit="kg/m2/s" />
-      <field id="taum_wa"     long_name="wind stress module over open ocean"           standard_name="magnitude_of_surface_downward_stress"               unit="N/m2"  />
-      <field id="utau_wa"     long_name="Wind Stress / i-axis over open ocean (T-point)"  standard_name="surf_down_x_stress_open_oce_Tpoints"        unit="N/m2"   />
-      <field id="vtau_wa"     long_name="Wind Stress / j-axis over open ocean (T-point)"  standard_name="surf_down_y_stress_open_oce_Tpoints"        unit="N/m2"    />
+      <field id="qt_oce"      long_name="total flux at ocean surface (qsr_oce+qns_oce+qemp_oce)" standard_name="surface_downward_heat_flux_in_sea_water"  unit="W/m2"  />
+      <field id="qsr_oce"     long_name="solar heat flux available for open ocean"     standard_name="net_downward_shortwave_flux_at_sea_water_surface"   unit="W/m2"  />
+      <field id="qns_oce"     long_name="non-solar heat flux available for open ocean (E-P not there)"   standard_name="qlat+qsen+qlw"                    unit="W/m2"  />
+      <field id="qemp_oce"    long_name="Downward Heat Flux from E-P"                  standard_name="heat_flux_from_e-p"                                 unit="W/m2"  />
+      <field id="taum_oce"    long_name="wind stress module over open ocean"           standard_name="magnitude_of_surface_downward_stress"               unit="N/m2"  />
+      <!-- --> 
+      <field id="qlw_oce"     long_name="Longwave Downward Heat Flux over open ocean"  standard_name="surface_net_downward_longwave_flux"                 unit="W/m2"  />
+      <field id="qsb_oce"     long_name="Sensible Downward Heat Flux over open ocean"  standard_name="surface_downward_sensible_heat_flux"                unit="W/m2"  />
+      <field id="qla_oce"     long_name="Latent Downward Heat Flux over open ocean"    standard_name="surface_downward_latent_heat_flux"                  unit="W/m2"  />
+      <field id="evap_oce"    long_name="Evaporation over open ocean"                  standard_name="evaporation_open_oce"                               unit="kg/m2/s" />
+      <field id="utau_oce"    long_name="Wind Stress / i-axis over open ocean (T-point)"  standard_name="surf_down_x_stress_open_oce_Tpoints"        unit="N/m2"   />
+      <field id="vtau_oce"    long_name="Wind Stress / j-axis over open ocean (T-point)"  standard_name="surf_down_y_stress_open_oce_Tpoints"        unit="N/m2"    />
 
 
       <!-- variables computed by the bulk parameterization algorithms (ln_blk) -->
-      <field id="qt_oce"       long_name="total flux at ocean surface"                  standard_name="surface_downward_heat_flux_in_sea_water"            unit="W/m2"  />
-      <field id="qsr_oce"      long_name="solar heat flux at ocean surface"             standard_name="net_downward_shortwave_flux_at_sea_water_surface"   unit="W/m2"  />
-      <field id="qns_oce"      long_name="non-solar heat flux at ocean surface (including E-P)"                                                            unit="W/m2"  />
-      <field id="qemp_oce"     long_name="Downward Heat Flux from E-P over open ocean"                                                                     unit="W/m2"  />
+      <!-- -->
       <field id="snowpre"      long_name="Snow precipitation"                   standard_name="snowfall_flux"                                                        unit="kg/m2/s"   />
       <field id="precip"       long_name="Total precipitation"                  standard_name="precipitation_flux"                                                   unit="kg/m2/s"   />
       <!-- -->
@@ -519,12 +519,12 @@
       <field id="mld_m"    long_name="Prescribed mixed layer depth"                                              unit="m"    />
       <field id="e3t_m"    long_name="Prescribed or received thickness of top ocean layer"                       unit="m"    />
       <field id="frq_m"    long_name="Prescribed or received fraction of solar flux captured in top ocean layer" unit="-"    />
-      <field id="sss_s"    long_name="Bulk SSS (slab-model corrected version of `sss_m`)"                        unit="-" />
-      <field id="sst_s"    long_name="Bulk SST (slab-model corrected version of `sst_m`)"                        unit="degC" />
+      <field id="sss_s"    long_name="Actual bulk SSS in use (possible slabmod correction / sss_m)"              unit="-"    />
+      <field id="sst_s"    long_name="Actual bulk SST in use (possible slabmod correction / sst_m)"              unit="degC" />
       <field id="ssst"     long_name="Skin sea surface temperature"                                              unit="degC" />
       <field id="frz_m"    long_name="Freezing point temperature of water based on `sss_m`"                      unit="degC" />
-      <field id="dsss_s"   long_name="`slab SSS - prescribed SSS`"                                               unit="-" />
-      <field id="dsst_s"   long_name="`slab SST - prescribed SST`"                                               unit="degC" />
+      <field id="dsss_s"   long_name="`actual bulk SSS - prescribed bulk SSS` (`sss_s-sss_m`)"                   unit="-"    />
+      <field id="dsst_s"   long_name="`actual bulk SST - prescribed bulk SST` (`sst_s-sst_m`)`"                  unit="degC" />
 
       <!-- rheology convergence tests -->
       <field id="uice_cvg"   long_name="sea ice velocity convergence"      standard_name="sea_ice_velocity_convergence"      unit="m/s" />

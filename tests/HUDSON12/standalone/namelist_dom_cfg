@@ -55,32 +55,47 @@
    nn_foss     = 1         !  frequency of OSS module call
       !                    !  (control sea-ice & iceberg model call)
       !              ! Type of coupling (Ice/Ocean) :
+   ln_prs_oce  = .true.    !  uses a prescribed surface state of the ocean => standalone mode
    ln_cpl_oce  = .false.   !  ocean coupled   formulation          ( requires key_oasis3 )
+      !
+   ln_ice_embd = .false.   !  =T embedded sea-ice (pressure + mass and salt exchanges)
+      !                    !  =F levitating ice (no pressure, mass and salt exchanges)
 /
 !!
 !-----------------------------------------------------------------------
-&namoss_ssx    !   Surface ocean state (when coupled=>init and not coupled =>prescibed) 
+&namoss_ssx    !   Surface ocean state (`ln_prs_oce=T` => prescibed sate | `ln_cpl_oce=T`=>initial state)
 !-----------------------------------------------------------------------
-   ln_ssxread   = .true.    !  =T Read in file ;  =F set all to 0. (see ossssm)
+   ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
       ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
-      ln_read_frq = .false.   !  specify whether we must read frq or not
+      ln_read_e3t = .false.   !  specify whether we must read `e3t` or not
+         rn_e3t_0 = 1.        !  if `ln_read_e3t=F` prescribed thickness of 1st ocean level to impose (m)
+      ln_read_frq = .false.   !  specify whether we must read `frq` or not
+         rn_frq_0 = 0.65      !  if `ln_read_frq=F` prescr. solar flux penetr. through 1st ocean level
    !
-   cn_dir      = './'      !  root directory for the ocean data location
-   !___________!_________________________!___________________!___________!_____________!________!___________!__________________!__________!_______________!
-   !           !  file name              ! frequency (hours) ! variable  ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
-   !           !                         !  (if <0  months)  !   name    !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_usp = 'HUDSON12_SSX_6h',   6., 'uos'     ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_vsp = 'HUDSON12_SSX_6h',   6., 'vos'     ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_tem = 'HUDSON12_SSX_6h',   6., 'tos'     ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_sal = 'HUDSON12_SSX_6h',   6., 'sos'     ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_ssh = 'HUDSON12_SSX_6h',   6., 'zos'     ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_e3t = 'HUDSON12_SSX_6h',   6., 'e3t_m'   ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_frq = 'HUDSON12_SSX_6h',   6., 'frq_m'   ,   .true.    , .false., 'yearly'  ,    ''            ,    ''    ,    ''
+   ! Relevant if `ln_prs_oce=T`:
+   ln_ssv_T    = .true. !YES! !  prescribed sea surface velocities are provided on T grid points (default is U,V!)
+   !
+   ln_slab_sst = .true.       ! if `ln_slab_sst=T`: correct the prescribed SST based on a slab model approach
+         rn_mld_0 = 10.       ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT USED'`
+         rn_ncs_sst = 0.5     ! nudging coefficient for SLAB bulk SST correction (the higher, the closer to the prescribed SST)
+   !
+   cn_dir      = './'    !  root directory for the ocean data location
+   !___________!_____________!_________________!___________!_____________!________!___________!__________________!__________!_______________!
+   !        !  file name     !frequency (hours)! variable  ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
+   !        !                !  (if <0  months)!   name    !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
+   sn_usp = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'uos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_vsp = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'vos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_tem = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'tos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_sal = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'sos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_ssh = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'zos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_mld = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'mld'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_e3t      = 'NOT USED'              ,  <FRQ_SSX>., 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_frq      = 'NOT USED'              ,  <FRQ_SSX>., 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
 /
 !!
 !!
 !!======================================================================
-!!            ***  Surface Boundary Condition namelists  ***          !!
+!!  ***  Surface Boundary Conditions (ice & ocean) namelists  ***     !!
 !!                                                                    !!
 !!   namsbc          surface boundary condition (ice & ocean) manager   (default: NO selection)
 !!   namsbc_flx      flux               formulation                     (ln_flx     =T)
@@ -98,9 +113,8 @@
 &namsbc_blk    !   namsbc_blk  generic Bulk formula          (ln_blk =T)
 !-----------------------------------------------------------------------
    !                    !  bulk algorithm :
-   ln_NCAR      = .false.     ! "NCAR"      algorithm   (Large and Yeager 2008)
+   ln_NCAR      = .false.    ! "NCAR"      algorithm   (Large and Yeager 2008)
    ln_COARE_3p0 = .false.    ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   ln_COARE_3p6 = .false.    ! "COARE 3.6" algorithm   (Edson et al. 2013)
    ln_ECMWF     = .true.     ! "ECMWF"     algorithm   (IFS cycle 45r1)
       rn_zqt       =  2.     !  Air temperature & humidity reference height (m)
       rn_zu        = 10.     !  Wind vector reference height (m)
@@ -153,7 +167,7 @@
 &nameos        !   ocean Equation Of Seawater                           (default: NO selection)
 !-----------------------------------------------------------------------
 /
-!!
+!
 !-----------------------------------------------------------------------
 &nammpp        !   Massively Parallel Processing
 !-----------------------------------------------------------------------

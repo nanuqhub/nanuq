@@ -57,7 +57,7 @@
 #
 # Debug with OpenACC:
 # ~~~~~~~~~~~~~~~~~~~
-#%FPPFLAGS            -P  -traditional %ACC_FPP_FLAGS
+#%FPPFLAGS            -P  -traditional %ACC_FPP_FLAGS -D_TRDBG
 #%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS %ACC_BASE_FLAGS %ACC_DEV_FLAGS
 
 
@@ -68,6 +68,7 @@
 #
 # Debug on CPU only:
 # ~~~~~~~~~~~~~~~~~~
+###%FPPFLAGS            -P  -traditional -D_TRDBG
 #%FPPFLAGS            -P  -traditional
 #%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
 

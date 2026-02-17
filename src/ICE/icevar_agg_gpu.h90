@@ -1,0 +1,286 @@
+   SUBROUTINE ice_var_agg_gpu( kn )
+      !!-------------------------------------------------------------------
+      !!                ***  ROUTINE ice_var_agg_gpu  ***
+      !!
+      !! ** Purpose :   aggregates ice-thickness-category variables to
+      !!              all-ice variables, i.e. it turns VGLO into VAGG
+      !!
+      !!       full    arrays: vt_i, vt_s, at_i, vt_ip, vt_il, at_ip
+      !!       reduced arrays: the rest
+      !!-------------------------------------------------------------------
+      INTEGER, INTENT( in ) ::   kn     ! =1 state variables only
+      !                                 ! >1 state variables + others
+      !
+      INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
+      REAL(wp) ::   z1_vt_i, z1_at_i
+      !!-------------------------------------------------------------------
+      IF( ln_timing )  CALL timing_start('ice_var_agg_gpu')
+      !
+      !$acc data present( kmsk_ice_f,kmsk_ice_t,kmsk_ice_u,kmsk_ice_v,om_i,sm_i,st_i,t_i,tm_i,tm_s,tm_si,tm_su,v_s,vt_i,vt_s,t_s,v_i,szv_i )
+      !$acc data present( af_i,a_i,at_i,ato_i,au_i,av_i,et_i,et_s,hm_i,hm_i_f,hm_s,umask,vmask,xmskf )
+      ! --> at_ip,hm_ip,vt_ip,hm_il,vt_il
+
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            vt_i(ji,jj) = 0._wp
+            vt_s(ji,jj) = 0._wp
+            at_i(ji,jj) = 0._wp
+            !
+            ato_i(ji,jj) = 0._wp
+            hm_i(ji,jj)  = 0._wp
+            hm_s(ji,jj)  = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !
+      ! --- integrated values
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+            !$acc loop seq
+            DO jl=1, jpl    ! integrated values
+               vt_i(ji,jj)  = vt_i(ji,jj)  + v_i (ji,jj,jl)
+               vt_s(ji,jj)  = vt_s(ji,jj)  + v_s (ji,jj,jl)
+               at_i(ji,jj)  = at_i(ji,jj)  + a_i (ji,jj,jl)
+            END DO !DO jl=1, jpl
+            !
+            ato_i(ji,jj) = 1._wp - at_i(ji,jj)  ! open water fraction
+            !
+            IF( at_i(ji,jj) <= epsi20 ) THEN
+               hm_i(ji,jj) = 0._wp
+               hm_s(ji,jj) = 0._wp
+            ELSE
+               z1_at_i = 1._wp / at_i(ji,jj)
+               hm_i(ji,jj) = vt_i(ji,jj) * z1_at_i
+               hm_s(ji,jj) = vt_s(ji,jj) * z1_at_i
+            ENDIF
+            !
+         END DO
+      END DO
+      !$acc end parallel loop
+
+# if ! defined _OPENACC
+      CALL lbc_lnk( 'ice_var_agg_gpu',  hm_i,'T',1._wp, hm_s,'T',1._wp, ato_i,'T',1._wp, vt_i,'F',1._wp, vt_s,'T',1._wp, at_i,'F',1._wp )
+# endif
+
+
+      IF( ln_icethd ) THEN
+
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               et_s(ji,jj) = 0._wp
+               et_i(ji,jj) = 0._wp
+               st_i(ji,jj) = 0._wp
+               !
+               tm_su(ji,jj) = 0._wp
+            END DO
+         END DO
+         !$acc end parallel loop
+
+         ! --- integrated values
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               !$acc loop seq
+               DO jl=1, jpl    ! integrated values
+                  !$acc loop seq
+                  DO jk=1, nlay_s
+                     et_s(ji,jj) = et_s(ji,jj) + e_s(ji,jj,jk,jl)
+                  END DO
+                  !$acc loop seq
+                  DO jk=1, nlay_i
+                     et_i(ji,jj) =        et_i(ji,jj) +   e_i(ji,jj,jk,jl)
+                     st_i(ji,jj) = MERGE( st_i(ji,jj) + szv_i(ji,jj,jk,jl)  ,  st_i(ji,jj)  ,  nn_icesal == 4 )
+                  END DO
+                  !
+                  st_i(ji,jj) = MERGE( st_i(ji,jj) + sv_i(ji,jj,jl)  ,  st_i(ji,jj)  ,  nn_icesal /= 4 )
+                  !
+               END DO !DO jl=1, jpl
+               !
+               !at_ip_eff(ji,jj) = SUM( a_ip_eff(ji,jj,:) * a_i(ji,jj,:) )
+               !
+               !!GS: tm_su always needed by ABL over sea-ice
+               IF( at_i(ji,jj) <= epsi20 ) THEN
+                  tm_su  (ji,jj) = rt0
+               ELSE
+                  z1_at_i = 1._wp / at_i(ji,jj)
+                  tm_su(ji,jj) = 0._wp
+                  !$acc loop seq
+                  DO jl=1, jpl    ! integrated values
+                     tm_su(ji,jj) = tm_su(ji,jj) + t_su(ji,jj,jl) * a_i(ji,jj,jl)
+                  END DO
+                  tm_su(ji,jj) = tm_su(ji,jj) * z1_at_i
+               ENDIF
+               !
+               !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
+               !   at_ip(ji,jj) = 0._wp
+               !   vt_ip(ji,jj) = 0._wp
+               !   vt_il(ji,jj) = 0._wp
+               !   !$acc loop seq
+               !   DO jl=1, jpl    ! integrated values
+               !      at_ip(ji,jj) = at_ip(ji,jj) + a_ip(ji,jj,jl) ! melt ponds
+               !      vt_ip(ji,jj) = vt_ip(ji,jj) + v_ip(ji,jj,jl)
+               !      vt_il(ji,jj) = vt_il(ji,jj) + v_il(ji,jj,jl)
+               !   END DO
+               !ENDIF
+            END DO
+         END DO
+         !$acc end parallel loop
+
+# if ! defined _OPENACC
+         CALL lbc_lnk( 'ice_var_agg_gpu',  tm_su,'T',1._wp, et_s,'T',1._wp, et_i,'T',1._wp, st_i,'T',1._wp )
+# endif
+
+
+         ! The following fields are calculated for diagnostics and outputs only
+         ! ==> Do not use them for other purposes
+         IF( kn > 1 ) THEN
+            !
+            !$acc parallel loop collapse(2)
+            DO jj=Njs0-nn_hls, Nje0+nn_hls
+               DO ji=Nis0-nn_hls, Nie0+nn_hls
+                  om_i(ji,jj)  = 0._wp
+                  sm_i(ji,jj) = 0._wp
+                  tm_i(ji,jj) = 0._wp
+                  tm_s(ji,jj) = 0._wp
+               END DO
+            END DO
+            !$acc end parallel loop
+
+            !$acc parallel loop collapse(2)
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+
+                  z1_at_i = MERGE( 1._wp / MAX( at_i(ji,jj), epsi20)  ,  0._wp  ,  at_i(ji,jj) > epsi20 )
+                  z1_vt_i = MERGE( 1._wp / MAX( vt_i(ji,jj), epsi20)  ,  0._wp  ,  vt_i(ji,jj) > epsi20)
+
+                  ! mean temperature (K), salinity and age
+                  !$acc loop seq
+                  DO jl=1, jpl
+                     tm_si(ji,jj) = tm_si(ji,jj) + t_si(ji,jj,jl) * a_i(ji,jj,jl)
+                     om_i (ji,jj) = om_i (ji,jj) + oa_i(ji,jj,jl)
+                  END DO
+                  tm_si(ji,jj) = tm_si(ji,jj) * z1_at_i
+                  om_i (ji,jj) = om_i (ji,jj) * z1_at_i
+                  sm_i (ji,jj) = st_i (ji,jj) * z1_vt_i
+               END DO
+            END DO
+            !$acc end parallel loop
+
+
+            !$acc parallel loop collapse(2)
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+
+                  ! put rt0 where there is no ice
+                  IF( at_i(ji,jj) <= epsi20 ) THEN
+                     tm_si(ji,jj) = rt0
+                     tm_i (ji,jj) = rt0
+                     tm_s (ji,jj) = rt0
+                     !
+                  ELSE
+                     !
+                     tm_i(ji,jj) = 0._wp
+                     tm_s(ji,jj) = 0._wp
+                     !$acc loop seq
+                     DO jl = 1, jpl
+                        !$acc loop seq
+                        DO jk=1, nlay_i
+                           IF( vt_i(ji,jj) > epsi20 ) THEN
+                              tm_i(ji,jj) = tm_i(ji,jj) + r1_nlay_i * t_i (ji,jj,jk,jl) * v_i(ji,jj,jl) / vt_i(ji,jj)
+                           ELSE
+                              tm_i(ji,jj) = rt0
+                           ENDIF
+                        END DO
+                        !$acc loop seq
+                        DO jk=1, nlay_s
+                           IF( vt_s(ji,jj) > epsi20 ) THEN
+                              tm_s(ji,jj) = tm_s(ji,jj) + r1_nlay_s * t_s (ji,jj,jk,jl) * v_s(ji,jj,jl) / vt_s(ji,jj)
+                           ELSE
+                              tm_s(ji,jj) = rt0
+                           ENDIF
+                        END DO
+                        !
+                     END DO !DO jl = 1, jpl
+                     !
+                  ENDIF !IF( at_i(ji,jj) <= epsi20 )
+
+               END DO !DO ji=Nis0, Nie0
+            END DO !DO jj=Njs0, Nje0
+            !$acc end parallel loop
+
+# if ! defined _OPENACC
+            CALL lbc_lnk( 'ice_var_agg_gpu',  tm_si,'T',1._wp, om_i,'T',1._wp, sm_i,'F',1._wp, tm_i,'T',1._wp, tm_s,'F',1._wp )
+# endif
+
+            ! mean melt pond depth
+            !WHERE( at_ip(:,:) > epsi20 )
+            !   hm_ip(:,:) = vt_ip(:,:) / at_ip(:,:)
+            !   hm_il(:,:) = vt_il(:,:) / at_ip(:,:)
+            !ELSEWHERE
+            !   hm_ip(:,:) = 0._wp
+            !   hm_il(:,:) = 0._wp
+            !END WHERE
+            !
+         ENDIF ! IF( kn > 1 )
+
+
+      ENDIF !IF( ln_icethd )
+
+
+      !! Ice concentration and thickness @F,U,V:
+      !
+      IF( ln_use_weno_rmp ) THEN
+         CALL rmpT2F_A_h_wn5s( at_i, hm_i, af_i, hm_i_f )
+      ELSE
+         CALL do_rmpT2F( at_i, af_i,    lconserv=.TRUE. )
+         CALL do_rmpT2F( hm_i, hm_i_f,  lconserv=.TRUE. )
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               af_i(ji,jj)   = MIN( MAX(   af_i(ji,jj), 0._wp ), rn_amax )
+               hm_i_f(ji,jj) =      MAX( hm_i_f(ji,jj), 0._wp )
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
+
+      CALL do_rmpT2U( at_i, au_i,  lconserv=.TRUE. )
+      CALL do_rmpT2V( at_i, av_i,  lconserv=.TRUE. )
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            au_i(ji,jj) = MIN( MAX( au_i(ji,jj) , 0._wp ) , rn_amax )
+            av_i(ji,jj) = MIN( MAX( av_i(ji,jj) , 0._wp ) , rn_amax )
+         END DO
+      END DO
+      !$acc end parallel loop
+
+# if !defined _OPENACC
+      CALL lbc_lnk( 'ice_var_agg_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp,  au_i,'U',1._wp,  av_i,'V',1._wp )
+# endif
+
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            ! For diagnostics:
+            kmsk_ice_t(ji,jj) = xmskt(ji,jj)
+            kmsk_ice_f(ji,jj) = xmskf(ji,jj)
+            IF( at_i(ji,jj) < rAmin_fld ) kmsk_ice_t(ji,jj) = 0
+            IF( af_i(ji,jj) < rAmin_fld ) kmsk_ice_f(ji,jj) = 0
+            ! For rheology and diags:
+            kmsk_ice_u(ji,jj) = INT(umask(ji,jj,1))
+            kmsk_ice_v(ji,jj) = INT(vmask(ji,jj,1))
+            IF( au_i(ji,jj) < rAmin_fld ) kmsk_ice_u(ji,jj) = 0
+            IF( av_i(ji,jj) < rAmin_fld ) kmsk_ice_v(ji,jj) = 0
+         END DO
+      END DO
+      !$acc end parallel loop
+
+      !$acc end data
+      !$acc end data
+      IF( ln_timing )  CALL timing_stop('ice_var_agg_gpu')
+      !
+   END SUBROUTINE ice_var_agg_gpu

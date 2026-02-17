@@ -10,8 +10,6 @@ MODULE sbcblk_algo_ncar
    !!   * the effective bulk wind speed at 10m Ubzu
    !!   => all these are used in bulk formulas in sbcblk.F90
    !!
-   !!    Using the bulk formulation/param. of Large & Yeager 2008
-   !!
    !!       Routine turb_ncar maintained and developed in AeroBulk
    !!                     (https://github.com/brodeau/aerobulk/)
    !!
@@ -34,8 +32,8 @@ MODULE sbcblk_algo_ncar
    !!                   adjusts t_air and q_air from zt to zu m
    !!                   returns the effective bulk wind speed at 10m
    !!----------------------------------------------------------------------
-   USE in_out_manager, ONLY: ln_timing
    USE phycst          ! physical constants
+   USE in_out_manager, ONLY: ln_timing
    USE sbc_phy         ! Catalog of functions for physical/meteorological parameters in the marine boundary layer
    USE timing         ! Timing
 
@@ -44,12 +42,11 @@ MODULE sbcblk_algo_ncar
 
    PUBLIC :: TURB_NCAR   ! called by sbcblk.F90
 
-   !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE turb_ncar( zt, zu, sst, t_zt, ssq, q_zt, U_zu,   &
-      &                        Cd, Ch, Ce, t_zu, q_zu, Ubzu,   &
-      &                        nb_iter )
+   SUBROUTINE turb_ncar( zt, zu, pSST, pt_zt, pSSQ, pq_zt, pU_zu,   &
+      &                  pCd, pCh, pCe, pt_zu, pq_zu, pUbzu,   &
+      &                   nb_iter )
       !!----------------------------------------------------------------------------------
       !!                      ***  ROUTINE  turb_ncar  ***
       !!
@@ -60,23 +57,23 @@ CONTAINS
       !!
       !! INPUT :
       !! -------
-      !!    *  zt   : height for temperature and spec. hum. of air            [m]
-      !!    *  zu   : height for wind speed (usually 10m)                     [m]
-      !!    *  sst  : bulk SST                                                [K]
-      !!    *  t_zt : potential air temperature at zt                         [K]
-      !!    *  ssq  : specific humidity at saturation at SST                  [kg/kg]
-      !!    *  q_zt : specific humidity of air at zt                          [kg/kg]
-      !!    *  U_zu : scalar wind speed at zu                                 [m/s]
+      !!    *  zt    : height for temperature and spec. hum. of air            [m]
+      !!    *  zu    : height for wind speed (usually 10m)                     [m]
+      !!    *  pSST  : bulk SST                                               [deg.C]
+      !!    *  pt_zt : potential air temperature at zt                         [K]
+      !!    *  pPSSQ  : specific humidity at saturation at SST                  [kg/kg]
+      !!    *  pq_zt : specific humidity of air at zt                          [kg/kg]
+      !!    *  pU_zu : scalar wind speed at zu                                 [m/s]
       !!
       !!
       !! OUTPUT :
       !! --------
-      !!    *  Cd     : drag coefficient
-      !!    *  Ch     : sensible heat coefficient
-      !!    *  Ce     : evaporation coefficient
-      !!    *  t_zu   : pot. air temperature adjusted at wind height zu       [K]
-      !!    *  q_zu   : specific humidity of air        //                    [kg/kg]
-      !!    *  Ubzu   : bulk wind speed at zu                                 [m/s]
+      !!    *  pCd     : drag coefficient
+      !!    *  pCh     : sensible heat coefficient
+      !!    *  pCe     : evaporation coefficient
+      !!    *  pt_zu   : pot. air temperature adjusted at wind height zu       [K]
+      !!    *  pq_zu   : specific humidity of air        //                    [kg/kg]
+      !!    *  pUbzu   : bulk wind speed at zu                                 [m/s]
       !!
       !! OPTIONAL INPUT:
       !! ---------------
@@ -84,75 +81,83 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, June 2019 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      REAL(wp), INTENT(in   )                     ::   zt       ! height for t_zt and q_zt                  [m]
-      REAL(wp), INTENT(in   )                     ::   zu       ! height for U_zu                           [m]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   sst      ! sea surface temperature              [Kelvin]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   t_zt     ! potential air temperature            [Kelvin]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   ssq      ! sea surface specific humidity         [kg/kg]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   q_zt     ! specific air humidity at zt           [kg/kg]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   U_zu     ! relative wind module at zu              [m/s]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   Cd       ! transfer coefficient for momentum         [-]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   Ch       ! transfer coefficient for sensible heat    [-]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   Ce       ! transfert coefficient for evaporation     [-]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   t_zu     ! pot. air temp. adjusted at zu             [K]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   q_zu     ! spec. humidity adjusted at zu         [kg/kg]
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   Ubzu     ! bulk wind speed at zu                   [m/s]
+      REAL(wp), INTENT(in   )                     ::   zt       ! height for pt_zt and pq_zt                [m]
+      REAL(wp), INTENT(in   )                     ::   zu       ! height for pU_zu                          [m]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pSST     ! BULK SST                              [deg.C]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pt_zt    ! potential air temperature            [Kelvin]
+      REAL(wp), INTENT(inout), DIMENSION(jpi,jpj) ::   pSSQ     ! sea surface specific humidity         [kg/kg]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pq_zt    ! specific air humidity at zt           [kg/kg]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pU_zu    ! relative wind module at zu              [m/s]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCd      ! transfer coefficient for momentum         [-]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCh      ! transfer coefficient for sensible heat    [-]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCe      ! transfert coefficient for evaporation     [-]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pt_zu    ! pot. air temp. adjusted at zu             [K]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pq_zu    ! spec. humidity adjusted at zu         [kg/kg]
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pUbzu    ! bulk wind speed at zu                   [m/s]
+      !
       INTEGER , INTENT(in   ), OPTIONAL           :: nb_iter    ! number of iterations
       !!----------------------------------------------------------------------------------
       INTEGER  :: ji, jj, nbit, jit
       REAL(wp) :: zm_ztzu                   ! => `1.` if `zu /= zt`, `0.` otherwize
-      REAL(wp) :: zstab, zCdN, zCeN, zChN   ! 10m neutral latent/sensible coefficient
+      REAL(wp) :: zstab, zCd, zCe, zCh, zCdN, zCeN, zChN   ! 10m neutral latent/sensible coefficient
       REAL(wp) :: zsqrt_Cd, zsqrt_CdN       ! square root of Cd_n10
       REAL(wp) :: zeta_u, zeta_t            ! stability parameter at height zu and zt
       REAL(wp) :: zlog1, zlog2, ztmp, ztmp2
       REAL(wp) :: zdt, zdq, zus, zts, zqs, z1oL, zpsi_m, zUn10
+      REAL(wp) :: zSST, zSSQ, zUbzu, zt_zt, zq_zt, zt_zu, zq_zu
       !!----------------------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('turb_ncar')
+      !$acc data present( pSST, pt_zt, pSSQ, pq_zt, pU_zu, pCd, pCh, pCe, pt_zu, pq_zu, pUbzu )
 
       nbit = nb_iter0
       IF( PRESENT(nb_iter) ) nbit = nb_iter
 
-      zm_ztzu = 0.5_wp + SIGN( 0.5_wp, ABS(zu-zt) - 0.01_wp ) ! => `1.` if `zu /= zt`, `0.` otherwize
-
-      Ubzu = MAX( 0.5_wp , U_zu )   !  relative wind speed at zu (normally 10m), we don't want to fall under 0.5 m/s
+      zm_ztzu = MERGE( 0._wp, 1._wp,  ABS(zu - zt) < 0.01_wp )  ! => `1.` if `zu /= zt`, `0.` otherwize
 
       !! ij-independant constants:
       zlog1 = LOG(zt/zu)
       zlog2 = LOG(zu/10._wp)
 
-      DO jj = Njs0-1, Nje0+1
-         DO ji = Nis0-1, Nie0+1
+      !$acc parallel loop collapse(2)
+      DO jj = Njs0, Nje0
+         DO ji = Nis0, Nie0
+
+            zSST  =  pSST(ji,jj) + rt0   ! => to Kelvin
+            zt_zt = pt_zt(ji,jj)            
+            zSSQ  =  pSSQ(ji,jj)
+            zq_zt = pq_zt(ji,jj)
+            zUbzu  = MAX( 0.5_wp , pU_zu(ji,jj) ) ! relative wind speed at zu (normally 10m), we don't want to fall under 0.5 m/s
 
             !! First guess of stability:
-            zstab = 0.5_wp + SIGN( 0.5_wp , virt_temp(t_zt(ji,jj), q_zt(ji,jj)) - virt_temp(sst(ji,jj), ssq(ji,jj)) )
+            zstab = 0.5_wp + SIGN( 0.5_wp , virt_temp(zt_zt, zq_zt) - virt_temp(zSST, zSSQ) )
 
             !! Neutral coefficients at 10m:
-            zCdN = cd_n10_ncar( Ubzu(ji,jj) )
+            zCdN = cd_n10_ncar( zUbzu )
             zsqrt_CdN = SQRT( zCdN )
 
             !! Initializing transf. coeff. with their first guess neutral equivalents :
-            Cd(ji,jj) = zCdN
-            Ce(ji,jj) = ce_n10_ncar( zsqrt_CdN )
-            Ch(ji,jj) = ch_n10_ncar( zsqrt_CdN , zstab )   ! zstab is stability (1/0)
+            zCd = zCdN
+            zCe = ce_n10_ncar( zsqrt_CdN )
+            zCh = ch_n10_ncar( zsqrt_CdN , zstab )   ! zstab is stability (1/0)
             zsqrt_Cd = zsqrt_CdN
 
             !! Initializing values at z_u with z_t values:
-            t_zu(ji,jj) = MAX( t_zt(ji,jj) ,  180._wp )   ! who knows what's given on masked-continental regions...
-            q_zu(ji,jj) = MAX( q_zt(ji,jj) , 1.e-6_wp )   !               "
+            zt_zu = MAX( zt_zt ,  180._wp )   ! who knows what's given on masked-continental regions...
+            zq_zu = MAX( zq_zt ,    0._wp )   !               "
 
             !! ITERATION BLOCK
             DO jit = 1, nbit
                !
-               zdt = t_zu(ji,jj) - sst(ji,jj)   ! Updating air/sea differences
-               zdq = q_zu(ji,jj) - ssq(ji,jj)
+               zdt = zt_zu - zSST   ! Updating air/sea differences
+               zdq = zq_zu - zSSQ
 
                ! Updating turbulent scales :   (L&Y 2004 Eq. (7))
-               zus = zsqrt_Cd*Ubzu(ji,jj)      ! u*
-               zts = Ch(ji,jj)/zsqrt_Cd*zdt    ! theta*
-               zqs = Ce(ji,jj)/zsqrt_Cd*zdq    ! q*
+               zus = zsqrt_Cd*zUbzu      ! u*
+               zts = zCh/zsqrt_Cd*zdt    ! theta*
+               zqs = zCe/zsqrt_Cd*zdq    ! q*
 
                ! Estimate the inverse of Obukov length (1/L) at height zu:
-               z1oL = One_on_L( t_zu(ji,jj), q_zu(ji,jj), zus, zts, zqs )
+               z1oL = One_on_L( zt_zu, zq_zu, zus, zts, zqs )
 
                !! Stability parameters :
                zeta_u   = zu*z1oL
@@ -162,24 +167,24 @@ CONTAINS
                zeta_t = zt*z1oL ! zeta_t !
                zeta_t = SIGN( MIN(ABS(zeta_t),10._wp), zeta_t )
                ztmp = zlog1 + psi_h_ncar(zeta_u) - psi_h_ncar(zeta_t)
-               t_zu(ji,jj) =       t_zt(ji,jj) - zm_ztzu*zts/vkarmn*ztmp
-               q_zu(ji,jj) = MAX(  q_zt(ji,jj) - zm_ztzu*zqs/vkarmn*ztmp , 0._wp )
+               zt_zu =       zt_zt - zm_ztzu*zts/vkarmn*ztmp
+               zq_zu = MAX(  zq_zt - zm_ztzu*zqs/vkarmn*ztmp , 0._wp )
 
                ! Update neutral wind speed at 10m and neutral Cd at 10m (L&Y 2004 Eq. 9a)...
                !   In very rare low-wind conditions, the old way of estimating the
                !   neutral wind speed at 10m leads to a negative value that causes the code
                !   to crash. To prevent this a threshold of 0.25m/s is imposed.
                zpsi_m = psi_m_ncar(zeta_u)
-               zUn10 = MAX( 0.25_wp , UN10_from_CD(zu, Ubzu(ji,jj), Cd(ji,jj), ppsi=zpsi_m) )
+               zUn10 = MAX( 0.25_wp , UN10_from_CD(zu, zUbzu, zCd, ppsi=zpsi_m) )
                zCdN = cd_n10_ncar(zUn10)
                zsqrt_CdN = SQRT(zCdN)
 
                !! Update of transfer coefficients:
                !! C_D
                ztmp  = 1._wp + zsqrt_CdN/vkarmn*(zlog2 - zpsi_m)   ! L&Y 2004 Eq. (10a) (zpsi_m == psi_m(zeta_u))
-               Cd(ji,jj)     = MAX( zCdN / ( ztmp*ztmp ), Cx_min )
+               zCd     = MAX( zCdN / ( ztmp*ztmp ), Cx_min )
                !! C_H and C_E
-               zsqrt_Cd = SQRT( Cd(ji,jj) )
+               zsqrt_Cd = SQRT( zCd )
                ztmp = ( zlog2 - psi_h_ncar(zeta_u) ) / vkarmn / zsqrt_CdN
                ztmp2 = zsqrt_Cd / zsqrt_CdN
 
@@ -187,13 +192,24 @@ CONTAINS
                zChN  = 1.e-3_wp * zsqrt_CdN*(18._wp*zstab + 32.7_wp*(1._wp - zstab))  ! L&Y 2004 eq. (6c-6d)
                zCeN  = 1.e-3_wp * (34.6_wp * zsqrt_CdN)                             ! L&Y 2004 eq. (6b)
 
-               Ch(ji,jj)    = MAX( zChN*ztmp2 / ( 1._wp + zChN*ztmp ) , Cx_min ) ! L&Y 2004 eq. (10b)
-               Ce(ji,jj)    = MAX( zCeN*ztmp2 / ( 1._wp + zCeN*ztmp ) , Cx_min ) ! L&Y 2004 eq. (10c)
+               zCh    = MAX( zChN*ztmp2 / ( 1._wp + zChN*ztmp ) , Cx_min ) ! L&Y 2004 eq. (10b)
+               zCe    = MAX( zCeN*ztmp2 / ( 1._wp + zCeN*ztmp ) , Cx_min ) ! L&Y 2004 eq. (10c)
 
             END DO !DO jit = 1, nb_iter
 
-         END DO
-      END DO
+            !! Update arrays that are returned by the routine:
+            pCd(ji,jj)   = zCd
+            pCe(ji,jj)   = zCe
+            pCh(ji,jj)   = zCh            
+            pt_zu(ji,jj) = zt_zu
+            pq_zu(ji,jj) = zq_zu
+            pUbzu(ji,jj) = zUbzu
+
+         END DO !DO ji = Nis0, Nie0
+      END DO !DO jj = Njs0, Nje0
+      !$acc end parallel loop
+
+      !$acc end data
 
       IF( ln_timing )   CALL timing_stop('turb_ncar')
 
@@ -202,6 +218,7 @@ CONTAINS
 
    !!===============================================================================================
    FUNCTION cd_n10_ncar( pw10 )
+      !$acc routine
       !!----------------------------------------------------------------------------------
       !! Estimate of the neutral drag coefficient at 10m as a function
       !! of neutral wind  speed at 10m
@@ -233,6 +250,7 @@ CONTAINS
 
    !!===============================================================================================
    FUNCTION ch_n10_ncar( psqrtcdn10 , pstab )
+      !$acc routine
       !!----------------------------------------------------------------------------------
       !! Estimate of the neutral heat transfer coefficient at 10m      !!
       !! Origin: Large & Yeager 2008, Eq. (9) and (12)
@@ -252,6 +270,7 @@ CONTAINS
 
    !!===============================================================================================
    FUNCTION ce_n10_ncar( psqrtcdn10 )
+      !$acc routine
       !!----------------------------------------------------------------------------------
       !! Estimate of the neutral heat transfer coefficient at 10m      !!
       !! Origin: Large & Yeager 2008, Eq. (9) and (13)
@@ -266,6 +285,7 @@ CONTAINS
 
    !!===============================================================================================
    FUNCTION psi_m_ncar( pzeta )
+      !$acc routine
       !!----------------------------------------------------------------------------------
       !! Universal profile stability function for momentum
       !!    !! Psis, L&Y 2004, Eq. (8c), (8d), (8e)
@@ -300,6 +320,7 @@ CONTAINS
 
    !!===============================================================================================
    FUNCTION psi_h_ncar( pzeta )
+      !$acc routine
       !!----------------------------------------------------------------------------------
       !! Universal profile stability function for temperature and humidity
       !!    !! Psis, L&Y 2004, Eq. (8c), (8d), (8e)

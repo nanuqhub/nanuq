@@ -75,16 +75,12 @@ MODULE sbc_oce
    !! wndm is used compute surface gases exchanges in ice-free ocean or leads
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   wndm              !: wind speed module at T-point (=|U10m-Uoce|)  [m/s]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   rhoa              !: air density at "rn_zu" m above the sea       [kg/m3]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qsr               !: sea heat flux:     solar                     [W/m2]
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qsr    , qsr_b    !: sea heat flux:     solar                     [W/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qns    , qns_b    !: sea heat flux: non solar                     [W/m2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qsr_tot           !: total     solar heat flux (over sea and ice) [W/m2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qns_tot           !: total non solar heat flux (over sea and ice) [W/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   emp    , emp_b    !: freshwater budget: volume flux               [Kg/m2/s]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   sfx    , sfx_b    !: salt flux                                    [PSS.kg/m2/s]
    !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   emp_tot           !: total E-P over ocean and ice                 [Kg/m2/s]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   fmmflx            !: freshwater budget: freezing/melting          [Kg/m2/s]
-   !!
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   fr_i              !: ice fraction = 1 - lead fraction      (between 0 to 1)
 
    !!---------------------------------------------------------------------
    !! ABL Vertical Domain size
@@ -125,18 +121,15 @@ CONTAINS
       ALLOCATE( utau(jpi,jpj) , utau_b(jpi,jpj) , taum(jpi,jpj) ,     &
          &      vtau(jpi,jpj) , vtau_b(jpi,jpj) , wndm(jpi,jpj) , rhoa(jpi,jpj) , STAT=ierr(1) )
       !
-      ALLOCATE( qns_tot(jpi,jpj) , qns  (jpi,jpj) , qns_b(jpi,jpj),        &
-         &      qsr_tot(jpi,jpj) , qsr  (jpi,jpj) ,                        &
+      ALLOCATE( qns(jpi,jpj) , qns_b(jpi,jpj) , qsr(jpi,jpj) , qsr_b(jpi,jpj),  &
          &      emp    (jpi,jpj) , emp_b(jpi,jpj) ,                        &
          &      sfx    (jpi,jpj) , sfx_b(jpi,jpj), fmmflx(jpi,jpj), STAT=ierr(2) )
       !  , emp_tot(jpi,jpj)
-      qns_tot(:,:)=0._wp ; qns(:,:)=0._wp ; qns_b(:,:)=0._wp
-      qsr_tot(:,:)=0._wp ; qsr(:,:)=0._wp
+      qns(:,:)=0._wp ; qns_b(:,:)=0._wp
+      qsr(:,:)=0._wp ; qsr_b(:,:)=0._wp
       emp(:,:)=0._wp ; emp_b(:,:)=0._wp
       sfx(:,:)=0._wp ; sfx_b(:,:)=0._wp ; fmmflx(:,:)=0._wp
 
-      ALLOCATE(  fr_i(jpi,jpj), STAT=ierr(3) )
-      !
       ALLOCATE( fatm_theta(jpi,jpj), fatm_q(jpi,jpj), fatm_slp(jpi,jpj), fatm_wnd(jpi,jpj), &
          &      fatm_prcp(jpi,jpj),  fatm_snow(jpi,jpj), fatm_u(jpi,jpj), fatm_v(jpi,jpj),  &
          &      fatm_dqsw(jpi,jpj),  fatm_dqlw(jpi,jpj),  STAT=ierr(4) ) !#LB
@@ -147,10 +140,10 @@ CONTAINS
       !
 # if defined _OPENACC
       PRINT *, ' * info GPU: sbc_oce_alloc() => adding SBC-related arrays to memory!'
-      PRINT *, '            => qns, qsr, emp, sfx, fmmflx, qns_tot, qsr_tot, qns_b, emp_b, sfx_b'
-      !$acc enter data copyin( qns, qsr, emp, sfx, fmmflx, qns_tot, qsr_tot, qns_b, emp_b, sfx_b )
-      PRINT *, '            => qsr, wndm, taum, fr_i, rhoa, utau, vtau, utau_b, vtau_b'
-      !$acc enter data copyin( qsr, wndm, taum, fr_i, rhoa, utau, vtau, utau_b, vtau_b )
+      PRINT *, '            => qns, qsr, emp, sfx, fmmflx, qns_b, qsr_b, emp_b, sfx_b'
+      !$acc enter data copyin( qns, qsr, emp, sfx, fmmflx, qns_b, qsr_b, emp_b, sfx_b )
+      PRINT *, '            => qsr, wndm, taum, rhoa, utau, vtau, utau_b, vtau_b'
+      !$acc enter data copyin( qsr, wndm, taum, rhoa, utau, vtau, utau_b, vtau_b )
       PRINT *, '            => fatm_theta, fatm_q, fatm_slp, fatm_wnd, fatm_u, fatm_v, fatm_prcp, fatm_snow, fatm_dqsw, fatm_dqlw'
       !$acc enter data copyin( fatm_theta, fatm_q, fatm_slp, fatm_wnd, fatm_u, fatm_v, fatm_prcp, fatm_snow, fatm_dqsw, fatm_dqlw )
 # endif

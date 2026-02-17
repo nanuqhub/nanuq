@@ -1,0 +1,194 @@
+
+   SUBROUTINE ice_var_glo2eqv( kn )
+      !!-------------------------------------------------------------------
+      !!                ***  ROUTINE ice_var_glo2eqv ***
+      !!
+      !! ** Purpose :   computes equivalent variables as function of
+      !!              global variables, i.e. it turns VGLO into VEQV
+      !!-------------------------------------------------------------------
+      INTEGER, INTENT( in ) ::   kn     ! =1 everything including ponds (necessary for init)
+      !                                 ! =2            excluding ponds if ln_pnd=F
+      INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
+      REAL(wp) ::   ze_i, zs_i                      ! local scalars
+      REAL(wp) ::   ztmelts, zbbb, zccc       !   -      -
+      REAL(wp) ::   zhmax, z1_hmax                  !   -      -
+      REAL(wp) ::   zlay_i, zlay_s                  !   -      -
+      REAL(wp) ::   z1_hl, z1_a_i, z1_a_ip
+      !REAL(wp), DIMENSION(jpi,jpi,jpl) ::   za_s_fra
+      !!-------------------------------------------------------------------
+
+      !---------------------------------------------------------------
+      ! Ice thickness, snow thickness, ice salinity, ice age and ponds
+      !---------------------------------------------------------------
+      !
+      ! bound h_i by hi_max (i.e. 99 m) with associated update of ice area
+      ! clem: if a>1 then do something
+      zhmax   =          hi_max(jpl)
+      z1_hmax =  1._wp / hi_max(jpl)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            IF( v_i(ji,jj,jpl) > ( zhmax*a_i(ji,jj,jpl) ) )   a_i(ji,jj,jpl) = MIN( 1._wp, v_i(ji,jj,jpl) * z1_hmax )
+         END DO
+      END DO
+
+      DO jl = 1, jpl
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               !                                            !--- inverse of the ice area
+               z1_a_i = MERGE( 1._wp / MAX(a_i(ji,jj,jl),epsi20)  ,  0._wp  ,  a_i(ji,jj,jl) > epsi20 )
+
+               !                                            !--- ice thickness
+               h_i(ji,jj,jl) = v_i (ji,jj,jl) * z1_a_i
+               !                                            !--- snow thickness
+               h_s(ji,jj,jl) = v_s (ji,jj,jl) * z1_a_i
+               !                                            !--- ice age
+               o_i(ji,jj,jl) = oa_i(ji,jj,jl) * z1_a_i
+               !
+            END DO
+         END DO
+      ENDDO
+
+
+      IF( ln_icethd ) THEN
+
+
+         !IF( kn == 1 .OR. ln_pnd ) THEN
+         !   !
+         !   z1_hl = 1._wp / ( rn_pnd_hl_max - rn_pnd_hl_min )
+         !   DO jl = 1, jpl
+         !      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !         DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !            IF( a_ip(ji,jj,jl) > epsi20 ) THEN   ;   z1_a_ip = 1._wp / a_ip(ji,jj,jl)
+         !            ELSE                                 ;   z1_a_ip = 0._wp
+         !            ENDIF
+         !            !                                         !--- pond and lid thickness
+         !            h_ip(ji,jj,jl) = v_ip(ji,jj,jl) * z1_a_ip
+         !            h_il(ji,jj,jl) = v_il(ji,jj,jl) * z1_a_ip
+         !         END DO
+         !      END DO
+         !      !                                            !--- melt pond effective area (used for albedo)
+         !      DO jj=Njs0-1, Nje0+1
+         !         DO ji=Nis0-1, Nie0+1
+         !            IF( a_i(ji,jj,jl) > epsi20 ) THEN   ;   a_ip_frac(ji,jj,jl) = a_ip(ji,jj,jl) / a_i(ji,jj,jl)
+         !            ELSE                                ;   a_ip_frac(ji,jj,jl) = 0._wp
+         !            ENDIF
+         !            IF    ( h_il(ji,jj,jl) <= rn_pnd_hl_min ) THEN   ;   a_ip_eff(ji,jj,jl) = a_ip_frac(ji,jj,jl)       ! lid is very thin.  Expose all the pond
+         !            ELSEIF( h_il(ji,jj,jl) >= rn_pnd_hl_max ) THEN   ;   a_ip_eff(ji,jj,jl) = 0._wp                     ! lid is very thick. Cover all the pond up with ice and snow
+         !            ELSE                                             ;   a_ip_eff(ji,jj,jl) = a_ip_frac(ji,jj,jl) * &   ! lid is in between. Expose part of the pond
+         !               &                                                                    ( rn_pnd_hl_max - h_il(ji,jj,jl) ) * z1_hl
+         !            ENDIF
+         !            IF( h_ip(ji,jj,jl) < h_s(ji,jj,jl) )   a_ip_eff(ji,jj,jl) = 0._wp
+         !            !
+         !         END DO
+         !      END DO
+         !
+         !   ENDDO
+         !   !
+         !   CALL ice_var_snwfra( h_s, za_s_fra )               ! calculate ice fraction covered by snow
+         !   a_ip_eff(:,:,:) = MIN( a_ip_eff(:,:,:), 1._wp - za_s_fra(:,:,:) )   ! make sure (a_ip_eff + a_s_fra) <= 1
+         !   !
+         !ENDIF
+         !
+         !-------------------
+         ! Ice salinity         (with a min value rn_simin and a max value rn_sinew*sss)
+         !-------------------
+         IF( nn_icesal == 1 .OR. nn_icesal == 3 ) THEN
+            !
+            CALL ice_var_salprof   ! salinity profile
+            !
+         ELSEIF( nn_icesal == 2 ) THEN
+            !
+            DO jl = 1, jpl
+               DO jj=Njs0-nn_hls, Nje0+nn_hls
+                  DO ji=Nis0-nn_hls, Nie0+nn_hls
+                     IF( v_i(ji,jj,jl) > epsi20 ) THEN
+                        s_i(ji,jj,jl) = sv_i(ji,jj,jl) / v_i(ji,jj,jl)
+                     ELSE
+                        s_i(ji,jj,jl) = rn_simin
+                     ENDIF
+                  END DO
+               END DO
+            ENDDO
+            CALL ice_var_salprof   ! salinity profile
+            !
+         ELSEIF( nn_icesal == 4 ) THEN
+            !
+            s_i(:,:,:) = 0._wp
+            zlay_i = REAL( nlay_i , wp )    ! number of layers
+
+            DO jl = 1, jpl
+               DO jj=Njs0-nn_hls, Nje0+nn_hls
+                  DO ji=Nis0-nn_hls, Nie0+nn_hls
+                     DO jk=1, nlay_i
+                        IF( v_i(ji,jj,jl) > epsi20 ) THEN     !--- icy area
+                           zs_i = szv_i(ji,jj,jk,jl) / ( v_i(ji,jj,jl) * r1_nlay_i )
+                           sz_i(ji,jj,jk,jl) = zs_i
+                        ELSE                                   !--- no ice
+                           sz_i(ji,jj,jk,jl) = rn_simin
+                        ENDIF
+                        s_i(ji,jj,jl) = s_i(ji,jj,jl) + sz_i(ji,jj,jk,jl) * r1_nlay_i
+                     END DO
+                  END DO
+               END DO
+            END DO
+            !
+         ENDIF
+
+
+         !-------------------
+         ! Ice temperature   [K]   (with a minimum value (rt0 - 100.))
+         !-------------------
+         zlay_i = REAL( nlay_i , wp )    ! number of layers
+
+         DO jl = 1, jpl
+            DO jk = 1, nlay_i
+               DO jj=Njs0-nn_hls, Nje0+nn_hls
+                  DO ji=Nis0-nn_hls, Nie0+nn_hls
+                     IF( v_i(ji,jj,jl) > epsi20 ) THEN     !--- icy area
+                        !
+                        ze_i             =   e_i (ji,jj,jk,jl) / v_i(ji,jj,jl) * zlay_i             ! Energy of melting e(S,T) [J.m-3]
+                        ztmelts          = - sz_i(ji,jj,jk,jl) * rTmlt                              ! Ice layer melt temperature [C]
+                        ! Conversion q(S,T) -> T (second order equation)
+                        zbbb             = ( rcp - rcpi ) * ztmelts + ze_i * r1_rhoi - rLfus
+                        zccc             = SQRT( MAX( zbbb * zbbb - 4._wp * rcpi * rLfus * ztmelts , 0._wp) )
+                        t_i(ji,jj,jk,jl) = MAX( -100._wp , MIN( -( zbbb + zccc ) * 0.5_wp * r1_rcpi , ztmelts ) ) + rt0   ! [K] with bounds: -100 < t_i < ztmelts
+                        !
+                     ELSE                                   !--- no ice
+                        t_i(ji,jj,jk,jl) = rt0
+                     ENDIF
+                  END DO
+               END DO
+            END DO
+         END DO
+
+         !--------------------
+         ! Snow temperature   [K]   (with a minimum value (rt0 - 100.))
+         !--------------------
+         zlay_s = REAL( nlay_s , wp )
+         DO jl = 1, jpl
+            DO jk = 1, nlay_s
+               DO jj=Njs0-nn_hls, Nje0+nn_hls
+                  DO ji=Nis0-nn_hls, Nie0+nn_hls
+                     IF( v_s(ji,jj,jl) > epsi20 ) THEN     !--- icy area
+                        t_s(ji,jj,jk,jl) = rt0 + MAX( -100._wp ,  &
+                           &               MIN( r1_rcpi*( -r1_rhos*( e_s(ji,jj,jk,jl) / v_s(ji,jj,jl) * zlay_s ) + rLfus ) , 0._wp ) )
+                     ELSE                                   !--- no ice
+                        t_s(ji,jj,jk,jl) = rt0
+                     ENDIF
+                  END DO
+               END DO
+            END DO
+         END DO
+
+
+      ENDIF !IF( ln_icethd )
+
+      !
+      ! integrated values
+      vt_i (:,:) = SUM( v_i , dim=3 )
+      !vt_ip(:,:) = SUM( v_ip, dim=3 )
+      vt_s (:,:) = SUM( v_s , dim=3 )
+      at_i (:,:) = SUM( a_i , dim=3 )
+      !at_ip(:,:) = SUM( a_ip, dim=3 )
+      !
+   END SUBROUTINE ice_var_glo2eqv

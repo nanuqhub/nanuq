@@ -17,7 +17,7 @@ MODULE icewri
    USE ice            ! sea-ice: variables
    USE icevar         ! sea-ice: operations
    USE icealb  , ONLY : rn_alb_oce
-   USE oss_nnq , ONLY : sst_m, e3t_m, frq_m
+   USE oss_nnq , ONLY : e3t_m, frq_m
    !
    USE ioipsl         !
    USE in_out_manager ! I/O manager
@@ -39,7 +39,6 @@ MODULE icewri
    PUBLIC ice_wri_adv    ! called by ice_stp (minimal set for advection-only tests)
    PUBLIC ice_wri_state  ! called by dia_wri_state
    
-
    !!----------------------------------------------------------------------
    !! NANUQ 0.1 beta, Brodeau (2024)
    !! $Id: icewri.F90 15388 2021-10-17 11:33:47Z clem $
@@ -313,7 +312,7 @@ CONTAINS
       !ENDIF
       !
       !IF( iom_use('zlambt') ) THEN
-      !   z2d(:,:) = Lambda_diag( at_i, dmdt, rdt_ice/REAL(nn_nbbm,wp) )
+      !   z2d(:,:) = Lambda_diag( at_i, dmdt, rdt_ice/REAL(nbbm,wp) )
       !   CALL iom_put( 'zlambt',  z2d(:,:)*zimskt )
       !ENDIF
       !
@@ -517,7 +516,7 @@ CONTAINS
          IF( iom_use('snwtemp' ) )   CALL iom_put( 'snwtemp', ( tm_s  - rt0 ) * zimskt + zmiss_val * ( 1._wp - zimskt ) )      ! snw mean temperature
          IF( iom_use('icettop' ) )   CALL iom_put( 'icettop', ( tm_su - rt0 ) * zimskt + zmiss_val * ( 1._wp - zimskt ) )      ! temperature at the ice surface
          IF( iom_use('icetbot' ) )   CALL iom_put( 'icetbot', ( t_bo  - rt0 ) * zimskt + zmiss_val * ( 1._wp - zimskt ) )      ! temperature at the ice bottom
-         IF( iom_use('dtsrfbt' ) )   CALL iom_put( 'dtsrfbt', ( t_bo-(sst_m+rt0))*zimskt + zmiss_val * ( 1._wp - zimskt ) )      ! `t_bo - sst`
+         !IF( iom_use('dtsrfbt') )   CALL iom_put( 'dtsrfbt', ( t_bo-(sst_m+rt0))*zimskt + zmiss_val * ( 1._wp - zimskt ) )      ! `t_bo - sst`
          IF( iom_use('icetsni' ) )   CALL iom_put( 'icetsni', ( tm_si - rt0 ) * zimskt + zmiss_val * ( 1._wp - zimskt ) )      ! temperature at the snow-ice interface
          IF( iom_use('icehc'   ) )   CALL iom_put( 'icehc'  ,  -et_i          * zimskt )                                       ! ice heat content
          IF( iom_use('snwhc'   ) )   CALL iom_put( 'snwhc'  ,  -et_s          * zimskt )                                       ! snow heat content

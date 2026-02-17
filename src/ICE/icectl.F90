@@ -643,10 +643,8 @@ CONTAINS
                WRITE(numout,*) ' qns_ini       : ', (1._wp-at_i_b(ji,jj)) * qns(ji,jj) + SUM( a_i_b(ji,jj,:) * qns_ice(ji,jj,:) )
                WRITE(numout,*)
                WRITE(numout,*)
-               WRITE(numout,*) ' sst        : ', sst_m(ji,jj)
-               WRITE(numout,*) ' sst slab   : ', sst_s(ji,jj)
-               WRITE(numout,*) ' sss        : ', sss_m(ji,jj)               
-               WRITE(numout,*) ' sss slab   : ', sss_s(ji,jj)
+               WRITE(numout,*) ' sst        : ', sst_s(ji,jj)
+               WRITE(numout,*) ' sss        : ', sss_s(ji,jj)
                WRITE(numout,*)
                WRITE(numout,*) ' - Stresses '
                WRITE(numout,*) '   ~~~~~~~~ '

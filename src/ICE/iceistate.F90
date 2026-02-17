@@ -14,7 +14,7 @@ MODULE iceistate
    USE par_ice        ! SI3 parameters
    USE phycst         ! physical constant
    USE oss_nnq , ONLY : sst_m, sss_m
-   USE sbc_ice , ONLY : tn_ice, snwice_mass, snwice_mass_b
+   USE sbc_ice , ONLY : snwice_mass, snwice_mass_b
    USE eosbn2  , ONLY : eos10_fzp_2d
    USE ice            ! sea-ice: variables
    USE icevar  , ONLY : ice_var_salprof, ice_var_itd
@@ -102,52 +102,60 @@ CONTAINS
       !---------------------------
       ! 1) 1st init. of the fields
       !---------------------------
-      
+
       ! basal temperature (considered at freezing point)   [Kelvin]
       CALL eos10_fzp_2d( sss_m(:,:), t_bo(:,:) )
       t_bo(:,:) = ( t_bo(:,:) + rt0 ) * xmskt(:,:)
       !
-      ! == reduced arrays == !
-      DO jl = 1, jpl
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
-               !
-               cnd_ice(ji,jj,jl) = 0._wp                  ! conductivity at the ice top
-               !
-               tn_ice(ji,jj,jl) = t_i (ji,jj,1,jl)        ! temp for coupled runs
-               t1_ice(ji,jj,jl) = t_i (ji,jj,1,jl)        ! temp for coupled runs
-               !
-               a_ip_eff(ji,jj,jl) = 0._wp   ! melt pond effective fraction
+
+      IF( ln_icethd ) THEN
+         ! == reduced arrays == !
+         DO jl = 1, jpl
+            DO jj=Njs0-1, Nje0+1
+               DO ji=Nis0-1, Nie0+1
+                  !
+                  cnd_ice(ji,jj,jl) = 0._wp                  ! conductivity at the ice top
+                  !
+                  t1_ice(ji,jj,jl) = t_i (ji,jj,1,jl)        ! temp for coupled runs
+                  !
+                  a_ip_eff(ji,jj,jl) = 0._wp   ! melt pond effective fraction
+               END DO
             END DO
-         END DO
-         !
-      ENDDO
+            !
+         ENDDO
+      ENDIF
+
 
       ! == full arrays == !
       DO jl = 1, jpl
          !
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               DO jk=1, nlay_i
-                  ! heat
-                  e_i(ji,jj,jk,jl) = 0._wp
-                  t_i(ji,jj,jk,jl) = rt0 * xmskt(ji,jj) ! ice temp
-                  ! salt
-                  szv_i(ji,jj,jk,jl) = 0._wp
-                  sz_i (ji,jj,jk,jl) = rn_simin * xmskt(ji,jj)
-               END DO
-            END DO
-         END DO
+         IF( ln_icethd ) THEN
 
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               DO jk=1, nlay_s
-                  ! heat
-                  e_s(ji,jj,jk,jl) = 0._wp
-                  t_s(ji,jj,jk,jl) = rt0 * xmskt(ji,jj) ! snw temp
+            DO jj=Njs0-nn_hls, Nje0+nn_hls
+               DO ji=Nis0-nn_hls, Nie0+nn_hls
+                  DO jk=1, nlay_i
+                     ! heat
+                     e_i(ji,jj,jk,jl) = 0._wp
+                     t_i(ji,jj,jk,jl) = rt0 * xmskt(ji,jj) ! ice temp
+                     ! salt
+                     szv_i(ji,jj,jk,jl) = 0._wp
+                     sz_i (ji,jj,jk,jl) = rn_simin * xmskt(ji,jj)
+                  END DO
                END DO
             END DO
-         END DO
+
+            DO jj=Njs0-nn_hls, Nje0+nn_hls
+               DO ji=Nis0-nn_hls, Nie0+nn_hls
+                  DO jk=1, nlay_s
+                     ! heat
+                     e_s(ji,jj,jk,jl) = 0._wp
+                     t_s(ji,jj,jk,jl) = rt0 * xmskt(ji,jj) ! snw temp
+                  END DO
+               END DO
+            END DO
+
+         ENDIF !IF( ln_icethd )
+
          !
          DO jj=Njs0-nn_hls, Nje0+nn_hls
             DO ji=Nis0-nn_hls, Nie0+nn_hls
@@ -163,14 +171,21 @@ CONTAINS
                o_i (ji,jj,jl) = 0._wp
                t_su(ji,jj,jl) = rt0 * xmskt(ji,jj)
                !
-               ! melt ponds
-               a_ip(ji,jj,jl) = 0._wp
-               v_ip(ji,jj,jl) = 0._wp
-               v_il(ji,jj,jl) = 0._wp
-               h_ip(ji,jj,jl) = 0._wp
-               h_il(ji,jj,jl) = 0._wp
             END DO
          END DO
+
+         IF( ln_icethd ) THEN
+            DO jj=Njs0-nn_hls, Nje0+nn_hls
+               DO ji=Nis0-nn_hls, Nie0+nn_hls
+                  ! melt ponds
+                  a_ip(ji,jj,jl) = 0._wp
+                  v_ip(ji,jj,jl) = 0._wp
+                  v_il(ji,jj,jl) = 0._wp
+                  h_ip(ji,jj,jl) = 0._wp
+                  h_il(ji,jj,jl) = 0._wp
+               END DO
+            END DO
+         ENDIF
          !
       ENDDO
       !
@@ -350,14 +365,16 @@ CONTAINS
          END WHERE
 
          ! calculate extensive and intensive variables
-         DO jl = 1, jpl
-            DO jj=Njs0-nn_hls, Nje0+nn_hls
-               DO ji=Nis0-nn_hls, Nie0+nn_hls
-                  s_i(ji,jj,jl) = MIN( MAX( rn_simin , s_i(ji,jj,jl) ) , rn_sinew * sss_m(ji,jj) )
+         IF( ln_icethd ) THEN
+            DO jl = 1, jpl
+               DO jj=Njs0-nn_hls, Nje0+nn_hls
+                  DO ji=Nis0-nn_hls, Nie0+nn_hls
+                     s_i(ji,jj,jl) = MIN( MAX( rn_simin , s_i(ji,jj,jl) ) , rn_sinew * sss_m(ji,jj) )
+                  END DO
                END DO
             END DO
-         END DO
-         CALL ice_var_salprof ! for sz_i
+            CALL ice_var_salprof ! for sz_i
+         ENDIF
 
          DO jl = 1, jpl
             DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -380,36 +397,38 @@ CONTAINS
             END DO
          END DO
          !
-         DO jl = 1, jpl
-            DO jj=Njs0-nn_hls, Nje0+nn_hls
-               DO ji=Nis0-nn_hls, Nie0+nn_hls
-                  DO jk=1, nlay_i
-                     ! salt
-                     szv_i(ji,jj,jk,jl) = sz_i(ji,jj,jk,jl) * v_i(ji,jj,jl) * r1_nlay_i
-                     ! heat
-                     ztmelts          = - rTmlt * sz_i(ji,jj,jk,jl) + rt0 ! melting temperature in K
-                     e_i(ji,jj,jk,jl) = zswitch(ji,jj) * v_i(ji,jj,jl) * r1_nlay_i * &
-                        &               rhoi * (  rcpi  * ( ztmelts - t_i(ji,jj,jk,jl) ) + &
-                        &                         rLfus * ( 1._wp - (ztmelts-rt0) / MIN( (t_i(ji,jj,jk,jl)-rt0), -epsi20 ) ) &
-                        &                       - rcp   * ( ztmelts - rt0 ) )
+         IF( ln_icethd ) THEN
+            DO jl = 1, jpl
+               DO jj=Njs0-nn_hls, Nje0+nn_hls
+                  DO ji=Nis0-nn_hls, Nie0+nn_hls
+                     DO jk=1, nlay_i
+                        ! salt
+                        szv_i(ji,jj,jk,jl) = sz_i(ji,jj,jk,jl) * v_i(ji,jj,jl) * r1_nlay_i
+                        ! heat
+                        ztmelts          = - rTmlt * sz_i(ji,jj,jk,jl) + rt0 ! melting temperature in K
+                        e_i(ji,jj,jk,jl) = zswitch(ji,jj) * v_i(ji,jj,jl) * r1_nlay_i * &
+                           &               rhoi * (  rcpi  * ( ztmelts - t_i(ji,jj,jk,jl) ) + &
+                           &                         rLfus * ( 1._wp - (ztmelts-rt0) / MIN( (t_i(ji,jj,jk,jl)-rt0), -epsi20 ) ) &
+                           &                       - rcp   * ( ztmelts - rt0 ) )
+                     END DO
                   END DO
                END DO
             END DO
-         END DO
-         !
-         ! Melt ponds
-         WHERE( a_i(:,:,:) > epsi10 )
-            a_ip_eff(:,:,:) = a_ip(:,:,:) / a_i(:,:,:)
-         ELSEWHERE
-            a_ip_eff(:,:,:) = 0._wp
-         END WHERE
-         v_ip(:,:,:) = h_ip(:,:,:) * a_ip(:,:,:)
-         v_il(:,:,:) = h_il(:,:,:) * a_ip(:,:,:)
+            !
+            ! Melt ponds
+            WHERE( a_i(:,:,:) > epsi10 )
+               a_ip_eff(:,:,:) = a_ip(:,:,:) / a_i(:,:,:)
+            ELSEWHERE
+               a_ip_eff(:,:,:) = 0._wp
+            END WHERE
+            v_ip(:,:,:) = h_ip(:,:,:) * a_ip(:,:,:)
+            v_il(:,:,:) = h_il(:,:,:) * a_ip(:,:,:)
+            !
+         ENDIF
 
          ! specific temperatures for coupled runs
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
-               tn_ice(ji,jj,:) = t_su(ji,jj,:)
                t1_ice(ji,jj,:) = t_i (ji,jj,1,:)
             END DO
          END DO
@@ -431,7 +450,12 @@ CONTAINS
       !----------------------------------------------------------
       ! 4) Adjust ssh and vertical scale factors to snow-ice mass
       !----------------------------------------------------------
-      snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i + rhow * ( v_ip + v_il ), dim=3  )   ! snow+ice mass
+      IF( ln_icethd ) THEN 
+         snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i + rhow * ( v_ip + v_il ), dim=3  )   ! snow+ice mass
+      ELSE
+         snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i                         , dim=3  )   ! snow+ice mass
+      ENDIF
+
       snwice_mass_b(:,:) = snwice_mass(:,:)
 
    END SUBROUTINE ice_istate

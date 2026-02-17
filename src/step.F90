@@ -15,9 +15,9 @@ MODULE step
    USE dom_oce          ! ocean space and time domain variables
    USE daymod           ! calendar                         (day     routine)
    USE icestp,  ONLY : ice_stp  !lulu    ! surface boundary condition: fields
-   USE sbcmod,  ONLY : nsbc, sbc, sbc_write ! surface boundary condition       (sbc     routine)
+   USE sbcmod,  ONLY : nsbc, sbc ! surface boundary condition       (sbc     routine)
    USE oss_nnq, ONLY : lk_oasis_oce, ln_cpl_oce     ! bottom boundary condition: fields
-   USE ossmod , ONLY : oss       ! oceans surface state (oss     routine)
+   USE ossmod , ONLY : oss, oss_blk_ssx, oss_flx_write ! oceans surface state (oss     routine)
    USE osscpl , ONLY : oss_cpl_snd        ! surface boundary condition: coupled interface
    !
    USE diawri           ! Standard run outputs             (dia_wri routine)
@@ -86,6 +86,11 @@ CONTAINS
       ! *** ssu_m, ssv_m, ssh_m, sst_m, sss_m, frq_m, e3t_m ***
 
 
+      CALL oss_blk_ssx( kstp ) ! Updates sst_s & sss_s, the actual bulk SS* to use in place of `sst_m` & `sst_s` (possible corrections+slab) as well as `t_bo` !
+      !!                       => uses:       sst_m, sss_m, mld_m, qsr_b, qns_b, qsr_b, emp_b
+      !!                       => may update: sst_m (freezing point consistency)
+      !!                       => updates:    sst_s, sss_s, t_bo
+
       !IF( .NOT. ln_dynADV2D ) THEN
       !! Surface Boundary Condition for the liquid ocean:
       CALL sbc( kstp )
@@ -97,7 +102,7 @@ CONTAINS
 
       CALL ice_stp( kstp, nsbc )  ! Sea-ice model
 
-      CALL sbc_write( kstp )      ! Outputs and control print for fluxes that serve as SBCs to the liquid ocean component
+      CALL oss_flx_write( kstp )  ! Outputs and control print for fluxes that serve as SBCs to the liquid ocean component
 
       CALL dia_wri( kstp,      Nnn )        ! Outputs
 

@@ -18,7 +18,7 @@ MODULE icedyn_rhg_tools
    USE timing
 
    !USE icevar, ONLY : test4nan
-   
+
    IMPLICIT NONE
 
    PRIVATE
@@ -82,7 +82,7 @@ MODULE icedyn_rhg_tools
    !!----------------------------------------------------------------------
 CONTAINS
 
-   
+
    FUNCTION sigmaII_sclr( ps11, ps22, ps12 )
       !!------------------------------------------------------------------------------------
       !$acc routine
@@ -98,7 +98,7 @@ CONTAINS
       sigmaII_sclr = SQRT( ztmp*ztmp + ps12*ps12 )
       !!
    END FUNCTION sigmaII_sclr
-   
+
    SUBROUTINE sigmaII_full( pSt, pSf, pSII )
       !!------------------------------------------------------------------------------------
       !!------------------------------------------------------------------------------------
@@ -119,12 +119,12 @@ CONTAINS
             pSII(ji,jj) = SQRT( ztmp*ztmp + zs*zs )
          END DO
       END DO
-      !$acc end parallel loop      
+      !$acc end parallel loop
       !$acc end data
    END SUBROUTINE sigmaII_full
-   
 
-   
+
+
 
    SUBROUTINE mohr_coulomb_dmg( pdt, pxpCt, pxpCf, pSclH_t, pSclH_f, p1mdt, p1mdf, psgmt, psgmf )
       !!======================================================================
@@ -138,7 +138,7 @@ CONTAINS
       REAL(wp) :: zs11t, zs22t, zs12t, zs11f, zs22f, zs12f, zE
       REAL(wp) :: zdx, zrr, zCohe, zNlim, zsqrtE, zTd, zsigI, zsigII
       INTEGER  :: ji, jj
-      !!======================================================================      
+      !!======================================================================
       IF( ln_timing ) CALL timing_start('mohr_coulomb_dmg')
       !$acc data present( pxpCt, pxpCf, pSclH_t, pSclH_f, p1mdt, p1mdf, psgmt, psgmf, res_grd_loc_t, res_grd_loc_f )
 
@@ -265,7 +265,7 @@ CONTAINS
       INTEGER :: jm
       !!-------------------------------------------------------------------
       l_CN = ( rn_crndg > 0._wp )
-      rCNC_eff = rn_crndg / REAL( nn_nbbm, wp )      
+      rCNC_eff = rn_crndg / REAL( nbbm, wp )
       !$acc update device(l_CN, rCNC_eff )
    END SUBROUTINE cross_nudging_init
 
@@ -426,6 +426,16 @@ CONTAINS
          z1_ecc2 = 1._wp / ( rn_delta_ecc*rn_delta_ecc )
       ENDIF
 
+      ! Prevent the occurence of NaN on the halos:
+      IF( l_r_e11  )  pe11(:,:)   = 0._wp 
+      IF( l_r_e22  )  pe22(:,:)   = 0._wp 
+      IF( l_r_e12  )  pe12(:,:)   = 0._wp 
+      IF( l_r_dudy )  pdudy(:,:)  = 0._wp 
+      IF( l_r_dvdx )  pdvdx(:,:)  = 0._wp 
+      IF( l_r_div  )  pdiv(:,:)   = 0._wp 
+      IF( l_r_mshr )  pmshr(:,:)  = 0._wp 
+      IF( l_r_dlt  )  pdelta(:,:) = 0._wp 
+
       kq = MAX( nn_hls-1, 0 )
       IF ( cgt == 'T' ) THEN
          !! In T-centric cell: dU/dX @ T-point = (U(i,j) - U(i-1,j))/dx == (U(i+ip,j) - U(i+im,j))/dx
@@ -561,7 +571,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-      
+
       !$acc parallel loop collapse(2)
       DO jj=Njs0-k1, Nje0+k2
          DO ji=Nis0-k1, Nie0+k2
@@ -807,7 +817,7 @@ CONTAINS
       END IF
       !
       !$acc end data
-      IF( ln_timing )   CALL timing_stop('apply_cn_gpu')      
+      IF( ln_timing )   CALL timing_stop('apply_cn_gpu')
    END SUBROUTINE apply_cn_gpu
 
 
@@ -980,7 +990,7 @@ CONTAINS
    END FUNCTION P_tilde_sclr
 
 
-   
+
    FUNCTION mc_incrmt( pSI, pSII, pN, pC, pTd )
       !$acc routine
       !!---------------------------------------------------------------------

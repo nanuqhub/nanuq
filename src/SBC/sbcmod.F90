@@ -22,37 +22,32 @@ MODULE sbcmod
    !!   sbc_init      : read namsbc namelist
    !!   sbc           : surface ocean momentum, heat and freshwater boundary conditions
    !!----------------------------------------------------------------------
-   USE dom_oce        ! ocean space and time domain
-   USE phycst         ! physical constants
-   USE sbc_phy, ONLY : pp_cldf
+   USE dom_oce, ONLY : rn_Dt
+   USE phycst,  ONLY : rday         ! physical constants
    USE sbc_oce        ! Surface boundary condition: ocean fields
-   !# if defined _OPENACC
-   !   USE sbc_ice, ONLY : qns_oce, qsr_oce
-   !# endif
-   USE sbcdcy         ! surface boundary condition: diurnal cycle
-   USE sbcflx         ! surface boundary condition: flux formulation
-   USE sbcblk         ! surface boundary condition: bulk formulation
-   USE sbcabl         ! atmospheric boundary layer
-   USE cpl_oasis3     ! OASIS routines for coupling
-   USE bdy, ONLY: ln_bdy
-   USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
    !
-   USE prtctl         ! Print control                    (prt_ctl routine)
-   USE iom            ! IOM library
+   USE sbcdcy, ONLY : nday_qsr              ! surface boundary condition: diurnal cycle
+   USE sbcflx, ONLY : sbc_flx               ! surface boundary condition: flux formulation
+   USE sbcblk, ONLY : sbc_blk_init, sbc_blk ! surface boundary condition: bulk formulation
+   USE sbcabl, ONLY : sbc_abl_init, sbc_abl   ! atmospheric boundary layer
+   !
+   USE cpl_oasis3, ONLY : cpl_freq     ! OASIS routines for coupling
+   !
+# if ! defined _OPENACC   
+   USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
+# endif
+   !
    USE in_out_manager ! I/O manager
-   USE lib_mpp        ! MPP library
+   USE lib_mpp, ONLY : ncom_fsbc, ctl_nam, ctl_stop, ctl_warn
    USE timing         ! Timing
-
-   !USE oss_nnq  , ONLY: ln_cpl_oce
 
    IMPLICIT NONE
    PRIVATE
 
    PUBLIC   sbc        ! routine called by step.F90
-   PUBLIC   sbc_write  ! output routine called by step.F90 => saving and control diags of fluxes to provide to liquid ocean
    PUBLIC   sbc_init   ! routine called by opa.F90
 
-   INTEGER, PUBLIC ::   nsbc  !lulu ! type of surface boundary condition (deduced from namsbc informations)
+   INTEGER, PUBLIC ::   nsbc  ! type of surface boundary condition (deduced from namsbc informations)
 
    !! * Substitutions
 #  include "single_precision_substitute.h90"
@@ -243,17 +238,15 @@ CONTAINS
       !!                time step, i.e.
       !!                utau_b, vtau_b, qns_b, qsr_b, emp_n, sfx_b
       !!                utau  , vtau  , qns  , qsr  , emp  , sfx
-      !!              - updte the ice fraction : fr_i
       !!----------------------------------------------------------------------
       INTEGER, INTENT(in) ::   kt   ! ocean time step
       !!----------------------------------------------------------------------
       INTEGER  ::   jj, ji          ! dummy loop argument
       REAL(wp) ::     zthscl        ! wd  tanh scale
       REAL(wp), DIMENSION(jpi,jpj) ::  zwdht, zwght  ! wd dep over wd limit, wgt
-      REAL(wp), DIMENSION(jpi,jpj) ::  z2d           ! temporary array used for iom_put
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('sbc')
-      !$acc data present( utau, vtau, qns, emp, sfx, utau_b, vtau_b, qns_b, emp_b, sfx_b )
+      !$acc data present( utau, vtau, qns, emp, sfx, utau_b, vtau_b, qns_b, qsr_b, emp_b, sfx_b )
 
       !                                            ! ---------------------------------------- !
       IF( kt > nit000 ) THEN                       !          Swap of forcing fields          !
@@ -263,6 +256,7 @@ CONTAINS
                utau_b(ji,jj) = utau(ji,jj)                       ! Swap the ocean forcing fields
                vtau_b(ji,jj) = vtau(ji,jj)                       ! (except at nit000 where before fields
                qns_b (ji,jj) = qns (ji,jj)                       !  are set at the end of the routine)
+               qsr_b (ji,jj) = qsr (ji,jj)                       !  are set at the end of the routine)               
                emp_b (ji,jj) = emp (ji,jj)
                sfx_b (ji,jj) = sfx (ji,jj)
             END DO
@@ -317,6 +311,7 @@ CONTAINS
          !   CALL iom_get( numror, jpdom_auto, 'utau_b', utau_b )   ! i-stress
          !   CALL iom_get( numror, jpdom_auto, 'vtau_b', vtau_b )   ! j-stress
          !   CALL iom_get( numror, jpdom_auto,  'qns_b',  qns_b )   ! non solar heat flux
+         !   CALL iom_get( numror, jpdom_auto,  'qsr_b',  qsr_b )   !     solar heat flux
          !   CALL iom_get( numror, jpdom_auto,  'emp_b',  emp_b )   ! freshwater flux
          !   ! To ensure restart capability with 3.3x/3.4 restart files    !! to be removed in v3.6
          !   IF( iom_varid( numror, 'sfx_b', ldstop = .FALSE. ) > 0 ) THEN
@@ -332,6 +327,7 @@ CONTAINS
                utau_b(ji,jj) = utau(ji,jj)
                vtau_b(ji,jj) = vtau(ji,jj)
                qns_b (ji,jj) = qns (ji,jj)
+               qsr_b (ji,jj) = qsr (ji,jj)               
                emp_b (ji,jj) = emp (ji,jj)
                sfx_b (ji,jj) = sfx (ji,jj)  !#LOLOfixme: it should be provided by ICE model, it is not updated by the 3 `sbc_*` routines above!!!
             END DO
@@ -339,83 +335,11 @@ CONTAINS
          !$acc end parallel loop
          !
       ENDIF
-      
+
       !$acc end data
       IF( ln_timing )   CALL timing_stop('sbc')
       !
    END SUBROUTINE sbc
-
-
-   SUBROUTINE sbc_write( kt )
-      !!---------------------------------------------------------------------
-      !!                    ***  ROUTINE sbc_write  ***
-      !!----------------------------------------------------------------------
-      INTEGER, INTENT(in) ::   kt   ! ocean time step
-      !!----------------------------------------------------------------------
-      !!---------------------------------------------------------------------
-      IF( ln_timing )   CALL timing_start('sbc_write')
-      !$acc data present( utau, vtau, qns, emp, sfx, utau_b, vtau_b, qns_b, emp_b, sfx_b )
-
-      !                                                ! ---------------------------------------- !
-      !                                                !        Outputs and control print         !
-      !                                                ! ---------------------------------------- !
-
-      !! LB => when coupled to ocean component via OASIS I rather save the exacts same fields (as saved here)
-      !!       right at the place where they are sent to OASIS, so technically in `oss_cpl_snd()@osscpl.F90` !
-
-      IF( iom_use('saltflx' ) ) THEN
-         !$acc update self( sfx )
-         CALL iom_put( "saltflx", sfx * xmskt         ) !#LOLOfixme  ! downward salt flux (includes virtual salt flux beneath ice in linear free surface case)
-      ENDIF
-      IF( iom_use('fmmflx' ) ) THEN
-         !$acc update self( fmmflx )
-         CALL iom_put( "fmmflx" , fmmflx * xmskt      ) !#LOLOfixme  ! Freezing-melting water flux
-      ENDIF
-      IF( iom_use('emp' ) ) THEN
-         !$acc update self( emp )
-         CALL iom_put( "emp"    , emp * xmskt )       ! solar heat flux
-      ENDIF      
-      IF( iom_use("qt") ) THEN
-         !$acc update self( qns, qsr )
-         CALL iom_put( "qt"  , (qns + qsr) * xmskt    )       ! total heat flux
-      ENDIF
-      IF( iom_use('qns' ) ) THEN
-         !$acc update self( qns )
-         CALL iom_put( "qns"    , qns * xmskt )       ! solar heat flux
-      ENDIF
-      IF( iom_use('qsr' ) ) THEN
-         !$acc update self( qsr )
-         CALL iom_put( "qsr"    , qsr * xmskt )       ! solar heat flux
-      ENDIF
-      IF( iom_use('fr_i' ) ) THEN
-         !$acc update self( fr_i )
-         CALL iom_put( "fr_i", fr_i )            ! ice fraction
-      ENDIF
-      IF( iom_use('taum' ) ) THEN
-         !$acc update self( taum )
-         CALL iom_put( "taum"   ,  taum * xmskt )       ! wind stress module
-      ENDIF
-      IF( iom_use('wspd' ) ) THEN
-         !$acc update self( wndm )
-         CALL iom_put( "wspd",     wndm * xmskt ) ! wind speed  module over free ocean or leads in presence of sea-ice
-      ENDIF
-      !
-      !ENDIF !IF( .NOT. ln_cpl_oce )
-
-      IF(sn_cfctl%l_prtctl) THEN     ! print mean trends (used for debugging)
-         CALL prt_ctl(tab2d_1=CASTDP(fr_i)                , clinfo1=' fr_i     - : ', mask1=tmask )
-         CALL prt_ctl(tab2d_1=CASTDP(qns)                 , clinfo1=' qns      - : ', mask1=tmask )
-         CALL prt_ctl(tab2d_1=CASTDP(qsr)                , clinfo1=' qsr      - : ', mask1=tmask )
-         CALL prt_ctl(tab3d_1=CASTDP(tmask)              , clinfo1=' tmask    - : ', mask1=tmask, kdim=jpk )
-         CALL prt_ctl(tab2d_1=CASTDP(utau)               , clinfo1=' utau     - : ', mask1=umask,                      &
-            &         tab2d_2=CASTDP(vtau)               , clinfo2=' vtau     - : ', mask2=vmask )
-      ENDIF
-
-      !$acc end data
-      IF( ln_timing )   CALL timing_stop('sbc_write')
-      !
-   END SUBROUTINE sbc_write
-
 
 
    !!======================================================================
