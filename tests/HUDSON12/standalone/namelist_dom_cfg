@@ -1,7 +1,7 @@
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 !! NEMO/OCE  Configuration namelist : overwrite default values defined in SHARED/namelist_ref
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-!!    HUDSON12 (1/12 of a degree)             !!
+!!    HUDSON12 standalone (1/12th of a degree)             !!
 !!======================================================================
 !
 !-----------------------------------------------------------------------
@@ -49,7 +49,7 @@
 !-----------------------------------------------------------------------
 &namoss        !   Surface Ocean State & Ice-Ocean interface manager                   (default: NO selection)
 !-----------------------------------------------------------------------
-   rn_Cd_io      = 5.2e-03 !  ice-ocean drag coefficient (-)
+   rn_Cd_io      = 5.e-03  !  ice-ocean drag coefficient (-)
    ln_drgice_imp = .true.  !  implicit ice-ocean drag
       !
    nn_foss     = 1         !  frequency of OSS module call
@@ -75,7 +75,7 @@
    ! Relevant if `ln_prs_oce=T`:
    ln_ssv_T    = .true. !YES! !  prescribed sea surface velocities are provided on T grid points (default is U,V!)
    !
-   ln_slab_sst = .true.       ! if `ln_slab_sst=T`: correct the prescribed SST based on a slab model approach
+   ln_slab_sst = .true. !YES! ! if `ln_slab_sst=T`: correct the prescribed SST based on a slab model approach
          rn_mld_0 = 10.       ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT USED'`
          rn_ncs_sst = 0.5     ! nudging coefficient for SLAB bulk SST correction (the higher, the closer to the prescribed SST)
    !
@@ -83,14 +83,14 @@
    !___________!_____________!_________________!___________!_____________!________!___________!__________________!__________!_______________!
    !        !  file name     !frequency (hours)! variable  ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
    !        !                !  (if <0  months)!   name    !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_usp = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'uos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
-   sn_vsp = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'vos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
-   sn_tem = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'tos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
-   sn_sal = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'sos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
-   sn_ssh = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'zos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
-   sn_mld = 'SSX_<SSX_FORCING>_<FRQ_SSX>h', <FRQ_SSX>., 'mld'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
-   sn_e3t      = 'NOT USED'              ,  <FRQ_SSX>., 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_frq      = 'NOT USED'              ,  <FRQ_SSX>., 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_usp = 'SSX_GLORYS12_24h', 24., 'uos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_vsp = 'SSX_GLORYS12_24h', 24., 'vos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_tem = 'SSX_GLORYS12_24h', 24., 'tos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_sal = 'SSX_GLORYS12_24h', 24., 'sos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_ssh = 'SSX_GLORYS12_24h', 24., 'zos'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_mld = 'SSX_GLORYS12_24h', 24., 'mld'   ,   .true.    , .false., 'yearly'  , '', ''   , ''
+   sn_e3t      = 'NOT USED'              ,  24., 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_frq      = 'NOT USED'              ,  24., 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
 /
 !!
 !!
@@ -139,16 +139,16 @@
    cn_dir      = './' !  root directory for the bulk data location
    !___________!____________!___________!__________!_____________!________!___________!_____________________________________________________________!__________!_______________!
    !           !  file name ! freq. (h) ! variable ! time interp.!  clim  ! 'yearly'/ !       weights filename                                      ! rotation ! land/sea mask !
-   !           !            !           !   name   !   (logical) !  (T/F) ! 'monthly' !                                                             ! pairing  !    filename   !
-   sn_wndi = 'u10_ERA5-HUDSON12',      1.,  'u10'    ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
-   sn_wndj = 'v10_ERA5-HUDSON12',      1.,  'v10'    ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
+   !           !            !           !   name   !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
+   sn_wndi = 'u10_ERA5-HUDSON12'     , 1., 'u10'     ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
+   sn_wndj = 'v10_ERA5-HUDSON12'     , 1., 'v10'     ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
    sn_qsr  = 'msdwswrf_ERA5-HUDSON12', 1., 'msdwswrf',    .false.  , .false. , 'yearly' , '' , ''       , ''
    sn_qlw  = 'msdwlwrf_ERA5-HUDSON12', 1., 'msdwlwrf',    .false.  , .false. , 'yearly' , '' , ''       , ''
-   sn_tair = 't2m_ERA5-HUDSON12',      1.,  't2m'    ,    .true.   , .false. , 'yearly' , '' , ''       , ''
-   sn_humi = 'd2m_ERA5-HUDSON12',      1.,  'd2m'    ,    .true.   , .false. , 'yearly' , '' , ''       , ''
-   sn_prec = 'mtpr_ERA5-HUDSON12',     1.,  'mtpr'   ,    .false.  , .false. , 'yearly' , '' , ''       , ''
-   sn_snow = 'msr_ERA5-HUDSON12',      1.,  'msr'    ,    .false.  , .false. , 'yearly' , '' , ''       , ''
-   sn_slp  = 'msl_ERA5-HUDSON12',      1.,  'msl'    ,    .true.   , .false. , 'yearly' , '' , ''       , ''
+   sn_tair = 't2m_ERA5-HUDSON12'     , 1., 't2m'     ,    .true.   , .false. , 'yearly' , '' , ''       , ''
+   sn_humi = 'd2m_ERA5-HUDSON12'     , 1., 'd2m'     ,    .true.   , .false. , 'yearly' , '' , ''       , ''
+   sn_prec = 'mtpr_ERA5-HUDSON12'    , 1., 'mtpr'    ,    .false.  , .false. , 'yearly' , '' , ''       , ''
+   sn_snow = 'msr_ERA5-HUDSON12'     , 1., 'msr'     ,    .false.  , .false. , 'yearly' , '' , ''       , ''
+   sn_slp  = 'msl_ERA5-HUDSON12'     , 1., 'msl'     ,    .true.   , .false. , 'yearly' , '' , ''       , ''
 /
 !!
 !!======================================================================

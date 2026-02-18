@@ -1,15 +1,21 @@
 #!/bin/bash
 
-#DIR_NC_IN="/DATA/IO/INPUT_NANUQ_DISTRIB"
-DIR_NC_IN="/data/GCM/INPUT_NANUQ_DISTRIB"
-
-
 if [ "${1}" = "" ]; then
     echo "USAGE: ${0} <res_in_km>"
     exit
 fi
 
 RESKM=${1}
+
+fsrc="../paths_nanuq_data.bash" ; # path to file containing info relative to current host !
+if [ -f ${fsrc} ]; then
+    . ${fsrc}
+else
+    echo "I cannot find file: ${fsrc} !  :("
+    exit
+fi
+
+
 
 lok="2 4 10"
 if [ "`echo ${lok} | grep ${RESKM}`" = "" ]; then

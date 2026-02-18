@@ -60,17 +60,17 @@
       !
    ln_ice_embd = .false.   !  =T embedded sea-ice (pressure + mass and salt exchanges)
       !                    !  =F levitating ice (no pressure, mass and salt exchanges)
-   !!
 /
 !!
 !-----------------------------------------------------------------------
-&namoss_ssx    !   Surface ocean state (when coupled=>init and not coupled =>prescibed) 
+&namoss_ssx    !   Surface ocean state (`ln_prs_oce=T` => prescibed sate | `ln_cpl_oce=T`=>initial state)
 !-----------------------------------------------------------------------
-   ln_ssxread   = .true.    !  =T Read in file ;  =F set all to 0. (see ossssm)
+   ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
       ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
-      ln_read_frq = .false.   !  specify whether we must read frq or not
-
-   cn_dir      = './'   !  root directory for the ocean data location
+      ln_read_e3t = .true.    !  specify whether we must read `e3t`
+      ln_read_frq = .true.    !  specify whether we must read `frq`
+   !
+   cn_dir      = './'      !  root directory for the ocean data location
    !___________!_________________________!___________________!___________!_____________!________!___________!__________________!__________!_______________!
    !           !  file name              ! frequency (hours) ! variable  ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
    !           !                         !  (if <0  months)  !   name    !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
@@ -79,6 +79,7 @@
    sn_tem      = 'CPL_init_EGL12_gridT' ,         -12.        , 'sosstsst',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_sal      = 'CPL_init_EGL12_gridT' ,         -12.        , 'sosaline',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_ssh      = 'CPL_init_EGL12_gridT' ,         -12.        , 'sossheig',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_mld = 'NOT USED'                  ,         -12.        , 'mld_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_e3t      = 'CPL_init_EGL12_gridT' ,         -12.        , 'e3t_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_frq      = 'CPL_init_EGL12_gridT' ,         -12.        , 'frq_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
 /
@@ -103,18 +104,14 @@
 &namsbc_blk    !   namsbc_blk  generic Bulk formula          (ln_blk =T)
 !-----------------------------------------------------------------------
    !                    !  bulk algorithm :
-   ln_NCAR      = .false.     ! "NCAR"      algorithm   (Large and Yeager 2008)
+   ln_NCAR      = .false.    ! "NCAR"      algorithm   (Large and Yeager 2008)
    ln_COARE_3p0 = .false.    ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   ln_COARE_3p6 = .false.    ! "COARE 3.6" algorithm   (Edson et al. 2013)
    ln_ECMWF     = .true.     ! "ECMWF"     algorithm   (IFS cycle 45r1)
       rn_zqt       =  2.     !  Air temperature & humidity reference height (m)
       rn_zu        = 10.     !  Wind vector reference height (m)
       nn_iter_algo = 5       !  Number of iterations in bulk param. algo ("stable ABL + weak wind" requires more)
       ln_skin_cs   = .false. !  use the cool-skin parameterization  => use at least nn_iter_algo > 10
       ln_skin_wl   = .false. !  use the warm-layer parameterization => use at least nn_iter_algo > 10
-   !
-   rn_pfac    = 1.          !  multipl. factor for precipitation (total & snow)
-   rn_efac    = 1.          !  multipl. factor for evaporation (0. or 1.)
    !
    ln_humi_sph = .false. !  humidity "sn_humi" is specific humidity  [kg/kg]
    ln_humi_dpt = .true.  !  humidity "sn_humi" is dew-point temperature [K]
@@ -151,11 +148,10 @@
 !!   nambdy        Unstructured open boundaries                         (default: OFF)
 !!   nambdy_dta    Unstructured open boundaries - external data         (see  nambdy)
 !!======================================================================
-!!
+!
 !-----------------------------------------------------------------------
 &nambdy        !  unstructured open boundaries                          (default: OFF)
 !-----------------------------------------------------------------------
-!!!   ln_bdy         = .false. !lolo   !  Use unstructured open boundaries
    ln_bdy         = .true.    !  Use unstructured open boundaries
    nb_bdy         = 1         !  number of open boundary sets
    ln_coords_file = .true.    !  =T : read bdy coordinates from file
@@ -188,15 +184,15 @@
 &nameos        !   ocean Equation Of Seawater                           (default: NO selection)
 !-----------------------------------------------------------------------
 /
-!!
+!
 !-----------------------------------------------------------------------
 &nammpp        !   Massively Parallel Processing
 !-----------------------------------------------------------------------
    ln_listonly =  .false.  !  do nothing else than listing the best domain decompositions (with land domains suppression)
    !                       !  if T: the largest number of cores tested is defined by max(mppsize, jpni*jpnj)
    ln_nnogather =  .false.
-!!   jpni        =   3       !  number of processors following i (set automatically if < 1), see also ln_listonly = T
-!!   jpnj        =   5       !  number of processors following j (set automatically if < 1), see also ln_listonly = T
+!!   jpni        =   2       !  number of processors following i (set automatically if < 1), see also ln_listonly = T
+!!   jpnj        =   2       !  number of processors following j (set automatically if < 1), see also ln_listonly = T
    nn_hls      =   3         !  halo width (applies to both rows and columns)
    nn_comm     =   1         !  comm choice
 /

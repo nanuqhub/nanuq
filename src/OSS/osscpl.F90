@@ -511,7 +511,7 @@ CONTAINS
       !! The following is certainly a "doublon" with what's done in `sbc()@sbcmod.F90`, but I want it
       !! to be right here to be sure about what fluxes are passed to OASIS...
 
-      IF( kt == nit000 ) PRINT *, 'LOLO `oss_cpl_snd()@osscpl.F90` => COUPLED: potentially IOMing the liquid ocean SBC fluxes !, kt =', kt
+      !IF( kt == nit000 ) PRINT *, 'LOLO `oss_cpl_snd()@osscpl.F90` => COUPLED: potentially IOMing the liquid ocean SBC fluxes !, kt =', kt
 
       IF( iom_use('utau_oa3' ) ) THEN
          !$acc update self( utau )

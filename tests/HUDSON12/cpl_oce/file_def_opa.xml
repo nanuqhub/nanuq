@@ -10,7 +10,7 @@
 
 <file_definition type="one_file" name="@expname@_@freq@_@startdate@_@enddate@" sync_freq="1d" min_digits="4">
 
-  <file_group id="3h" output_freq="3h"  output_level="10" enabled=".TRUE.">  <!-- 3h files -->
+  <file_group id="1d" output_freq="1d"  output_level="10" enabled=".TRUE.">  <!-- 1d files -->
 
     <file id="file11" name_suffix="_gridT" description="ocean T grid variables" >
       <field field_ref="toce"         name="votemper"  />

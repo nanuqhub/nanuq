@@ -327,7 +327,7 @@ CONTAINS
       fmask(:,:,:) = 0._wp
       !
       IF( rn_ishlat == 0._wp ) THEN
-         PRINT *, 'LOLO: `icedyn.F90` building `fmask` for shear for rn_ishlat=0 !'
+         IF(lwp )PRINT *, ' * IMPORTANT: `icedyn.F90` building sea-ice `fmask` (shear) with rn_ishlat=0 !'
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
                fmask(ji,jj,1) = xmskt(ji,jj) * xmskt(ji+1,jj) * xmskt(ji,jj+1) * xmskt(ji+1,jj+1)
@@ -335,7 +335,7 @@ CONTAINS
          END DO
          !
       ELSE
-         PRINT *, 'LOLO: `icedyn.F90` building `fmask` for shear for rn_ishlat/=0 !'
+         IF(lwp )PRINT *, ' * IMPORTANT: `icedyn.F90` building sea-ice `fmask` (shear) with rn_ishlat/=0 !'
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
                fmask(ji,jj,1) = xmskt(ji,jj) * xmskt(ji+1,jj) * xmskt(ji,jj+1) * xmskt(ji+1,jj+1)

@@ -10,11 +10,13 @@ Decide what resolution `<RES>` (in km) you want to use (available: 10km and 2km)
 
 Copy or create symbolic links of all the netCDF files found under `<SOMEWHERE>/INPUT_NANUQ_DISTRIB/ROTATION/<RES>km` in here.
 
+Adjust the host-specific value of paths such as `DIR_NC_IN` into the file located under `<NANUQ_REPO>/tests/paths_nanuq_data.bash`; `INPUT_NANUQ_DISTRIB` should provide the full path to the `INPUT_NANUQ_DISTRIB` you have downloaded.
+
 Create symbolic links `namelist_dom_cfg` and `namelist_ice_cfg` pointing to the appropriate namelist for the chosen resolution, _i.e._ `namelist_dom_cfg.<RES>km` and `namelist_ice_cfg.<RES>km`.
 
 Copy or create a symbolic link of the `nanuq.exe` executable compiled into `../../cfgs/generic/BLD/bin/nanuq.exe`
 
-The `prepare_prod_dir.sh` can do all this for you, all you have to do is set the `DIR_NC_IN` variable to the full path to `INPUT_NANUQ_DISTRIB` directory prior to executing it, example:
+The `prepare_prod_dir.sh` can do all this for you, example:
 
 `./prepare_prod_dir.sh 10` prepares the current directory for the resolution at 10 km...
 

@@ -38,22 +38,24 @@ Make a copy or create symbolic links, in here, of all the netCDF files found und
 * `<SOMEWHERE>/INPUT_NANUQ_DISTRIB/EGL12/BDY/`
 * `<SOMEWHERE>/ERA5_Arctic`
 
+Adjust the host-specific value of paths such as `DIR_NC_IN` & `HUDSON12_FATM_DIR` into the file located under `<NANUQ_REPO>/tests/paths_nanuq_data.bash`; `INPUT_NANUQ_DISTRIB` should provide the full path to the `INPUT_NANUQ_DISTRIB` you have downloaded.
 
 Copy or create a symbolic link of the `nemo.exe` executable (see above).
 
 Copy or create a symbolic link of the `nanuq.exe` executable (see above).
 
+The `prepare_prod_dir.sh` can do all this for you, example:
 
-The `prepare_prod_dir.sh` can do all this for you, all you have to do is set the full path to the `nanuq.exe` and `nemo.exe`, set the `DIR_NC_IN` variable to the full path to `INPUT_NANUQ_DISTRIB` directory, and the `FATM_DIR` variable to the full path to `ERA5_Arctic`.
+`./prepare_prod_dir.sh` prepares the current directory for the run...
 
 Now you can launch the simulation on `N` cores.
 
 
 ### Launching coupled ocean--sea-ice simulation with XIOS in server mode
 
-Here on `N=32` cores:
+Here on `N=28` cores:
 
-```mpirun -n 2 ./xios_server.exe : -n 20 ./nemo.exe : -n 10 ./nanuq.exe``
+```mpirun -n 2 ./xios_server.exe : -n 16 ./nemo.exe : -n 10 ./nanuq.exe``
 
 
 Follow the progression of the simulation:

@@ -1,7 +1,7 @@
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 !! NEMO/OCE  Configuration namelist : overwrite default values defined in SHARED/namelist_ref
 !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-!!    HUDSON12 (1/12 of a degree)             !!
+!!    HUDSON12 coupled to OCE of NEMO (1/12th of a degree)             !!
 !!======================================================================
 !
 !-----------------------------------------------------------------------
@@ -60,16 +60,16 @@
       !
    ln_ice_embd = .false.   !  =T embedded sea-ice (pressure + mass and salt exchanges)
       !                    !  =F levitating ice (no pressure, mass and salt exchanges)
-   !!
 /
 !!
 !-----------------------------------------------------------------------
-&namoss_ssx    !   Surface ocean state (when coupled=>init and not coupled =>prescibed) 
+&namoss_ssx    !   Surface ocean state (`ln_prs_oce=T` => prescibed sate | `ln_cpl_oce=T`=>initial state)
 !-----------------------------------------------------------------------
-   l_ssxread   = .true.    !  =T Read in file ;  =F set all to 0. (see ossssm)
+   ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
       ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
-      ln_read_frq = .false.   !  specify whether we must read frq or not
-
+      ln_read_e3t = .true.    !  specify whether we must read `e3t`
+      ln_read_frq = .true.    !  specify whether we must read `frq`
+   !
    cn_dir      = './'      !  root directory for the ocean data location
    !___________!_____________!_________________!___________!_____________!________!___________!__________________!__________!_______________!
    !        !  file name     !frequency (hours)! variable  ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
@@ -79,13 +79,14 @@
    sn_tem = 'CPL_init_HUDSON12_gridT', 6.      , 'sosstsst',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_sal = 'CPL_init_HUDSON12_gridT', 6.      , 'sosaline',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_ssh = 'CPL_init_HUDSON12_gridT', 6.      , 'sossheig',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_mld = 'NOT USED'              ,  6.      , 'mld_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_e3t = 'CPL_init_HUDSON12_gridT', 6.      , 'e3t_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_frq = 'CPL_init_HUDSON12_gridT', 6.      , 'frq_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
 /
 !!
 !!
 !!======================================================================
-!!            ***  Surface Boundary Condition namelists  ***          !!
+!!  ***  Surface Boundary Conditions (ice & ocean) namelists  ***     !!
 !!                                                                    !!
 !!   namsbc          surface boundary condition (ice & ocean) manager   (default: NO selection)
 !!   namsbc_flx      flux               formulation                     (ln_flx     =T)
@@ -103,9 +104,8 @@
 &namsbc_blk    !   namsbc_blk  generic Bulk formula          (ln_blk =T)
 !-----------------------------------------------------------------------
    !                    !  bulk algorithm :
-   ln_NCAR      = .false.     ! "NCAR"      algorithm   (Large and Yeager 2008)
+   ln_NCAR      = .false.    ! "NCAR"      algorithm   (Large and Yeager 2008)
    ln_COARE_3p0 = .false.    ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   ln_COARE_3p6 = .false.    ! "COARE 3.6" algorithm   (Edson et al. 2013)
    ln_ECMWF     = .true.     ! "ECMWF"     algorithm   (IFS cycle 45r1)
       rn_zqt       =  2.     !  Air temperature & humidity reference height (m)
       rn_zu        = 10.     !  Wind vector reference height (m)
@@ -118,7 +118,7 @@
    ln_humi_rlh = .false. !  humidity "sn_humi" is relative humidity     [%]
    ln_tair_pot = .false. !  air temperature read in "sn_tair" is already POTENTIAL TEMPERATURE, NOT ABSOLUTE (ECMWF => ln_tair_pot=.false.)
    !!
-   !! Bulk transfer coefficients over sea-ice: (relevant IF: nn_ice >=1 )
+   !! Bulk transfer coefficients over sea-ice:
    ln_Cx_ice_cst = .true.     ! use constant ice-air bulk transfer coefficients (value given below)
       rn_Cd_i  = 1.6e-3       ! sea-ice drag coefficient
       rn_Ce_i  = 1.4e-3       !    "    sublimation coefficient
@@ -128,35 +128,27 @@
    ln_Cx_ice_LG15  = .false.  !  (Lupkes & Gryanik 2015)
    !
    cn_dir      = './' !  root directory for the bulk data location
-   !___________!____________!___________!__________!_____________!________!___________!__________________!__________!_______________!
-   !           !  file name ! freq. (h) ! variable ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
+   !___________!____________!___________!__________!_____________!________!___________!_____________________________________________________________!__________!_______________!
+   !           !  file name ! freq. (h) ! variable ! time interp.!  clim  ! 'yearly'/ !       weights filename                                      ! rotation ! land/sea mask !
    !           !            !           !   name   !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_wndi = 'u10_ERA5-HUDSON12',      1.,  'u10'    ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
-   sn_wndj = 'v10_ERA5-HUDSON12',      1.,  'v10'    ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
+   sn_wndi = 'u10_ERA5-HUDSON12'     , 1., 'u10'     ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
+   sn_wndj = 'v10_ERA5-HUDSON12'     , 1., 'v10'     ,    .true.   , .false. , 'yearly' , ''  ,''       , ''
    sn_qsr  = 'msdwswrf_ERA5-HUDSON12', 1., 'msdwswrf',    .false.  , .false. , 'yearly' , '' , ''       , ''
    sn_qlw  = 'msdwlwrf_ERA5-HUDSON12', 1., 'msdwlwrf',    .false.  , .false. , 'yearly' , '' , ''       , ''
-   sn_tair = 't2m_ERA5-HUDSON12',      1.,  't2m'    ,    .true.   , .false. , 'yearly' , '' , ''       , ''
-   sn_humi = 'd2m_ERA5-HUDSON12',      1.,  'd2m'    ,    .true.   , .false. , 'yearly' , '' , ''       , ''
-   sn_prec = 'mtpr_ERA5-HUDSON12',     1.,  'mtpr'   ,    .false.  , .false. , 'yearly' , '' , ''       , ''
-   sn_snow = 'msr_ERA5-HUDSON12',      1.,  'msr'    ,    .false.  , .false. , 'yearly' , '' , ''       , ''
-   sn_slp  = 'msl_ERA5-HUDSON12',      1.,  'msl'    ,    .true.   , .false. , 'yearly' , '' , ''       , ''
+   sn_tair = 't2m_ERA5-HUDSON12'     , 1., 't2m'     ,    .true.   , .false. , 'yearly' , '' , ''       , ''
+   sn_humi = 'd2m_ERA5-HUDSON12'     , 1., 'd2m'     ,    .true.   , .false. , 'yearly' , '' , ''       , ''
+   sn_prec = 'mtpr_ERA5-HUDSON12'    , 1., 'mtpr'    ,    .false.  , .false. , 'yearly' , '' , ''       , ''
+   sn_snow = 'msr_ERA5-HUDSON12'     , 1., 'msr'     ,    .false.  , .false. , 'yearly' , '' , ''       , ''
+   sn_slp  = 'msl_ERA5-HUDSON12'     , 1., 'msl'     ,    .true.   , .false. , 'yearly' , '' , ''       , ''
 /
 !!
 !!======================================================================
 !!               ***  Lateral boundary condition  ***                 !!
 !!                                                                    !!
-!!   namlbc        lateral momentum boundary condition                  (default: NO selection)
 !!   nambdy        Unstructured open boundaries                         (default: OFF)
 !!   nambdy_dta    Unstructured open boundaries - external data         (see  nambdy)
-!!   nambdy_tide   tidal forcing at open boundaries                     (default: OFF)
 !!======================================================================
 !
-!-----------------------------------------------------------------------
-&namlbc        !   lateral momentum boundary condition                  (default: NO selection)
-!-----------------------------------------------------------------------
-   rn_shlat    =    2.     !  no slip #lolo very important for BBM to match that of sea-ice (rn_ishlat)
-/
-!!
 !-----------------------------------------------------------------------
 &nambdy        !  unstructured open boundaries                          (default: OFF)
 !-----------------------------------------------------------------------
@@ -165,20 +157,21 @@
 !!-----------------------------------------------------------------------
 &nameos        !   ocean Equation Of Seawater                           (default: NO selection)
 !-----------------------------------------------------------------------
-   ln_teos10   = .true.         !  = Use TEOS-10
 /
-!!
+!
 !-----------------------------------------------------------------------
 &nammpp        !   Massively Parallel Processing
 !-----------------------------------------------------------------------
    ln_listonly =  .false.  !  do nothing else than listing the best domain decompositions (with land domains suppression)
    !                       !  if T: the largest number of cores tested is defined by max(mppsize, jpni*jpnj)
    ln_nnogather =  .false.
-!!   jpni        =   4       !  number of processors following i (set automatically if < 1), see also ln_listonly = T
-!!   jpnj        =   4       !  number of processors following j (set automatically if < 1), see also ln_listonly = T
-   nn_comm     =   1            !  comm choice
+!!   jpni        =   2       !  number of processors following i (set automatically if < 1), see also ln_listonly = T
+!!   jpnj        =   2       !  number of processors following j (set automatically if < 1), see also ln_listonly = T
+   nn_hls      =   3         !  halo width (applies to both rows and columns)
+   nn_comm     =   1         !  comm choice
 /
 !-----------------------------------------------------------------------
 &namctl        !   Control prints                                       (default: OFF)
 !-----------------------------------------------------------------------
+   ln_timing   = .true.          !  timing by routine write out in timing.output file
 /

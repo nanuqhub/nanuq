@@ -63,7 +63,6 @@
       <field field_ref="icettop"          name="sittop" operation="instant" />
       <field field_ref="icetbot"          name="sitbot" operation="instant" />
       <field field_ref="snwtemp"          name="sntemp" operation="instant" />
-      <field field_ref="icetsni"          name="sitsni" operation="instant" />
 
       <!-- momentum -->
       <field field_ref="uice"             name="u_ice-u"   operation="instant" valid_min="-0.5" valid_max="0.5" />
@@ -77,30 +76,6 @@
 
     </file>
 
-
-    <file id="file32" name_suffix="_siflx" description="fluxes sea-ice" enabled=".true." >
-      <field field_ref="iceconc"      name="siconc"                  operation="average" />
-      <!-- flux of momentum -->
-      <field field_ref="taum_ai"      name="taum_ai"                 operation="average" valid_min="0."   valid_max="0.5" />
-      <field field_ref="utau_ai"      name="utau_ai"                 operation="average" />
-      <field field_ref="vtau_ai"      name="vtau_ai"                 operation="average" />
-      <!-- -->
-      <field field_ref="taum_oi"      name="taum_oi"                 operation="average" valid_min="0."   valid_max="0.5" />
-      <field field_ref="utau_oi"      name="utau_oi"                 operation="average" />
-      <field field_ref="vtau_oi"      name="vtau_oi"                 operation="average" />
-      <!-- -->
-      <field field_ref="qns_atmo"                     operation="average"  />
-      <!-- -->
-      <!-- Air-ice heat fluxes -->
-      <field field_ref="qt_ice"       name="qt_ice"   operation="average"  />
-      <field field_ref="qsr_ice"      name="qsr_ice"  operation="average"  />
-      <field field_ref="qns_ice"      name="qns_ice"  operation="average"  />
-      <!-- -->
-      <!-- Surface fluxes received by the liquid-ocean in regions where there is sea-ice -->
-      <field field_ref="qsr_oce_si"   name="qsr_oce"  operation="average" />
-      <field field_ref="qns_oce_si"   name="qns_oce"  operation="average" />
-      <field field_ref="qemp_oce_si"  name="qemp_oce" operation="average" />
-    </file>
   </file_group>
 
 

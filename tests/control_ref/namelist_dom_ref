@@ -91,9 +91,9 @@
 !-----------------------------------------------------------------------
    ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
       ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
-      ln_read_e3t = .false.   !  specify whether we must read `e3t` or not
+      ln_read_e3t = .false.   !  specify whether we must read `e3t`
          rn_e3t_0 = 1.        !  if `ln_read_e3t=F` prescribed thickness of 1st ocean level to impose (m)
-      ln_read_frq = .false.   !  specify whether we must read `frq` or not
+      ln_read_frq = .false.   !  specify whether we must read `frq`
          rn_frq_0 = 0.65      !  if `ln_read_frq=F` prescr. solar flux penetr. through 1st ocean level
    !
    ! Relevant if `ln_prs_oce=T`:

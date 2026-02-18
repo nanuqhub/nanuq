@@ -184,24 +184,6 @@
     </file>
 
 
-    <file id="file34" name_suffix="_flxWA" description="fluxes open ocean surface" enabled=".false." >
-      <!-- Open ocean heat fluxes -->
-      <!-- flux of momentum between water and air -->
-      <field field_ref="iceconc"     name="siconc"       operation="average" />
-      <field field_ref="wspd"        operation="average" />
-      <field field_ref="rho_air"     operation="average"  />
-      <!--  -->
-      <field field_ref="taum_wa"     operation="average" valid_min="0."   valid_max="0.5" />
-      <field field_ref="qla_wa"      operation="average"  />
-      <field field_ref="qsb_wa"      operation="average"  />
-      <field field_ref="qlw_wa"      operation="average"  />
-      <field field_ref="qns_wa"      operation="average"  />
-      <field field_ref="qsr_wa"      operation="average"  />
-      <field field_ref="evap_wa"     operation="average"  />
-      <field field_ref="utau_wa"     operation="average" />
-      <field field_ref="vtau_wa"     operation="average" />
-      <!--  -->
-    </file>
 
 
 

@@ -122,16 +122,14 @@ Executable created: `cfgs/generic_cpl_oce/BLD/bin/nanuq.exe`
 
 ## Getting started with NANUQ
 
-Download the archive containing input and forcings for the test-cases:
-
-[`https://ige-meom-opendap.univ-grenoble-alpes.fr/thredds/fileServer/meomopendap/extract/MEOM/NANUQ/INPUT_NANUQ_DISTRIB.tgz`](https://ige-meom-opendap.univ-grenoble-alpes.fr/thredds/fileServer/meomopendap/extract/MEOM/NANUQ/INPUT_NANUQ_DISTRIB.tgz)
+Download the archive containing input and forcings for the test-cases [here](https://ige-meom-opendap.univ-grenoble-alpes.fr/thredds/fileServer/meomopendap/extract/SASIP/model-forcings/nanuq/INPUT_NANUQ_DISTRIB.tgz).
 
 And extract it somewhere...
 
 `tar zxvf INPUT_NANUQ_DISTRIB.tgz`
 
 If you plan to test the HUDSON12 setups (standalone or coupled to OCE of NEMO), also download the atmospheric forcing:
-[here](https://ige-meom-opendap.univ-grenoble-alpes.fr/thredds/catalog/meomopendap/extract/MEOM/NANUQ/atmo_forcings/FATM_1997_HUDSON12/catalog.html) (16 GiB!).
+[here](https://ige-meom-opendap.univ-grenoble-alpes.fr/thredds/catalog/meomopendap/extract/SASIP/model-forcings/nanuq/ERA5-HUDSON12/catalog.html) (16 GiB!).
 <br>
 It is the 1-hourly ERA5 surface atmospheric forcing for 1997 interpolated on the HUDSON12 domain, 1 netCDF file per atmospheric variable.
 

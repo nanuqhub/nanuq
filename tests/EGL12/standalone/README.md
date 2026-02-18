@@ -22,10 +22,13 @@ Make a copy or create symbolic links, in here, of all the netCDF files found und
 * `<SOMEWHERE>/INPUT_NANUQ_DISTRIB/EGL12/BDY/`
 * `<SOMEWHERE>/ERA5_Arctic`
 
+Adjust the host-specific value of paths such as `DIR_NC_IN` & `HUDSON12_FATM_DIR` into the file located under `<NANUQ_REPO>/tests/paths_nanuq_data.bash`; `INPUT_NANUQ_DISTRIB` should provide the full path to the `INPUT_NANUQ_DISTRIB` you have downloaded.
 
 Copy or create a symbolic link of the `nanuq.exe` executable compiled into `../../cfgs/generic/BLD/bin/nanuq.exe`
 
-The `prepare_prod_dir.sh` can do all this for you, all you have to do is set the `DIR_NC_IN` variable to the full path to `INPUT_NANUQ_DISTRIB` directory, and the `FATM_DIR` variable to the full path to `ERA5_Arctic`.
+The `prepare_prod_dir.sh` can do all this for you, example:
+
+`./prepare_prod_dir.sh` prepares the current directory for the run...
 
 Now you can launch the simulation on `N` cores.
 

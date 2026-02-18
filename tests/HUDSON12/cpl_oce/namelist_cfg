@@ -77,8 +77,8 @@
    !___________!__________________!___________________!_____________!_____________!________!___________!__________________!__________!_______________!
    !           !  file name       ! frequency (hours) !  variable   ! time interp.!  clim  ! 'yearly'/ ! weights filename ! rotation ! land/sea mask !
    !           !                  !  (if <0  months)  !    name     !   (logical) !  (T/F) ! 'monthly' !                  ! pairing  !    filename   !
-   sn_tem = 'votemper_GLORYS12V1-HUDSON12_L16_19970101',    -12. ,'votemper',   .FALSE.   , .TRUE. , 'yearly'  ,    ''    ,    ''    ,    ''
-   sn_sal = 'vosaline_GLORYS12V1-HUDSON12_L16_19970101',    -12. ,'vosaline',   .FALSE.   , .TRUE. , 'yearly'  ,    ''    ,    ''    ,    ''
+   sn_tem = 'votemper_GLORYS12-HUDSON12_L16_19970101',-12. ,'votemper',   .FALSE.   , .TRUE. , 'yearly'  ,    ''    ,    ''    ,    ''
+   sn_sal = 'vosaline_GLORYS12-HUDSON12_L16_19970101',-12. ,'vosaline',   .FALSE.   , .TRUE. , 'yearly'  ,    ''    ,    ''    ,    ''
 /
 
 !!======================================================================

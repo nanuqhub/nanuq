@@ -1,174 +1,81 @@
 <?xml version="1.0"?>
 
-<file_definition type="one_file" name="@expname@_@freq@_@startdate@_@enddate@" sync_freq="1d" min_digits="4">
+<file_definition type="one_file" name="@expname@_@freq@_@startdate@_@enddate@" sync_freq="6h" min_digits="4">
 
 
-
-  
   <file_group id="1h" output_freq="1h"  output_level="10" >  <!-- 1h files -->
-    <!-- Fields for Lagrangian-Tracking -->
-    <file id="file21" name_suffix="_icemod" description="ice variables" enabled=".true." >
+
+    <file id="file21" name_suffix="_icemod" description="ice variables" enabled=".false." >
+      <!-- general -->
       <field field_ref="iceconc"        name="siconc"     operation="average" />
       <field field_ref="icevolu"        name="sivolu"     operation="average" />
       <field field_ref="uice"           name="u_ice"      operation="average" />
       <field field_ref="vice"           name="v_ice"      operation="average" />
-      <!--
-          <field field_ref="icedmgt"        name="damage-t"   operation="average" />
-          <field field_ref="icedmgf"        name="damage-f"   operation="average" />
-      -->
-    </file>    
-  </file_group>
-
-  <!-- Generates a SSX forcing -->
-  <file_group id="6h" output_freq="6h"  output_level="10" >  <!-- 6h files: create a standalone SSX forcing -->
-    <file id="file22" name_suffix="_SSX" description="ocean surface state" enabled=".true." >
-      <field field_ref="ssh_m"  name="zos"     operation="average" />
-      <field field_ref="sst_m"  name="tos"     operation="average" />
-      <field field_ref="sss_m"  name="sos"     operation="average" />
-      <field field_ref="e3t_m"  name="e3t_m"   operation="average" />
-      <field field_ref="frq_m"  name="frq_m"   operation="average" />
-      <field field_ref="ssu_m"  name="uos"     operation="average" />
-      <field field_ref="ssv_m"  name="vos"     operation="average" />
+      <field field_ref="icedmgt"        name="damage-t"   operation="average" />
+      <field field_ref="icedmgf"        name="damage-f"   operation="average" />
     </file>
+
   </file_group>
 
 
-  <!-- The REAL DEAL: -->
   <file_group id="3h" output_freq="3h"  output_level="10" >  <!-- 3h files -->
 
     <file id="file31" name_suffix="_icemod" description="ice variables" enabled=".true." >
-
       <!-- general -->
-      <field field_ref="iceconc"          name="siconc-t"  operation="instant" />
-      <field field_ref="icevolu"          name="sivolu"    operation="instant" valid_min="0." valid_max="5." />
-      <!-- <field field_ref="icethic"          name="sithic-t"  operation="instant" valid_min="0." valid_max="5." />      -->
-      <field field_ref="snwvolu"          name="snvolu"    operation="instant" valid_min="0." valid_max="3." />
-      <field field_ref="icedmgt"     name="damage-t"    operation="instant" />
-      
-      <!-- Mostly for debug: -->
-      <field field_ref="iceconc-f"       name="siconc-f"  operation="instant" /> -->      
-      <field field_ref="icethic-f"       name="sithic-f"  operation="instant" valid_min="0." valid_max="5." />
-      <field field_ref="icedmgf"         name="damage-f"    operation="instant" />
-      
+      <field field_ref="iceconc"          name="siconc"   operation="instant" />
+      <field field_ref="icevolu"          name="sivolu"   operation="instant" valid_min="0." valid_max="5." />
+      <field field_ref="icethic"          name="sithic"   operation="instant" valid_min="0." valid_max="5." />
+      <field field_ref="snwvolu"          name="snvolu"   operation="instant" valid_min="0." valid_max="3." />
+
       <!-- FIELDS received by the Ocean model NANUQ is coupled to: -->
-      <!--
-          <field field_ref="sst_m"              operation="instant" />
-          <field field_ref="sss_m"              operation="instant" />
-          <field field_ref="ssh_m"              operation="instant" />
-          <field field_ref="ssu_m"              operation="instant" />
-          <field field_ref="ssv_m"              operation="instant" />
-      -->
-      <!--      
-          <field field_ref="e3t_m"              operation="instant" />
-          <field field_ref="frq_m"              operation="instant" />
-      -->
-      <!--
-          <field field_ref="Cd_ice"          name="Cd_ice"   operation="instant" valid_min="0." valid_max="2." />
-          <field field_ref="Ch_ice"          name="Ch_ice"   operation="instant" />
-          <field field_ref="Ce_ice"          name="Ce_ice"   operation="instant" />
-      -->
+      <field field_ref="sst_m"              operation="instant" />
+      <field field_ref="sss_m"              operation="instant" />
+      <field field_ref="ssh_m"              operation="instant" />
+      <field field_ref="ssu_m"              operation="instant" />
+      <field field_ref="ssv_m"              operation="instant" />
+      <!-- -->
+      <field field_ref="e3t_m"              operation="instant" />
+      <field field_ref="frq_m"              operation="instant" />
 
       <!-- rheology -->
       <!-- Traditional C-grid location: -->
-
-      <!-- <field field_ref="cncoeff_t"                      operation="instant" /> -->
+      <field field_ref="icedmgt"     name="damage-t"    operation="instant" />
       <field field_ref="icedivt"     name="sidive-t"    operation="instant" valid_min="-0.5e-5" valid_max="0.5e-5" />
       <field field_ref="iceshrf"     name="sishear-f"   operation="instant" valid_min="-0.5e-5" valid_max="0.5e-5" />
-      <field field_ref="icedeft"     name="sidefo-t"    operation="instant" valid_min="0."      valid_max="1.e-5"  />    
       <field field_ref="icevorf"     name="sivort-f"    operation="instant" valid_min="-1.e-5"  valid_max="1.e-5"   />
       <field field_ref="iceshet"     name="simxshr-t"   operation="instant" valid_min="0."      valid_max="1.e-5" />
-      <!--
-          <field field_ref="fUu"         name="fUu"         operation="instant" valid_min="-0.2"    valid_max="0.2"   />
-          <field field_ref="fVv"         name="fVv"         operation="instant" valid_min="-0.2"    valid_max="0.2"   />
-      -->
-      <!--
-          <field field_ref="zelat"       name="zelat"       operation="instant" />
-          <field field_ref="zlambt"      name="zlambt"      operation="instant" />
-          <field field_ref="zetat"       name="zetat"       operation="instant" />
-      -->
+      <field field_ref="icedeft"     name="sidefo-t"    operation="instant" valid_min="0."      valid_max="1.e-5" />
 
       <!-- F-centric C-grid location: -->
-      
-      <!--
-          <field field_ref="icedivf"     name="sidive-f"    operation="instant" valid_min="-0.5e-5" valid_max="0.5e-5" />
-          <field field_ref="iceshrt"     name="sishear-t"   operation="instant" valid_min="-0.5e-5" valid_max="0.5e-5" />
-          <field field_ref="icedeff"     name="sidefo-f"    operation="instant" valid_min="0."     valid_max="1.e-5"   />
-      -->
-      <!--
-          <field field_ref="icevort"     name="sivort-t"    operation="instant" valid_min="-1.e-5" valid_max="1.e-5" />
-          <field field_ref="iceshef"     name="simxshr-f"   operation="instant" valid_min="0."     valid_max="1.e-5" />
-      -->
+      <field field_ref="icedmgf"     name="damage-f"    operation="instant" />
+      <field field_ref="icedivf"     name="sidive-f"    operation="instant" valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="iceshrt"     name="sishear-t"   operation="instant" valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="icevort"     name="sivort-t"    operation="instant" valid_min="-1.e-5" valid_max="1.e-5" />
+      <field field_ref="iceshef"     name="simxshr-f"   operation="instant" valid_min="0."     valid_max="1.e-5" />
+      <field field_ref="icedeff"     name="sidefo-f"    operation="instant" valid_min="0."     valid_max="1.e-5" />
       <!--
           <field field_ref="zelaf"       name="zelaf"       operation="instant" />
           <field field_ref="zmulf"       name="zmulf"       operation="instant" />
       -->
 
       <!-- thermo -->
-      <!--
-          <field field_ref="icetemp"          name="sitemp" operation="instant" />
-          <field field_ref="icettop"          name="sittop" operation="instant" />
-          <field field_ref="icetbot"          name="sitbot" operation="instant" />
-          <field field_ref="snwtemp"          name="sntemp" />
-          <field field_ref="icetsni"          name="sitsni" />
-      -->
+      <field field_ref="icetemp"          name="sitemp" operation="instant" />
+      <field field_ref="icettop"          name="sittop" operation="instant" />
+      <field field_ref="icetbot"          name="sitbot" operation="instant" />
+      <field field_ref="snwtemp"          name="sntemp" operation="instant" />
 
       <!-- momentum -->
-      <field field_ref="uice"             name="u_ice-u"    operation="instant" valid_min="-0.5" valid_max="0.5" />
-      <field field_ref="vice"             name="v_ice-v"    operation="instant" valid_min="-0.5" valid_max="0.5" />
-      <!-- <field field_ref="icevel"           name="sivelo-t" operation="instant" valid_min="0."   valid_max="0.5" /> -->
+      <field field_ref="uice"             name="u_ice-u"   operation="instant" valid_min="-0.5" valid_max="0.5" />
+      <field field_ref="vice"             name="v_ice-v"   operation="instant" valid_min="-0.5" valid_max="0.5" />
+      <field field_ref="icevel"           name="sivelo-t"  operation="instant" valid_min="0."   valid_max="0.5" />
       <!-- -->
-
-      <!--
-          <field field_ref="uice_v"           name="u_ice-v"    operation="instant" valid_min="-0.5" valid_max="0.5" />
-          <field field_ref="vice_u"           name="v_ice-u"    operation="instant" valid_min="-0.5" valid_max="0.5" />
-      -->
-
 
       <!-- stress tensors -->
       <field field_ref="normstr"     name="ice_sigI-t"  operation="instant" valid_min="-5.e4" valid_max="5.e3" />
       <field field_ref="sheastr"     name="ice_sigII-t" operation="instant" valid_min="0."    valid_max="3.e4" />
 
-      <!--
-          <field field_ref="ice_sig11"   name="sigma11-t" operation="instant" valid_min="-5.e4" valid_max="5.e3" />
-          <field field_ref="ice_sig22"   name="sigma22-t" operation="instant" valid_min="-5.e4" valid_max="5.e3" />
-          <field field_ref="ice_sig12"   name="sigma12-f" operation="instant" valid_min="-5.e4" valid_max="5.e4" />
-      -->
-      <!--
-          <field field_ref="ice_sig11f"  name="sigma11-f" operation="instant" valid_min="-5.e4" valid_max="5.e3"  />
-          <field field_ref="ice_sig22f"  name="sigma22-f" operation="instant" valid_min="-5.e4" valid_max="5.e3"  />
-          <field field_ref="ice_sig12t"  name="sigma12-t" operation="instant" valid_min="-5.e4" valid_max="5.e4"  />
-      -->
-
-      <!-- -->
-
     </file>
 
-
-    <file id="file32" name_suffix="_siflx" description="fluxes sea-ice" enabled=".true." >
-      <field field_ref="iceconc"     name="siconc"   operation="average" />
-      <field field_ref="wspd"                        operation="average" />
-      <!-- flux of momentum -->
-      <!-- <field field_ref="taum_ai"      name="taum_ai"                 operation="average" valid_min="0."   valid_max="0.5" /> -->
-      <field field_ref="taux_ai_u"    name="taux_ai_u"                 operation="average" />
-      <field field_ref="tauy_ai_v"    name="tauy_ai_v"                 operation="average" />
-      <!-- -->
-      <!-- <field field_ref="taum_oi"      name="taum_oi"                 operation="average" valid_min="0."   valid_max="0.5" /> -->
-      <field field_ref="taux_oi_u"      name="taux_oi_u"                 operation="average" />
-      <field field_ref="tauy_oi_v"      name="tauy_oi_v"                 operation="average" />
-      <!-- -->
-      <field field_ref="qns_atmo"                     operation="average"  />
-      <!-- Air-ice heat fluxes -->
-      <field field_ref="qt_ice"       name="qt_ice"   operation="average"  />
-      <field field_ref="qsr_ice"      name="qsr_ice"  operation="average"  />
-      <field field_ref="qns_ice"      name="qns_ice"  operation="average"  />
-      <!-- -->
-      <!-- Surface fluxes received by the liquid-ocean in regions where there is sea-ice -->
-      <!--
-          <field field_ref="qsr_oce_si"   name="qsr_oce"  operation="average" />
-          <field field_ref="qns_oce_si"   name="qns_oce"  operation="average" />
-          <field field_ref="qemp_oce_si"  name="qemp_oce" operation="average" />
-      -->
-    </file>
   </file_group>
 
 
@@ -178,55 +85,55 @@
     <file id="file41" name_suffix="_icemod" description="ice variables" enabled=".false." >
 
       <!-- general -->
-      <field field_ref="iceconc"    name="siconc"   operation="average"  />
-      <field field_ref="icethic"    name="sithic"   operation="average"  valid_min="0." valid_max="5." />
-      <field field_ref="icevolu"    name="sivolu"   operation="average"  valid_min="0." valid_max="5." />
-      <field field_ref="snwvolu"    name="snvolu"   operation="average"  valid_min="0." valid_max="3." />
-      <field field_ref="icesalt"    name="sisali"   operation="average"  />
-      <field field_ref="sst_m"      name="sst_m"    operation="average"  />
-      <field field_ref="sss_m"      name="sss_m"    operation="average"  />
-      <field field_ref="icedmgt"    name="damage-t" operation="average"  />
+      <field field_ref="iceconc"    name="siconc"   operation="average" />
+      <field field_ref="icethic"    name="sithic"   operation="average" valid_min="0." valid_max="5." />
+      <field field_ref="icevolu"    name="sivolu"   operation="average" valid_min="0." valid_max="5." />
+      <field field_ref="snwvolu"    name="snvolu"   operation="average" valid_min="0." valid_max="3." />
+      <field field_ref="icesalt"    name="sisali"   operation="average" />
+      <field field_ref="sst_m"      name="sst_m"    operation="average" />
+      <field field_ref="sss_m"      name="sss_m"    operation="average" />
+      <field field_ref="icedmgt"    name="damage-t" operation="average" />
 
       <!-- rheology -->
       <!-- Traditional C-grid location: -->
-      <field field_ref="icedivt"     name="sidive-t"    operation="average"  valid_min="-0.5e-5" valid_max="0.5e-5" />
-      <field field_ref="iceshrf"     name="sishear-f"   operation="average"  valid_min="-0.5e-5" valid_max="0.5e-5" />
-      <field field_ref="icevorf"     name="sivort-f"    operation="average"  valid_min="-1.e-5" valid_max="1.e-5" />
-      <field field_ref="iceshet"     name="simxshr-t"   operation="average"  valid_min="0."     valid_max="1.e-5" />
-      <field field_ref="icedeft"     name="sidefo-t"    operation="average"  valid_min="0."     valid_max="1.e-5" />
+      <field field_ref="icedivt"     name="sidive-t"    operation="average" valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="iceshrf"     name="sishear-f"   operation="average" valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="icevorf"     name="sivort-f"    operation="average" valid_min="-1.e-5" valid_max="1.e-5" />
+      <field field_ref="iceshet"     name="simxshr-t"   operation="average" valid_min="0."     valid_max="1.e-5" />
+      <field field_ref="icedeft"     name="sidefo-t"    operation="average" valid_min="0."     valid_max="1.e-5" />
       <!-- F-centric C-grid location: -->
-      <field field_ref="icedivf"     name="sidive-f"    operation="average"  valid_min="-0.5e-5" valid_max="0.5e-5" />
-      <field field_ref="iceshrt"     name="sishear-t"   operation="average"  valid_min="-0.5e-5" valid_max="0.5e-5" />
-      <field field_ref="icevort"     name="sivort-t"    operation="average"  valid_min="-1.e-5" valid_max="1.e-5" />
-      <field field_ref="iceshef"     name="simxshr-f"   operation="average"  valid_min="0."     valid_max="1.e-5" />
-      <field field_ref="icedeff"     name="sidefo-f"    operation="average"  valid_min="0."     valid_max="1.e-5" />
+      <field field_ref="icedivf"     name="sidive-f"    operation="average" valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="iceshrt"     name="sishear-t"   operation="average" valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="icevort"     name="sivort-t"    operation="average" valid_min="-1.e-5" valid_max="1.e-5" />
+      <field field_ref="iceshef"     name="simxshr-f"   operation="average" valid_min="0."     valid_max="1.e-5" />
+      <field field_ref="icedeff"     name="sidefo-f"    operation="average" valid_min="0."     valid_max="1.e-5" />
       <!-- -->
 
       <!-- heat -->
-      <field field_ref="icetemp"          name="sitemp" operation="average"  />
+      <field field_ref="icetemp"          name="sitemp" operation="average" />
 
       <!-- momentum -->
-      <field field_ref="uice"             name="u_ice"    operation="average"  />
-      <field field_ref="vice"             name="v_ice"    operation="average"  />
-      <field field_ref="icevel"           name="sivelo-t" operation="average"  />
+      <field field_ref="uice"             name="u_ice"    operation="average" />
+      <field field_ref="vice"             name="v_ice"    operation="average" />
+      <field field_ref="icevel"           name="sivelo-t" operation="average" />
 
-      <field field_ref="taum_ai"                         operation="average"  />
-      <field field_ref="taux_ai_u"                         operation="average"  />
-      <field field_ref="tauy_ai_v"                         operation="average"  />
+      <field field_ref="taum_ai"                         operation="average" />
+      <field field_ref="utau_ai"                         operation="average" />
+      <field field_ref="vtau_ai"                         operation="average" />
 
-      <field field_ref="taum_oi"                         operation="average"  />
-      <field field_ref="taux_oi_u"                         operation="average"  />
-      <field field_ref="tauy_oi_v"                         operation="average"  />
+      <field field_ref="taum_oi"                         operation="average" />
+      <field field_ref="utau_oi"                         operation="average" />
+      <field field_ref="vtau_oi"                         operation="average" />
       <!-- -->
 
       <!-- stress tensor -->
-      <field field_ref="normstr"     name="ice_sigI-t"  operation="average"  />
-      <field field_ref="sheastr"     name="ice_sigII-t" operation="average"  />
+      <field field_ref="normstr"     name="ice_sigI-t"  operation="average" />
+      <field field_ref="sheastr"     name="ice_sigII-t" operation="average" />
 
       <!-- heat fluxes -->
-      <field field_ref="qt_ice"           name="qt_ice"   operation="average"   />
-      <field field_ref="qsr_ice"          name="qsr_ice"  operation="average"   />
-      <field field_ref="qns_ice"          name="qns_ice"  operation="average"   />
+      <field field_ref="qt_ice"           name="qt_ice"   operation="average"  />
+      <field field_ref="qsr_ice"          name="qsr_ice"  operation="average"  />
+      <field field_ref="qns_ice"          name="qns_ice"  operation="average"  />
 
     </file>
 
