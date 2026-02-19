@@ -38,7 +38,7 @@ MODULE sbcblk_algo_ecmwf
    USE in_out_manager, ONLY: nit000, nitend, ln_timing  ! I/O manager
    USE sbc_phy         ! Catalog of functions for physical/meteorological parameters in the marine boundary layer
    USE sbcblk_coare_util, ONLY : first_guess_coare
-   USE sbcblk_skin_ecmwf ! cool-skin/warm layer scheme !LB
+   USE sbcblk_skin_ecmwf ! cool-skin/warm layer scheme
    USE oss_nnq , ONLY : e3t_m
    USE ossskin , ONLY : oss_skin_alloc, oss_skin_dealloc, dT_cs, dT_wl, Hz_wl
 
@@ -59,13 +59,12 @@ MODULE sbcblk_algo_ecmwf
    REAL(wp), PARAMETER ::   alpha_H = 0.40    ! (Chapter 3, p.34, IFS doc Cy31r1)
    REAL(wp), PARAMETER ::   alpha_Q = 0.62    !
 
-
 CONTAINS
 
-   SUBROUTINE turb_ecmwf( kt, zt, zu, pSST, pT_s, pt_zt, pq_s, pq_zt, pU_zu, l_use_cs, l_use_wl, &
-      &                      pCd, pCh, pCe, pt_zu, pq_zu, pUbzu,                           &
-      &                      nb_iter,                                                      & ! optional input
-      &                      pQsw, prad_lw, pslp )                                 ! optionals for warm-layer only
+   SUBROUTINE turb_ecmwf(    kt, zt, zu, pSST, pT_s, pt_zt, pq_s, pq_zt, pU_zu, l_use_cs, l_use_wl, &
+      &                       pCd, pCh, pCe, pt_zu, pq_zu, pUbzu,                                   &
+      &                       nb_iter,                                                              & ! optional input
+      &                       pQsw, prad_lw, pslp )                                                   ! opt. cool-skin & warm-layer
       !!----------------------------------------------------------------------------------
       !!                      ***  ROUTINE  turb_ecmwf  ***
       !!
@@ -84,7 +83,7 @@ CONTAINS
       !!    *  kt    : current time step (starts at 1)
       !!    *  zt    : height for temperature and spec. hum. of air            [m]
       !!    *  zu    : height for wind speed (usually 10m)                     [m]
-      !!    *  pSST  : bulk SST                                               [deg.C]
+      !!    *  pSST  : bulk SST                                                [deg.C]
       !!    *  pt_zt : potential air temperature at zt                         [K]
       !!    *  pq_zt : specific humidity of air at zt                          [kg/kg]
       !!    *  pU_zu : scalar wind speed at zu                                 [m/s]
@@ -95,7 +94,7 @@ CONTAINS
       !! -------------
       !!    *  pT_s  : surface skin temperature                               [deg.C]
       !!    *  pq_s  : saturation specific humidity at temp. pT_s             [kg/kg]
-      !!       ==> these 2 are identical `pSST` & `q_sat(pSST)` when CSWL not used !!!
+      !!  ==> these 2 are identical `pSST` & `q_sat(pSST)` when CSWL not used !!!
       !!
       !! OPTIONAL INPUT:
       !! ---------------
@@ -117,7 +116,6 @@ CONTAINS
       !!    *  pt_zu   : pot. air temperature adjusted at wind height zu       [K]
       !!    *  pq_zu   : specific humidity of air        //                    [kg/kg]
       !!    *  pUbzu   : bulk wind speed at zu                                 [m/s]
-      !!
       !!
       !! ** Author: L. Brodeau, June 2019 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
@@ -153,7 +151,7 @@ CONTAINS
       REAL(wp) :: zz0, zz0t, zz0q, zpsi_h_z0t, zpsi_h_z0q, zpsi_m_z0, zzeta_u, zzeta_t
       REAL(wp) :: zlog_10, zlog_ztu, zlog_z0, zlog_zu, zlog_z0t, zlog_z0q
       REAL(wp) :: zFm, zFh, zFq, zQns
-      REAL(wp) :: zSST, zT_s, zq_s, zubzu, zt_zt, zq_zt, zt_zu, zq_zu
+      REAL(wp) :: zSST, zT_s, zq_s, zUbzu, zt_zt, zq_zt, zt_zu, zq_zu
       REAL(wp) :: ztmp0, ztmp1
       !
       CHARACTER(len=40), PARAMETER :: crtnm = 'turb_ecmwf@sbcblk_algo_ecmwf.F90'
@@ -240,9 +238,9 @@ CONTAINS
             zlog_z0t = LOG(zz0t)
 
             !! Functions such as  u* = pUbzu*vkarmn/zFm
-            zFm = zlog_zu - zlog_z0  - psi_m_ecmwf_sclr(zzeta_u) + psi_m_ecmwf_sclr( zz0*z1oL)
-            zpsi_h_u = psi_h_ecmwf_sclr(zzeta_u)
-            zFh = zlog_zu - zlog_z0t - zpsi_h_u + psi_h_ecmwf_sclr(zz0t*z1oL)
+            zFm = zlog_zu - zlog_z0  - psi_m_ecmwf(zzeta_u) + psi_m_ecmwf( zz0*z1oL)
+            zpsi_h_u = psi_h_ecmwf(zzeta_u)
+            zFh = zlog_zu - zlog_z0t - zpsi_h_u + psi_h_ecmwf(zz0t*z1oL)
 
             !! ITERATION BLOCK
             !$acc loop seq
@@ -257,30 +255,30 @@ CONTAINS
                z1oL   = SIGN( MIN(ABS(z1oL),200._wp), z1oL ) ! (prevent FPE from stupid values from masked region later on...)
 
                zzeta_u  = zu*z1oL
-               zpsi_m_u = psi_m_ecmwf_sclr(zzeta_u)
-               zpsi_h_u = psi_h_ecmwf_sclr(zzeta_u)
+               zpsi_m_u = psi_m_ecmwf(zzeta_u)
+               zpsi_h_u = psi_h_ecmwf(zzeta_u)
 
                zzeta_t  = zt*z1oL
-               zpsi_h_t = psi_h_ecmwf_sclr(zzeta_t)
+               zpsi_h_t = psi_h_ecmwf(zzeta_t)
 
                !! Update zFm with new z1oL:
-               zFm = zlog_zu -zlog_z0 - zpsi_m_u + psi_m_ecmwf_sclr(zz0*z1oL) ! LB: should be "zu+z0" rather than "zu" alone, but z0 is tiny wrt zu!
+               zFm = zlog_zu -zlog_z0 - zpsi_m_u + psi_m_ecmwf(zz0*z1oL) ! LB: should be "zu+z0" rather than "zu" alone, but z0 is tiny wrt zu!
 
-               !! Need to update roughness lengthes:
+               !! Roughness lengthes z0, z0t (z0q /= z0t):
                zus = zUbzu*vkarmn/zFm
                zus2  = zus*zus
-               ztmp0  = znu_a/zus
-               zz0     = MIN( ABS( alpha_M*ztmp0 + charn0_ecmwf*zus2/grav ) , 0.001_wp)
-               zz0t    = MIN( ABS( alpha_H*ztmp0                           ) , 0.001_wp)   ! eq.3.26, Chap.3, p.34, IFS doc - Cy31r1
-               zz0q    = MIN( ABS( alpha_Q*ztmp0                           ) , 0.001_wp)
+               ztmp0 = znu_a/zus
+               zz0   = MIN( ABS( alpha_M*ztmp0 + charn0_ecmwf*zus2/grav ) , 0.001_wp)
+               zz0t  = MIN( ABS( alpha_H*ztmp0                          ) , 0.001_wp)   ! eq.3.26, Chap.3, p.34, IFS doc - Cy31r1
+               zz0q  = MIN( ABS( alpha_Q*ztmp0                          ) , 0.001_wp)
 
                zlog_z0  = LOG(zz0 )
                zlog_z0t = LOG(zz0t)
                zlog_z0q = LOG(zz0q)
 
-               zpsi_m_z0   = psi_m_ecmwf_sclr(zz0 *z1oL)  ! LB: should be "zu+z0" rather than "zu" alone, but z0 is tiny wrt zu!
-               zpsi_h_z0t  = psi_h_ecmwf_sclr(zz0t*z1oL)  !              "                           "
-               zpsi_h_z0q  = psi_h_ecmwf_sclr(zz0q*z1oL)  !              "                           "
+               zpsi_m_z0   = psi_m_ecmwf(zz0 *z1oL)  ! LB: should be "zu+z0" rather than "zu" alone, but z0 is tiny wrt zu!
+               zpsi_h_z0t  = psi_h_ecmwf(zz0t*z1oL)  !              "                           "
+               zpsi_h_z0q  = psi_h_ecmwf(zz0q*z1oL)  !              "                           "
 
 
                !! Update wind@zu / convection-related wind gustiness in unst. cond. (C.3.2, IFS doc - Cy40r1, Eq.3.17 and Eq.3.18 + Eq.3.8)
@@ -289,8 +287,7 @@ CONTAINS
                zUbzu = MAX(SQRT(zUzu*zUzu + ztmp0), 0.2_wp)        ! include gustiness in bulk wind speed
                ! => 0.2 prevents pUbzu to be 0 in stable case when pU_zu=0.
 
-
-               !! Shifting temperature and humidity at zu if required by `zm_ztzu`:
+               !! Adjusting temperature and humidity at zu if required by `zm_ztzu`:
                ztmp0 = zpsi_h_u - zpsi_h_z0t
                ztmp1 = vkarmn/(zlog_zu - zlog_z0t - ztmp0)
                zts   = zdt*ztmp1
@@ -310,7 +307,7 @@ CONTAINS
                !IF( l_use_cs ) THEN
                !   !! Cool-skin contribution
                !   CALL UPDATE_QNSOL_TAU( zu, zT_s, zq_s, ztzu, zqzu, zus, zts, zqs, &
-               !      &                   zUzu, zubzu, pslp(ji,jj), prad_lw(ji,jj), zQns, ztmp0 )  ! Tau -> ztmp0
+               !      &                   zUzu, zUbzu, pslp(ji,jj), prad_lw(ji,jj), zQns, ztmp0 )  ! Tau -> ztmp0
                !
                !   CALL CS_ECMWF( pQsw(ji,jj), zQns, zus, zSST, zdT_cs )
                !   !IF( PRESENT(pdT_cs) ) pdT_cs(ji,jj) = zdT_cs
@@ -321,7 +318,7 @@ CONTAINS
 
                !IF( l_use_wl ) THEN
                !   !! Warm-layer contribution
-               !   CALL UPDATE_QNSOL_TAU( zu, zT_s, zq_s, ztzu, zqzu, zus, zts, zqs, zUzu, zubzu, &
+               !   CALL UPDATE_QNSOL_TAU( zu, zT_s, zq_s, ztzu, zqzu, zus, zts, zqs, zUzu, zUbzu, &
                !      &                   pslp(ji,jj), prad_lw(ji,jj), zQns, ztmp0)  ! Tau -> ztmp0
                !   !IF((ji==10).AND.(jj==10)) PRINT *, 'LOLO: sbcblk_algo_ecmwf.F90 => depth SST = ', 0.5*e3t_m(ji,jj)
                !   !CALL WL_ECMWF( ji, jj, pQsw(ji,jj), zQns, zus, zsst(ji,jj), 0.5*e3t_m(ji,jj) )
@@ -331,7 +328,6 @@ CONTAINS
                !   IF( l_use_cs ) zT_s = zT_s + zdT_cs
                !   zq_s = rdct_qsat_salt*q_sat(MAX(zT_s, 200._wp), pslp(ji,jj))
                !ENDIF
-
 
                zdt = zt_zu - zT_s ;  zdt = SIGN( MAX(ABS(zdt),1.E-09_wp), zdt )
                zdq = zq_zu - zq_s ;  zdq = SIGN( MAX(ABS(zdq),1.E-12_wp), zdq )
@@ -350,7 +346,6 @@ CONTAINS
 
             ! compute transfer coefficients at zu :
             zFq = zlog_zu - zlog_z0q - zpsi_h_u + zpsi_h_z0q
-
             pCd(ji,jj) = MAX( vkarmn2/(zFm*zFm) , Cx_min )
             pCh(ji,jj) = MAX( vkarmn2/(zFm*zFh) , Cx_min )
             pCe(ji,jj) = MAX( vkarmn2/(zFm*zFq) , Cx_min )
@@ -369,7 +364,7 @@ CONTAINS
 
 
    !!===============================================================================================
-   FUNCTION psi_m_ecmwf_sclr( pzeta )
+   FUNCTION psi_m_ecmwf( pzeta )
       !!--------------------------------------------------------------------------------------------
       !! Universal profile stability function for momentum
       !!     ECMWF / as in IFS cy31r1 documentation, available online
@@ -382,7 +377,7 @@ CONTAINS
       !!--------------------------------------------------------------------------------------------
       !$acc routine
       REAL(wp), INTENT(in) :: pzeta
-      REAL(wp)             :: psi_m_ecmwf_sclr
+      REAL(wp)             :: psi_m_ecmwf
       !!
       REAL(wp) :: zta, zx2, zx, ztmp, zpsi_unst, zpsi_stab, zstab, zc
       !!--------------------------------------------------------------------------------------------
@@ -403,15 +398,16 @@ CONTAINS
       !
       zstab = 0.5_wp + SIGN(0.5_wp, zta) ! zta > 0 => zstab = 1
       !
-      psi_m_ecmwf_sclr =         zstab    * zpsi_stab &  ! (zta > 0) Stable
+      psi_m_ecmwf =         zstab    * zpsi_stab &  ! (zta > 0) Stable
          &              + (1._wp - zstab) * zpsi_unst    ! (zta < 0) Unstable
       !
-   END FUNCTION psi_m_ecmwf_sclr
+   END FUNCTION psi_m_ecmwf
+
    !!===============================================================================================
 
 
    !!===============================================================================================
-   FUNCTION psi_h_ecmwf_sclr( pzeta )
+   FUNCTION psi_h_ecmwf( pzeta )
       !!--------------------------------------------------------------------------------------------
       !! Universal profile stability function for temperature and humidity
       !!     ECMWF / as in IFS cy31r1 documentation, available online
@@ -424,7 +420,7 @@ CONTAINS
       !!--------------------------------------------------------------------------------------------
       !$acc routine
       REAL(wp), INTENT(in) :: pzeta
-      REAL(wp)             :: psi_h_ecmwf_sclr
+      REAL(wp)             :: psi_h_ecmwf
       !!
       REAL(wp) ::  zta, zx2, zpsi_unst, zpsi_stab, zstab, zc
       !!--------------------------------------------------------------------------------------------
@@ -444,10 +440,11 @@ CONTAINS
       !
       zstab = 0.5_wp + SIGN(0.5_wp, zta) ! zta > 0 => zstab = 1
       !
-      psi_h_ecmwf_sclr =        zstab     * zpsi_stab   &  ! (zta > 0) Stable
+      psi_h_ecmwf =        zstab     * zpsi_stab   &  ! (zta > 0) Stable
          &              + (1._wp - zstab) * zpsi_unst      ! (zta < 0) Unstable
       !
-   END FUNCTION psi_h_ecmwf_sclr
+   END FUNCTION psi_h_ecmwf
+
    !!===============================================================================================
 
    SUBROUTINE cap_zeta( pzeta )

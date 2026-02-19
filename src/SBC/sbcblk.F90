@@ -451,7 +451,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER, INTENT(in) ::   kt   ! ocean time step
       !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj) :: zcd_du, zsen, zlat, zevp, zpre
+      REAL(wp), DIMENSION(jpi,jpj) :: zcd_du, zsen, zlat, zevap, zpre
       REAL(wp) :: ztst, zpa
       LOGICAL  :: llerr
       INTEGER :: ji, jj
@@ -506,7 +506,7 @@ CONTAINS
       IF( iom_use('precip' ) ) CALL iom_put( 'precip' , fatm_snow )                  ! Total precipitation
 
 
-      !$acc data create( zsen, zlat, zevp ) present( qsr, wndm, utau, vtau, ssst, taum, rhoa, emp, qns, qns_oce, qsr_oce )
+      !$acc data create( zsen, zlat, zevap ) present( qsr, wndm, utau, vtau, ssst, taum, rhoa, emp, qns, qns_oce, qsr_oce )
 
       ! Specific humidity of air at z=rn_zqt
       SELECT CASE( nhumi )
@@ -577,10 +577,10 @@ CONTAINS
          &                sst_s, ssu_m, ssv_m,                                &   !   <<= in
          &                sf(jp_uoatm)%fnow(:,:,1), sf(jp_voatm)%fnow(:,:,1), &   !   <<= in
          &                fatm_dqsw, fatm_dqlw,                               &   !   <<= in (wl/cs)
-         &                ssst, sssq, zsen, zlat, zevp, qsr, wndm, taum, utau, vtau ) ! =>> in/out or out
-      !&                 zcd_du, zsen, zlat, zevp )                    !   =>> out
+         &                ssst, sssq, zsen, zlat, zevap, qsr, wndm, taum, utau, vtau ) ! =>> in/out or out
+      !&                 zcd_du, zsen, zlat, zevap )                    !   =>> out
       !!
-      !!    ==> updates: qsr, wndm, utau, vtau, ssst, taum, rhoa, zsen, zlat, zevp
+      !!    ==> updates: qsr, wndm, utau, vtau, ssst, taum, rhoa, zsen, zlat, zevap
 
       !ji=22 ; jj=120
       !PRINT *, 'BULK OUTPUT:'
@@ -592,7 +592,7 @@ CONTAINS
       !PRINT *, ''; PRINT *, ''
 
 
-      CALL blk_oce_2( fatm_theta, fatm_dqlw, fatm_prcp, fatm_snow, ssst, zsen, zlat, zevp ) !   <<= in
+      CALL blk_oce_2( fatm_theta, fatm_dqlw, fatm_prcp, fatm_snow, ssst, zsen, zlat, zevap ) !   <<= in
       !!   ==> updates: emp, qns, qns_oce, qsr_oce
 
       !$acc end data
@@ -604,8 +604,8 @@ CONTAINS
    SUBROUTINE blk_oce_1( kt, pwndi, pwndj, ptair, pqair, pslp, psst, pu, pv,     &  ! in
       &                      puatm, pvatm, pdqsr, pdqlw,                         &  ! in
       &                      pssst, psssq,                                        &  ! in/out
-      &                      psen, plat, pevp, pqsr, pwndm, ptaum, putau, pvtau  )  ! out
-      !&                             pcd_du, psen, plat, pevp ) ! out
+      &                      psen, plat, pevap, pqsr, pwndm, ptaum, putau, pvtau  )  ! out
+      !&                             pcd_du, psen, plat, pevap ) ! out
       !!---------------------------------------------------------------------
       !!                     ***  ROUTINE blk_oce_1  ***
       !!
@@ -620,7 +620,7 @@ CONTAINS
       !!              - pcd_du  : Cd x |dU| at T-points  (m/s)
       !!              - psen    : sensible heat flux (W/m^2)
       !!              - plat    : latent heat flux   (W/m^2)
-      !!              - pevp    : evaporation        (mm/s) #lolo
+      !!              - pevap    : evaporation        (mm/s) #lolo
       !!              - pqsr    : net shortwave radiation available for the ocean (after albedo) (W/m^2)
       !!              - pwndm   : Wind speed module at T-point          (m/s)
       !!              - ptaum   : module of air-sea wind stress at T-point (N/m^2)
@@ -645,7 +645,7 @@ CONTAINS
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   psssq   ! SKIN SSQ (or BULK if CS & WL not used)  [Celsius]
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   psen
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   plat
-      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pevp
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pevap
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pqsr   !NEW
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pwndm  !NEW
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   ptaum
@@ -665,7 +665,7 @@ CONTAINS
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_oce_1')
       !
-      !$acc data present( pwndi,pwndj,ptair,pqair,pslp,psst,pu,pv,pdqsr,pdqlw, pssst,psssq,psen,plat,pevp,ptaum,pqsr,pwndm ) create(zcd_oce,zch_oce,zce_oce,ztheta_zu,zq_zu,zU_zu)
+      !$acc data present( pwndi,pwndj,ptair,pqair,pslp,psst,pu,pv,pdqsr,pdqlw, pssst,psssq,psen,plat,pevap,ptaum,pqsr,pwndm ) create(zcd_oce,zch_oce,zce_oce,ztheta_zu,zq_zu,zU_zu)
       !
 
       z1_alb = 1. - albo
@@ -678,7 +678,7 @@ CONTAINS
             psen(ji,jj)  = 0._wp
             plat(ji,jj)  = 0._wp
             ptaum(ji,jj) = 0._wp
-            pevp(ji,jj)  = 0._wp
+            pevap(ji,jj)  = 0._wp
             !
             pqsr(ji,jj)  = 0._wp
          END DO
@@ -754,12 +754,10 @@ CONTAINS
             &                nb_iter=nn_iter_algo )
          !
       CASE( np_COARE_3p0 )
-         STOP'LOLO turb_coare3p0'
-         !CALL turb_coare3p0( kt, rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm, &
-         !   &                ln_skin_cs, ln_skin_wl,                             &
-         !   &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
-         !   &                nb_iter=nn_iter_algo,                               &
-         !   &                Qsw=pqsr(:,:), rad_lw=pdqlw(:,:), slp=pslp(:,:) )
+         CALL turb_coare3p0( kt, rn_zqt, rn_zu, psst, pssst, ptair, psssq, pqair, pwndm,  &
+            &                ln_skin_cs, ln_skin_wl,                             &
+            &                zcd_oce, zch_oce, zce_oce, ztheta_zu, zq_zu, zU_zu, &
+            &                nb_iter=nn_iter_algo ) !LOLOfixme: no WL/CS for now...
          !
          !CASE( np_COARE_3p6 )
          !   CALL turb_coare3p6( kt, rn_zqt, rn_zu, psst, ptair, psssq, pqair, pwndm, &
@@ -836,7 +834,7 @@ CONTAINS
       !         pwndm(ji,jj)   = zztmp                   ! Store zU_zu in pwndm to compute ustar2 in ablmod
       !         pcd_du(ji,jj) = zztmp * zcd_oce(ji,jj)
       !         psen(ji,jj)   = zztmp * zch_oce(ji,jj)
-      !         pevp(ji,jj)   = zztmp * zce_oce(ji,jj)
+      !         pevap(ji,jj)   = zztmp * zce_oce(ji,jj)
       !         zpre(ji,jj)   = pres_temp( pqair(ji,jj), pslp(ji,jj), rn_zu, ptpot=ptair(ji,jj), pta=ztabs(ji,jj) )
       !         rhoa(ji,jj)   = rho_air( ztabs(ji,jj), pqair(ji,jj), zpre(ji,jj) )
       !      END DO
@@ -858,13 +856,13 @@ CONTAINS
                &                    zcd_oce(ji,jj), zch_oce(ji,jj), zce_oce(ji,jj),               &
                &                    pwndm(ji,jj), zU_zu(ji,jj), pslp(ji,jj),                       &
                &                    pTau=ptaum(ji,jj), pQsen=psen(ji,jj), pQlat=plat(ji,jj),       &
-               &                    pEvap=pevp(ji,jj), prhoa=rhoa(ji,jj) )
+               &                    pEvap=pevap(ji,jj), prhoa=rhoa(ji,jj) )
 
             !DEBUG:
             !IF( ji==22 .AND. jj==120 ) THEN
             !   PRINT *, 'BULK_FORMULA OUTPUT:'
             !   PRINT *, ' * Rho_air =', rhoa(ji,jj)
-            !   PRINT *, ' * E       =', pevp(ji,jj)
+            !   PRINT *, ' * E       =', pevap(ji,jj)
             !   PRINT *, ' * Qsens   =', psen(ji,jj)
             !   PRINT *, ' * Qlat    =', plat(ji,jj)
             !   PRINT *, ''
@@ -874,7 +872,7 @@ CONTAINS
             psen(ji,jj)  = psen(ji,jj)  * zmsk
             plat(ji,jj)  = plat(ji,jj)  * zmsk
             ptaum(ji,jj) = ptaum(ji,jj) * zmsk
-            pevp(ji,jj)  = pevp(ji,jj)  * zmsk
+            pevap(ji,jj)  = pevap(ji,jj)  * zmsk
             rhoa(ji,jj)  = rhoa(ji,jj)  * zmsk
             !
          END DO
@@ -897,15 +895,15 @@ CONTAINS
       ! -----------------------------------
       IF( iom_use('taum_oce' ) ) THEN
          !$acc update self( ptaum )
-         CALL iom_put( "taum_oce",   ptaum(:,:) )   ! output wind stress module
+         CALL iom_put( "taum_oce",   ptaum )   ! output wind stress module
       ENDIF
       IF( iom_use('rho_air' ) ) THEN
          !$acc update self( rhoa )
          CALL iom_put( "rho_air"  ,  rhoa )     ! output air density [kg/m^3]
       ENDIF
       IF( iom_use('evap_oce' ) ) THEN
-         !$acc update self( pevp )
-         CALL iom_put( "evap_oce" ,  pevp )     ! evaporation
+         !$acc update self( pevap )
+         CALL iom_put( "evap_oce" ,  pevap )     ! evaporation
       ENDIF
       IF( iom_use('qsb_oce' ) ) THEN
          !$acc update self( psen )
@@ -917,11 +915,11 @@ CONTAINS
       ENDIF
       IF( iom_use('utau_oce' ) ) THEN
          !$acc update self( putau )
-         CALL iom_put( "utau_oce"  ,  putau )     ! output downward latent   heat over the ocean
+         CALL iom_put( "utau_oce" ,  putau )     ! output downward latent   heat over the ocean
       ENDIF
       IF( iom_use('vtau_oce' ) ) THEN
          !$acc update self( pvtau )
-         CALL iom_put( "vtau_oce"  ,  pvtau )     ! output downward latent   heat over the ocean
+         CALL iom_put( "vtau_oce" ,  pvtau )     ! output downward latent   heat over the ocean
       ENDIF
 
       IF(sn_cfctl%l_prtctl) THEN
@@ -938,7 +936,7 @@ CONTAINS
    END SUBROUTINE blk_oce_1
    !qsr, wndm, utau, vtau
 
-   SUBROUTINE blk_oce_2( ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevp )   ! <<= in
+   SUBROUTINE blk_oce_2( ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevap )   ! <<= in
       !!---------------------------------------------------------------------
       !!                     ***  ROUTINE blk_oce_2  ***
       !!
@@ -957,7 +955,7 @@ CONTAINS
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pssst   ! SKIN surface temperature   [Celsius]
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   psen
       REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   plat
-      REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pevp
+      REAL(wp), INTENT(in), DIMENSION(jpi,jpj) ::   pevap
       !REAL(wp), INTENT(in), OPTIONAL, DIMENSION(jpi,jpj) ::   qlwn   ! net longwave radiation at surface (MFS only) [W/m^2]
       !
       INTEGER  ::   ji, jj               ! dummy loop indices
@@ -967,7 +965,7 @@ CONTAINS
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_oce_2')
       !
-      !$acc data present(ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevp, emp, qns, qns_oce, qsr_oce) create( zqlw )
+      !$acc data present(ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevap, emp, qns, qns_oce, qsr_oce) create( zqlw )
 
 
       !$acc parallel loop collapse(2)
@@ -992,11 +990,11 @@ CONTAINS
             !     IV    Total FLUXES                                                       !
             ! ----------------------------------------------------------------------------- !
             !
-            emp(ji,jj) = ( pevp(ji,jj) - pprec(ji,jj) ) * zmsk              ! mass flux (evap. - precip.)
+            emp(ji,jj) = ( pevap(ji,jj) - pprec(ji,jj) ) * zmsk             ! mass flux (evap. - precip.)
             !
             qns(ji,jj) = (   zqlw(ji,jj) + psen(ji,jj) + plat(ji,jj)    &   ! Downward Non Solar
                &           - psnow(ji,jj) *  rLfus                      &   ! remove latent melting heat for solid precip
-               &           - pevp(ji,jj) * zcptn                        &   ! remove evap heat content at SST
+               &           - pevap(ji,jj) * zcptn                       &   ! remove evap heat content at SST
                &           + ( pprec(ji,jj) - psnow(ji,jj) ) * zcptrain &   ! add liquid precip heat content at Tair
                &           + psnow(ji,jj) * zcptsnw                     &   ! add solid  precip heat content at min(Tair,Tsnow)
                &          ) * zmsk
@@ -1044,7 +1042,7 @@ CONTAINS
 
    SUBROUTINE blk_ice_1( pwndi, pwndj, ptair, pqair, pslp, puice, pvice, ptsui,   & ! inputs
       &                  pCHi, pCEi, ptheta_zu_i, pq_zu_i,                        & ! outputs
-      &                  putaui, pvtaui, pseni, pevpi, pssqi, pcd_dui )             ! optional outputs
+      &                  putaui, pvtaui, pseni, pevapi, pssqi, pcd_dui )             ! optional outputs
       !!---------------------------------------------------------------------
       !!                     ***  ROUTINE blk_ice_1  ***
       !!
@@ -1071,7 +1069,7 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   putaui  ! if ln_blk air-ice wind stress i-component at T-point [N/m^2]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   pvtaui  ! if ln_blk air-ice wind stress j-component at T-point [N/m^2]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   pseni   ! if ln_abl
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   pevpi   ! if ln_abl
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   pevapi   ! if ln_abl
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   pssqi   ! if ln_abl
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out), OPTIONAL ::   pcd_dui ! if ln_abl
       !!---------------------------------------------------------------------
@@ -1170,12 +1168,12 @@ CONTAINS
       ELSE
 
          ! ln_abl
-         !$acc parallel loop collapse(2) present( pcd_dui, pseni, pevpi, pssqi )
+         !$acc parallel loop collapse(2) present( pcd_dui, pseni, pevapi, pssqi )
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
                pcd_dui(ji,jj) = wndm_ice(ji,jj) * zCDi(ji,jj)
                pseni  (ji,jj) = wndm_ice(ji,jj) * pCHi(ji,jj)
-               pevpi  (ji,jj) = wndm_ice(ji,jj) * pCEi(ji,jj)
+               pevapi (ji,jj) = wndm_ice(ji,jj) * pCEi(ji,jj)
                !
                pssqi(ji,jj) = q_sat( ptsui(ji,jj), pslp(ji,jj), l_ice=.TRUE. ) ; ! more accurate way to obtain ssq !
             END DO
@@ -1230,7 +1228,7 @@ CONTAINS
       !REAL(wp), DIMENSION(jpi,jpj,jpl), ALLOCATABLE ::   zmsk   ! temporary mask for prt_ctl
       REAL(wp)  ::   z_dqlw        ! long wave heat sensitivity over ice
       REAL(wp)  ::   z_dqsb        ! sensible  heat sensitivity over ice
-      REAL(wp)  ::   zevap   ! evaporation and snw distribution after wind blowing (SI3)
+      REAL(wp)  ::   zevap         ! evaporation and snw distribution after wind blowing (SI3)
       REAL(wp)  ::   ztri
       REAL(wp)  ::   zcptrain, zcptsnw, zcptn ! Heat content per unit mass (J/kg)
       !!---------------------------------------------------------------------
@@ -1385,33 +1383,6 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
-
-      !IF( iom_use('evap_ao_cea') .OR. iom_use('hflx_evap_cea') ) THEN
-      !   CALL iom_put( 'evap_ao_cea'  , zevap(:,:) * ( 1._wp - at_i_b(:,:) ) * xmskt(:,:)              )   ! ice-free oce evap (cell average)
-      !   CALL iom_put( 'hflx_evap_cea', zevap(:,:) * ( 1._wp - at_i_b(:,:) ) * xmskt(:,:) * zcptn(:,:) )   ! heat flux from evap (cell average)
-      !ENDIF
-      !IF( iom_use('rain') .OR. iom_use('rain_ao_cea') .OR. iom_use('hflx_rain_cea') ) THEN
-      !   CALL iom_put( 'rain'         ,   fatm_prcp(:,:) - fatm_snow(:,:)                             )          ! liquid precipitation
-      !   CALL iom_put( 'rain_ao_cea'  , ( fatm_prcp(:,:) - fatm_snow(:,:) ) * ( 1._wp - at_i_b(:,:) ) )          ! liquid precipitation over ocean (cell average)
-      !   CALL iom_put( 'hflx_rain_cea', ( fatm_prcp(:,:) - fatm_snow(:,:) ) * zcptrain(:,:) )                    ! heat flux from rain (cell average)
-      !ENDIF
-      !IF(  iom_use('snow_ao_cea')   .OR. iom_use('snow_ai_cea')      .OR. &
-      !   & iom_use('hflx_snow_cea') .OR. iom_use('hflx_snow_ao_cea') .OR. iom_use('hflx_snow_ai_cea')  )  THEN
-      !   CALL iom_put( 'snow_ao_cea'     , fatm_snow(:,:)                            * ( 1._wp - zsnw(:,:) ) ) ! Snow over ice-free ocean  (cell average)
-      !   CALL iom_put( 'snow_ai_cea'     , fatm_snow(:,:)                            *           zsnw(:,:)   ) ! Snow over sea-ice         (cell average)
-      !   CALL iom_put( 'hflx_snow_cea'   , fatm_snow(:,:) * ( zcptsnw(:,:) - rLfus ) )                         ! heat flux from snow (cell average)
-      !   CALL iom_put( 'hflx_snow_ao_cea', fatm_snow(:,:) * ( zcptsnw(:,:) - rLfus ) * ( 1._wp - zsnw(:,:) ) ) ! heat flux from snow (over ocean)
-      !   CALL iom_put( 'hflx_snow_ai_cea', fatm_snow(:,:) * ( zcptsnw(:,:) - rLfus ) *           zsnw(:,:)   ) ! heat flux from snow (over ice)
-      !ENDIF
-      !IF( iom_use('hflx_prec_cea') ) THEN                                                                    ! heat flux from precip (cell average)
-      !   CALL iom_put('hflx_prec_cea' ,    fatm_snow(:,:)                  * ( zcptsnw (:,:) - rLfus )  &
-      !      &                          + ( fatm_prcp(:,:) - fatm_snow(:,:) ) *   zcptrain(:,:) )
-      !ENDIF
-      !IF( iom_use('subl_ai_cea') .OR. iom_use('hflx_subl_cea') ) THEN
-      !   CALL iom_put( 'subl_ai_cea'  , SUM( a_i_b(:,:,:) *  evap_ice(:,:,:), dim=3 ) * xmskt(:,:) ) ! Sublimation over sea-ice (cell average)
-      !   CALL iom_put( 'hflx_subl_cea', SUM( a_i_b(:,:,:) * qevap_ice(:,:,:), dim=3 ) * xmskt(:,:) ) ! Heat flux from sublimation (cell average)
-      !ENDIF
 
       IF( iom_use('qsr_ice') ) THEN
          !$acc update self( qsr_ice )
