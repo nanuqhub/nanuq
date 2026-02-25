@@ -38,7 +38,7 @@ CONTAINS
    !!              N-3  N-2  N-1   N
    !!              Nie0
    !!####################################################################################################################
-   
+
 
    !!##################################################################################################
    !!            * 1 2D array (real 8)
@@ -55,7 +55,6 @@ CONTAINS
       !$acc loop seq
       DO jh = 1, nn_hls
          jc = nn_hls-jh+1
-         !
          !$acc parallel loop
          DO jj = 1, jpj
             pf2d(    jh  ,jj) = pf2d(jpi-jc  ,jj)
@@ -63,7 +62,6 @@ CONTAINS
          END DO
          !$acc end parallel loop
       END DO
-      !
       !$acc end data
    END SUBROUTINE lbc_lnk_EW_1f2d_r8
    !
@@ -81,9 +79,10 @@ CONTAINS
          jc = nn_hls-jh+1
          !$acc parallel loop
          DO ji = 1, jpi
-            pf2d(ji,    jh  ) = pf2d(ji,jpi-jc  )
-            pf2d(ji,jpi-jh+1) = pf2d(ji,    jc+1)
+            pf2d(ji,    jh  ) = pf2d(ji,jpj-jc  )
+            pf2d(ji,jpj-jh+1) = pf2d(ji,    jc+1)
          END DO
+         !$acc end parallel loop
       END DO
       !$acc end data
    END SUBROUTINE lbc_lnk_NS_1f2d_r8
@@ -104,7 +103,6 @@ CONTAINS
       !$acc loop seq
       DO jh = 1, nn_hls
          jc = nn_hls-jh+1
-         !
          !$acc parallel loop
          DO jj = 1, jpj
             pf2d1(    jh  ,jj) = pf2d1(jpi-jc  ,jj)
@@ -114,7 +112,6 @@ CONTAINS
          END DO
          !$acc end parallel loop
       END DO
-      !
       !$acc end data
    END SUBROUTINE lbc_lnk_EW_2f2d_r8
    !
@@ -132,11 +129,12 @@ CONTAINS
          jc = nn_hls-jh+1
          !$acc parallel loop
          DO ji = 1, jpi
-            pf2d1(ji,    jh  ) = pf2d1(ji,jpi-jc  )
-            pf2d1(ji,jpi-jh+1) = pf2d1(ji,    jc+1)
-            pf2d2(ji,    jh  ) = pf2d2(ji,jpi-jc  )
-            pf2d2(ji,jpi-jh+1) = pf2d2(ji,    jc+1)
+            pf2d1(ji,    jh  ) = pf2d1(ji,jpj-jc  )
+            pf2d1(ji,jpj-jh+1) = pf2d1(ji,    jc+1)
+            pf2d2(ji,    jh  ) = pf2d2(ji,jpj-jc  )
+            pf2d2(ji,jpj-jh+1) = pf2d2(ji,    jc+1)
          END DO
+         !$acc end parallel loop
       END DO
       !$acc end data
    END SUBROUTINE lbc_lnk_NS_2f2d_r8
@@ -157,7 +155,6 @@ CONTAINS
       !$acc loop seq
       DO jh = 1, nn_hls
          jc = nn_hls-jh+1
-         !
          !$acc parallel loop
          DO jj = 1, jpj
             pf2d1(    jh  ,jj) = pf2d1(jpi-jc  ,jj)
@@ -169,7 +166,6 @@ CONTAINS
          END DO
          !$acc end parallel loop
       END DO
-      !
       !$acc end data
    END SUBROUTINE lbc_lnk_EW_3f2d_r8
    !
@@ -187,13 +183,14 @@ CONTAINS
          jc = nn_hls-jh+1
          !$acc parallel loop
          DO ji = 1, jpi
-            pf2d1(ji,    jh  ) = pf2d1(ji,jpi-jc  )
-            pf2d1(ji,jpi-jh+1) = pf2d1(ji,    jc+1)
-            pf2d2(ji,    jh  ) = pf2d2(ji,jpi-jc  )
-            pf2d2(ji,jpi-jh+1) = pf2d2(ji,    jc+1)
-            pf2d3(ji,    jh  ) = pf2d3(ji,jpi-jc  )
-            pf2d3(ji,jpi-jh+1) = pf2d3(ji,    jc+1)
+            pf2d1(ji,    jh  ) = pf2d1(ji,jpj-jc  )
+            pf2d1(ji,jpj-jh+1) = pf2d1(ji,    jc+1)
+            pf2d2(ji,    jh  ) = pf2d2(ji,jpj-jc  )
+            pf2d2(ji,jpj-jh+1) = pf2d2(ji,    jc+1)
+            pf2d3(ji,    jh  ) = pf2d3(ji,jpj-jc  )
+            pf2d3(ji,jpj-jh+1) = pf2d3(ji,    jc+1)
          END DO
+         !$acc end parallel loop
       END DO
       !$acc end data
    END SUBROUTINE lbc_lnk_NS_3f2d_r8
@@ -214,7 +211,6 @@ CONTAINS
       !$acc loop seq
       DO jh = 1, nn_hls
          jc = nn_hls-jh+1
-         !
          !$acc parallel loop
          DO jj = 1, jpj
             pf2d1(    jh  ,jj) = pf2d1(jpi-jc  ,jj)
@@ -228,7 +224,6 @@ CONTAINS
          END DO
          !$acc end parallel loop
       END DO
-      !
       !$acc end data
    END SUBROUTINE lbc_lnk_EW_4f2d_r8
    !
@@ -246,15 +241,16 @@ CONTAINS
          jc = nn_hls-jh+1
          !$acc parallel loop
          DO ji = 1, jpi
-            pf2d1(ji,    jh  ) = pf2d1(ji,jpi-jc  )
-            pf2d1(ji,jpi-jh+1) = pf2d1(ji,    jc+1)
-            pf2d2(ji,    jh  ) = pf2d2(ji,jpi-jc  )
-            pf2d2(ji,jpi-jh+1) = pf2d2(ji,    jc+1)
-            pf2d3(ji,    jh  ) = pf2d3(ji,jpi-jc  )
-            pf2d3(ji,jpi-jh+1) = pf2d3(ji,    jc+1)
-            pf2d4(ji,    jh  ) = pf2d4(ji,jpi-jc  )
-            pf2d4(ji,jpi-jh+1) = pf2d4(ji,    jc+1)
+            pf2d1(ji,    jh  ) = pf2d1(ji,jpj-jc  )
+            pf2d1(ji,jpj-jh+1) = pf2d1(ji,    jc+1)
+            pf2d2(ji,    jh  ) = pf2d2(ji,jpj-jc  )
+            pf2d2(ji,jpj-jh+1) = pf2d2(ji,    jc+1)
+            pf2d3(ji,    jh  ) = pf2d3(ji,jpj-jc  )
+            pf2d3(ji,jpj-jh+1) = pf2d3(ji,    jc+1)
+            pf2d4(ji,    jh  ) = pf2d4(ji,jpj-jc  )
+            pf2d4(ji,jpj-jh+1) = pf2d4(ji,    jc+1)
          END DO
+         !$acc end parallel loop
       END DO
       !$acc end data
    END SUBROUTINE lbc_lnk_NS_4f2d_r8
@@ -304,8 +300,8 @@ CONTAINS
          !$acc parallel loop collapse(2)
          DO jk = 1, 4
             DO ji = 1, jpi
-               pv4(ji,    jh  ,jk) = pv4(ji,jpi-jc  ,jk)
-               pv4(ji,jpi-jh+1,jk) = pv4(ji,    jc+1,jk)
+               pv4(ji,    jh  ,jk) = pv4(ji,jpj-jc  ,jk)
+               pv4(ji,jpj-jh+1,jk) = pv4(ji,    jc+1,jk)
             END DO
          END DO
          !$acc end parallel loop
@@ -359,10 +355,10 @@ CONTAINS
          !$acc parallel loop collapse(2)
          DO jk = 1, 3
             DO ji = 1, jpi
-               pSt(ji,    jh  ,jk) = pSt(ji,jpi-jc  ,jk)
-               pSt(ji,jpi-jh+1,jk) = pSt(ji,    jc+1,jk)
-               pSf(ji,    jh  ,jk) = pSf(ji,jpi-jc  ,jk)
-               pSf(ji,jpi-jh+1,jk) = pSf(ji,    jc+1,jk)
+               pSt(ji,    jh  ,jk) = pSt(ji,jpj-jc  ,jk)
+               pSt(ji,jpj-jh+1,jk) = pSt(ji,    jc+1,jk)
+               pSf(ji,    jh  ,jk) = pSf(ji,jpj-jc  ,jk)
+               pSf(ji,jpj-jh+1,jk) = pSf(ji,    jc+1,jk)
             END DO
          END DO
          !$acc end parallel loop
@@ -422,14 +418,14 @@ CONTAINS
          !$acc parallel loop collapse(2)
          DO jk = 1, 3
             DO ji = 1, jpi
-               pSt(ji,    jh  ,jk) = pSt(ji,jpi-jc  ,jk)
-               pSt(ji,jpi-jh+1,jk) = pSt(ji,    jc+1,jk)
-               pSf(ji,    jh  ,jk) = pSf(ji,jpi-jc  ,jk)
-               pSf(ji,jpi-jh+1,jk) = pSf(ji,    jc+1,jk)
-               pdt(ji,    jh     ) = pdt(ji,jpi-jc     )
-               pdt(ji,jpi-jh+1   ) = pdt(ji,    jc+1   )
-               pdf(ji,    jh     ) = pdf(ji,jpi-jc     )
-               pdf(ji,jpi-jh+1   ) = pdf(ji,    jc+1   )
+               pSt(ji,    jh  ,jk) = pSt(ji,jpj-jc  ,jk)
+               pSt(ji,jpj-jh+1,jk) = pSt(ji,    jc+1,jk)
+               pSf(ji,    jh  ,jk) = pSf(ji,jpj-jc  ,jk)
+               pSf(ji,jpj-jh+1,jk) = pSf(ji,    jc+1,jk)
+               pdt(ji,    jh     ) = pdt(ji,jpj-jc     )
+               pdt(ji,jpj-jh+1   ) = pdt(ji,    jc+1   )
+               pdf(ji,    jh     ) = pdf(ji,jpj-jc     )
+               pdf(ji,jpj-jh+1   ) = pdf(ji,    jc+1   )
             END DO
          END DO
          !$acc end parallel loop
@@ -437,19 +433,6 @@ CONTAINS
       !$acc end data
    END SUBROUTINE lbc_lnk_NS_2f3d3_2f2d_r8
    !!##################################################################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
