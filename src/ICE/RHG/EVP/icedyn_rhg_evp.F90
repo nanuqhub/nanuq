@@ -19,7 +19,6 @@ MODULE icedyn_rhg_evp
    !!----------------------------------------------------------------------
    USE phycst         ! Physical constant
    USE dom_oce        ! Ocean domain
-   USE sbc_oce , ONLY : nn_fsbc
    USE oss_nnq , ONLY : ssh_m
    USE sbc_ice , ONLY : utau_ice, vtau_ice, snwice_mass_b
    USE par_ice
@@ -190,8 +189,11 @@ CONTAINS
             END DO
          END DO
          !$acc end parallel loop
-# if ! defined _OPENACC
-         CALL lbc_lnk( 'icedyn_rhg_bbm', zhf,'F',1._wp )
+
+# if defined _OPENACC
+         CALL lbc_lnk_gpu( 'icedyn_rhg_evp', zhf )         
+# else
+         CALL lbc_lnk(     'icedyn_rhg_evp', zhf,'F',1._wp )
 # endif
       ELSE
          !$acc parallel loop collapse(2)
@@ -313,7 +315,7 @@ CONTAINS
                tau_icebfr(ji,jj) = - rn_lf_bfr * MAX( 0._wp, vt_i(ji,jj) - zvCr ) * EXP( -rn_crhg * ( 1._wp - at_i(ji,jj) ) )
             END DO
          END DO
-         CALL lbc_lnk( 'icedyn_rhg_evp', tau_icebfr(:,:), 'T', 1.0_wp )
+         CALL lbc_lnk( 'icedyn_rhg_evp', tau_icebfr, 'T', 1.0_wp )
          !
       ELSE
          !                   !-- no landfast
@@ -380,8 +382,10 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-# if ! defined _OPENACC
-         CALL lbc_lnk( 'icedyn_rhg_evp', zdelta, 'T', 1.0_wp, zp_delt, 'T', 1.0_wp )
+# if defined _OPENACC
+         CALL lbc_lnk_gpu( 'icedyn_rhg_evp', zdelta, zp_delt )
+# else
+         CALL lbc_lnk(     'icedyn_rhg_evp', zdelta, 'T', 1.0_wp, zp_delt, 'T', 1.0_wp )
 # endif
 
          !$acc parallel loop collapse(2) present( zp_delt, zdt_m, zs1, zs2 )
@@ -591,10 +595,11 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'icedyn_rhg_evp', pshear_i, 'T', 1._wp, pdivu_i, 'T', 1._wp, pdelta_i, 'T', 1._wp, zten_i, 'T', 1._wp, &
-         &                            zshear  , 'T', 1._wp, zdelta , 'T', 1._wp, zs1     , 'T', 1._wp, zs2   , 'T', 1._wp, zs12, 'F', 1._wp )
-      !CALL lbc_lnk( 'icedyn_rhg_evp', zs1, 'T', 1._wp, zs2,'T', 1._wp, zs12, 'F', 1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i, zten_i, zshear, zdelta, zs1, zs2, zs12 )
+# else
+      CALL lbc_lnk(     'icedyn_rhg_evp', pshear_i,'T',1._wp, pdivu_i,'T',1._wp, pdelta_i,'T',1._wp, zten_i,'T',1._wp, &
+         &                                zshear  ,'T',1._wp, zdelta ,'T',1._wp, zs1     ,'T',1._wp, zs2   ,'T',1._wp, zs12,'F',1._wp )
 # endif
 
       !$acc parallel loop collapse(2)
@@ -754,7 +759,7 @@ CONTAINS
       ELSEIF( TRIM(cdrw) == 'WRITE' ) THEN   ! Create restart file
          !                                   ! -------------------
          IF(lwp) WRITE(numout,*) '---- rhg-rst ----'
-         iter = kt + nn_fsbc - 1             ! ice restarts are written at kt == nitrst - nn_fsbc + 1
+         iter = kt             ! ice restarts are written at kt == nitrst
          !
          !$acc update self ( stress1_i, stress2_i, stress12_i )
          !

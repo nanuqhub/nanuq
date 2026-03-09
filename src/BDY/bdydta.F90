@@ -190,7 +190,7 @@ CONTAINS
          ! read/update all bdy data
          ! ------------------------
          ! BDY: use pt_offset=0.5 as applied at the end of the step and fldread is referenced at the middle of the step
-         CALL fld_read( kt, 1, bf_alias, pt_offset = 0.5_wp, Kmm = Kmm )
+         CALL fld_read( kt, bf_alias, pt_offset = 0.5_wp, Kmm = Kmm )
          ! apply some corrections in some specific cases...
          ! --------------------------------------------------
 

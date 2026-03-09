@@ -74,10 +74,9 @@ CONTAINS
       !      => so no `lbc_lnk`ing of `p1md` !!!
       ! ==> REALLY ???
 #if defined _OPENACC
-      IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', p1md )
-      IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', p1md )
+      CALL lbc_lnk_gpu( crtnm, p1md )
 #else
-      CALL lbc_lnk( crtnm, p1md,cgt,1._wp )
+      CALL lbc_lnk(     crtnm, p1md,cgt,1._wp )
 #endif
 
 

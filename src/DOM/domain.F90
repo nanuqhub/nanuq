@@ -122,12 +122,19 @@ CONTAINS
       !CALL dom_tile_init                ! Tile domain
       !LOLO.
 
-      CALL dom_hgr                      ! Horizontal mesh
+      CALL dom_hgr              ! Horizontal mesh
 
       CALL dom_bth( zbathy )    ! Bathymetry
 
       CALL dom_msk( zbathy )    ! Masks
-      !
+
+      !! Important! (i.e. cross nudging...) Should not be a cause for concern elsewhere...
+      e1e2t(:,:) = e1e2t(:,:) * xmskt(:,:)
+      e1e2f(:,:) = e1e2f(:,:) * xmskf(:,:)     
+      r1_e1e2t(:,:) = r1_e1e2t(:,:) * xmskt(:,:)
+      r1_e1e2f(:,:) = r1_e1e2f(:,:) * xmskf(:,:)
+      
+      
       !                                 != ssh initialization
       !
       IF( ln_meshmask    )   CALL dom_wri       ! Create a domain file
@@ -146,7 +153,7 @@ CONTAINS
       !$acc enter data copyin( e1e2t, e1e2f, e1t2, e2t2, e1f2, e2f2 )
       !
       PRINT *, ' * info GPU: dom_init() => adding the `r1_e*` arrays to memory!'
-      PRINT *, '    ==> 1_e1u, r1_e2u, r1_e1v, r1_e2v, r1_e1e2t, r1_e1e2f, r1_e1e2u, r1_e1e2v'
+      PRINT *, '    ==> r1_e1u, r1_e2u, r1_e1v, r1_e2v, r1_e1e2t, r1_e1e2f, r1_e1e2u, r1_e1e2v'
       !$acc enter data copyin( r1_e1u, r1_e2u, r1_e1v, r1_e2v, r1_e1e2t, r1_e1e2f, r1_e1e2u, r1_e1e2v )
       !
       PRINT *, ' * info GPU: dom_init() => adding Coriolis and grid res. arrays to memory!'

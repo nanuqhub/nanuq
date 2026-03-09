@@ -63,9 +63,6 @@ CONTAINS
 
 
 
-
-
-
    SUBROUTINE wenoX_rk3( kt, cgt, pdt, pe1e2, p1_e1e2, pu, pv, pmlbc,  pf,  psf,  lSmesh )
       !!----------------------------------------------------------------------
       !! Time discretization operator for WENOX
@@ -257,10 +254,9 @@ CONTAINS
       !! Linking required here!
       !!  => because `zfs` used +-2 stencils, so can't do better than `Nis0:Nie0,Njs0:Nje0` for them.
 #if defined _OPENACC
-      IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', zfs1, zfs2, zfs3, zfs4 )
-      IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', zfs1, zfs2, zfs3, zfs4 )
+      CALL lbc_lnk_gpu( 'wnx_spc_op', zfs1, zfs2, zfs3, zfs4 )
 #else
-      CALL lbc_lnk( 'wnx_spc_op', zfs1,cgtu,-1._wp, zfs2,cgtv,-1._wp, zfs3,cgtu,-1._wp, zfs4,cgtv,-1._wp )
+      CALL lbc_lnk(     'wnx_spc_op', zfs1,cgtu,-1._wp, zfs2,cgtv,-1._wp, zfs3,cgtu,-1._wp, zfs4,cgtv,-1._wp )
 #endif
 
       !$acc parallel loop collapse(2)
@@ -284,10 +280,9 @@ CONTAINS
       !! Linking required here!
       !!  => needed for the next round in RK3 (`pf` has to be complete!)
 #if defined _OPENACC
-      IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', pop )
-      IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', pop )
+      CALL lbc_lnk_gpu( 'wnx_spc_op', pop )
 #else
-      CALL lbc_lnk( 'wnx_spc_op', pop,cgt,1._wp )
+      CALL lbc_lnk(     'wnx_spc_op', pop,cgt,1._wp )
 #endif
 
       !$acc end data

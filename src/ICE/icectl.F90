@@ -828,7 +828,7 @@ CONTAINS
       rdiag_adv_iceheat = rdiag_adv_iceheat + zchk(6)
       !
       !                    ! output drifts and close ascii file
-      IF( kt == nitend - nn_fsbc + 1 .AND. lwp ) THEN
+      IF( kt == nitend .AND. lwp ) THEN
          ! to ascii file
          WRITE(numicedrift,*) '******************************************'
          WRITE(numicedrift,FMT='(3x,a23,6x,E10.2)') 'Run mass drift     [kg]', rdiag_icemass

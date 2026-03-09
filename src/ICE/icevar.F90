@@ -61,6 +61,9 @@ MODULE icevar
    USE remap_weno,    ONLY: rmpT2F_A_h_wn5s
 
    USE lbclnk
+# if defined _OPENACC
+   USE lbclnk_gpu
+# endif
 
    USE timing
 
@@ -174,8 +177,10 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'ice_var_agg_adv2d_gpu',  at_i,'T',1._wp, hm_i,'T',1._wp ) !LOLOfixme: `at_i` or/and `hm_i` LBC_LNKed!
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_var_agg_adv2d_gpu',  at_i, hm_i )
+# else
+      CALL lbc_lnk(     'ice_var_agg_adv2d_gpu',  at_i,'T',1._wp, hm_i,'T',1._wp ) !LOLOfixme: `at_i` or/and `hm_i` LBC_LNKed!
       !                                                                        ! => shows up when `ln_use_weno_rmp` !
       !                                                                        ! => scary, so doing it here...
 # endif
@@ -207,9 +212,10 @@ CONTAINS
       !END DO
 !!$acc end parallel loop
 
-# if !defined _OPENACC
-      !CALL lbc_lnk( 'ice_var_agg_adv2d_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp,  au_i,'U',1._wp,  av_i,'V',1._wp )
-      CALL lbc_lnk( 'ice_var_agg_adv2d_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_var_agg_adv2d_gpu',  af_i,  hm_i_f )
+# else
+      CALL lbc_lnk(     'ice_var_agg_adv2d_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp )
 # endif
 
       !$acc parallel loop collapse(2)

@@ -111,19 +111,19 @@ CONTAINS
       INTEGER, INTENT(in) ::   kt       ! ocean time step
       INTEGER, INTENT(in) ::   ksbc     ! flux formulation (user defined, bulk, or Pure Coupled)
       !!---------------------------------------------------------------------
-      LOGICAL :: l_normal, l_do_diags
+      LOGICAL :: l_NotAdvOnly, l_do_diags
       INTEGER :: ji, jj, jl   ! dummy loop index
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_stp')
 
       kt_ice = kt                              ! -- Ice model time step
 
-      l_normal   = ( .NOT. ln_dynADV2D )       ! i.e. it's not a super-idealized simulation
+      l_NotAdvOnly   = ( .NOT. ln_dynADV2D )       ! i.e. it's not a super-idealized simulation
 
       l_do_diags = ( ln_icediachk .OR. iom_use('hfxdhc') )
 
 
-      IF( l_normal ) THEN
+      IF( l_NotAdvOnly ) THEN
 
          !! * `t_bo` to Kelvin & `=rt0` over land:
          !!   (`t_bo` has been updated into `oss_blk_ssx()@ossmod.F90` called in `stp()@step.F90` !
@@ -135,11 +135,10 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-      ENDIF !IF( l_normal )
+      ENDIF !IF( l_NotAdvOnly )
 
 
       CALL store_fields()             ! Store now ice values
-
 
       !------------------------------------------------!
       ! --- Dynamical coupling with the atmosphere --- !
@@ -159,10 +158,9 @@ CONTAINS
       !    qemp_oce, qemp_ice,  = sensible heat (associated with evap & precip) [W/m2]
       !    qprec_ice, qevap_ice
       !------------------------------------------------------!
-      IF( l_normal ) THEN
+      IF( l_NotAdvOnly ) THEN
          CALL ice_sbc( kt, ksbc, utau_ice, vtau_ice )
       ENDIF
-
 
       !-------------------------------------!
       ! --- ice dynamics and advection  --- !
@@ -180,9 +178,7 @@ CONTAINS
       !PRINT *, ' * LOLO2 max At=', MAXVAL(at_i(:,:)*xmskt(:,:)), MAX_VAR_GPU( at_i, xmskt )
       !CALL test4inf( ' a_i@icestp b ice_dyn  ', a_i )
 
-
       IF( ln_icedyn ) CALL ice_dyn( kt )       ! -- Ice dynamics
-
 
       !IF( l_do_diags ) CALL diag_trends(1)         ! record dyn trends  ! NOT GPU PORTED YET !!!!
 
@@ -196,7 +192,7 @@ CONTAINS
       ENDIF
 
 
-      IF( l_normal ) THEN
+      IF( l_NotAdvOnly ) THEN
          !CALL test4inf( ' a_i@icestp b glo2eqv  ', a_i )
          !                          !==  previous lead fraction and ice volume for flux calculations
          CALL ice_var_glo2eqv_gpu(2)   !2       ! h_i and h_s for ice albedo calculation
@@ -210,7 +206,7 @@ CONTAINS
          !! => we are the idealized 2D advection test-case:
          CALL ice_var_agg_adv2d_gpu()
 
-      ENDIF !IF( l_normal )
+      ENDIF !IF( l_NotAdvOnly )
 
 
       CALL store_fields()             ! Store now ice values
@@ -225,18 +221,17 @@ CONTAINS
 
          IF( l_do_diags ) CALL diag_trends( 2 )         ! record thermo trends
 
-         CALL ice_var_glo2eqv_gpu(2)  ! 2!    ! necessary calls (at least for coupling)
+         CALL ice_var_glo2eqv_gpu(2)
 
-         CALL ice_var_agg_gpu( 2 )     ! necessary calls (at least for coupling)
+         CALL ice_var_agg_gpu( 2 )
          ! ==> UPDATES: af_i,at_i,ato_i,au_i,av_i,et_i,et_s,hm_i,hm_i_f,hm_s,kmsk_ice_f,kmsk_ice_t,kmsk_ice_u,kmsk_ice_v,om_i,sm_i,st_i,tm_i,tm_s,tm_si,tm_su,vt_i,vt_s )
 
          CALL ice_update_flx( kt )     ! -- Update ocean surface mass, heat and salt fluxes (calls ice_alb() !!!)
 
-
       ELSE
          ! --> thermo is turned off !
 
-         CALL ice_var_glo2eqv_gpu(2)          ! necessary calls (at least for coupling)
+         CALL ice_var_glo2eqv_gpu(2)
 
          !$acc parallel loop collapse(2)
          DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -261,29 +256,20 @@ CONTAINS
       !IF( ln_icediahsb )      CALL ice_dia( kt )            ! -- Diagnostics outputs                    ! NOT GPU PORTED YET !!!!
       !
       !IF( ln_icediachk )      CALL ice_drift_wri( kt )      ! -- Diagnostics outputs for conservation   ! NOT GPU PORTED YET !!!
-      !
-      IF( ln_dynADV2D ) THEN
-         CALL ice_wri_adv( kt )        ! -- Ice outputs (minimal set for advection-only tests)
-      ELSE
+
+      IF( l_NotAdvOnly ) THEN
          CALL ice_wri( kt )            ! -- Ice outputs
+      ELSE
+         CALL ice_wri_adv( kt )        ! -- Ice outputs (minimal set for advection-only tests)
       ENDIF
-      !
+
       IF( lrst_ice )           CALL ice_rst_write( kt )      ! -- Ice restart file
-      !
+
       IF( ln_icectl )          CALL ice_ctl( kt )            ! -- Control checks
-      !
 
-      !-------------------------!
-      ! --- Ocean time step --- !
-      !-------------------------!
+      IF( l_NotAdvOnly )       CALL ice_update_tau( kt )         ! -- update surface ocean stresses   !LOLO_NANUQ
 
-      IF( l_normal ) THEN
-         CALL ice_update_tau( kt )         ! -- update surface ocean stresses   !LOLO_NANUQ
-         !%acc update zelf( taum, utau, vtau )
-      ENDIF
-
-      !!gm   remark, the ocean-ice stress is not saved in ice diag call above .....  find a solution!!!
-      !
+      
       IF( ln_timing )   CALL timing_stop('ice_stp')
       !
    END SUBROUTINE ice_stp
@@ -440,10 +426,10 @@ CONTAINS
          CALL ctl_stop( 'STOP', 'par_init: in coupled mode, nn_cats_cpl should be either 1 or jpl' )
       ENDIF
       !
-      rDt_ice   = REAL(nn_fsbc) * rn_Dt          !--- sea-ice timestep and its inverse
+      rDt_ice   = rn_Dt          !--- sea-ice timestep and its inverse
       r1_Dt_ice = 1._wp / rDt_ice
       IF(lwp) WRITE(numout,*)
-      IF(lwp) WRITE(numout,*) '      ice timestep rDt_ice = nn_fsbc*rn_Dt = ', rDt_ice
+      IF(lwp) WRITE(numout,*) '      ice timestep rDt_ice = rn_Dt = ', rDt_ice
       !
       r1_nlay_i = 1._wp / REAL( nlay_i, wp )   !--- inverse of nlay_i and nlay_s
       r1_nlay_s = 1._wp / REAL( nlay_s, wp )

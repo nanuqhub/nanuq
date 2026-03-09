@@ -522,6 +522,7 @@ CONTAINS
       ! * SIMIP diagnostics
       ii = ii + 1
       ALLOCATE( t_si(jpi,jpj,jpl) , tm_si(jpi,jpj) , qcn_ice_bot(jpi,jpj,jpl) , qcn_ice_top(jpi,jpj,jpl) , STAT = ierr(ii) )
+      tm_si(:,:) = 0._wp
 # if defined _OPENACC
       PRINT *, ' * info GPU: ice_alloc() => adding arrays to memory'
       PRINT *, '            => t_si, tm_si, qcn_ice_bot, qcn_ice_top'

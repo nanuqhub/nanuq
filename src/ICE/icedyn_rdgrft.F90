@@ -21,7 +21,11 @@ MODULE icedyn_rdgrft
    USE in_out_manager ! I/O manager
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
+# if defined _OPENACC
+   USE lbclnk_gpu     ! lateral boundary conditions (or mpp links)
+# else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
+# endif
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -1019,7 +1023,7 @@ CONTAINS
       !                                                  ! in Beaufort Sea in wintertime of the order 150 kN/m.
       !
       ! Coon et al. (2007) state that 20 kN/m is ~10% of the maximum compressive strength of isotropic ice, giving max strength of 200 kN/m.
-      
+
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_strength')
       !$acc data present( strength, apartf, araft, aridge, hi_hrdg, hi_hrdg, hraft, hrmin, hrmax, hrexp ) create( ll_ice_present, zistr )
@@ -1111,7 +1115,7 @@ CONTAINS
 
             CALL rdgrft_prep( za_i_cap, v_i, ato_i, ll_ice_present, &                ! <<== in
                &              apartf, aridge, araft, hi_hrdg, hraft, hrmin, hrmax, hrexp )             ! ==>> out
-            
+
             z1_3 = 1._wp / 3._wp
             !$acc parallel loop collapse(2)
             DO jj=Njs0, Nje0
@@ -1144,7 +1148,7 @@ CONTAINS
                            ENDIF
                            !
                            zhi = MERGE( v_i(ji,jj,jl) / MAX( a_i(ji,jj,jl), epsi10 )  ,  0._wp  ,  a_i(ji,jj,jl) > epsi10 )
-                                                      
+
                            ! Make sure ice thickness is not below the minimum
                            ! Do not adjust concentration as don't want strength routine to be able to do this
                            zhi = MAX( zhi, rn_himin )
@@ -1152,7 +1156,7 @@ CONTAINS
                            zistr(ji,jj) = zistr(ji,jj) - apartf(ji,jj,jl) * zhi * zhi                  ! PE loss
                            zistr(ji,jj) = zistr(ji,jj) + 2._wp * araft(ji,jj,jl) * zhi * zhi           ! PE gain (rafting)
                            zistr(ji,jj) = zistr(ji,jj) + aridge(ji,jj,jl) * h2rdg *  hi_hrdg(ji,jj,jl)    ! PE gain (ridging)
-                           
+
                         ENDIF
                         !
                      END DO !DO jl = 1, jpl
@@ -1163,16 +1167,18 @@ CONTAINS
                END DO !DO ji=Nis0, Nie0
             END DO !DO jj=Njs0, Nje0
             !$acc end parallel loop
-            
+
          ENDIF !IF( kice_p > 0 )
          !
-# if ! defined _OPENACC
-         CALL lbc_lnk( 'icedyn_rdgrft', zistr, 'T', 1.0_wp ) ! this call could be removed if calculations were done on the full domain
+# if  defined _OPENACC
+         CALL lbc_lnk_gpu( 'icedyn_rdgrft', zistr )          ! this call could be removed if calculations were done on the full domain
+# else
+         CALL lbc_lnk(     'icedyn_rdgrft', zistr, 'T', 1.0_wp ) ! this call could be removed if calculations were done on the full domain
          !                                                   ! but we decided it is more efficient this way
 # endif
          !$acc end data
 
-         
+
       CASE ( np_strh79 )           !== Hibler(1979)'s method ==!
          !
          !$acc parallel loop collapse(2)
@@ -1217,8 +1223,10 @@ CONTAINS
             END DO
          END DO
          !$acc end parallel loop
-# if ! defined _OPENACC
-         CALL lbc_lnk( 'icedyn_rdgrft', strength, 'T', 1._wp )
+# if defined _OPENACC
+         CALL lbc_lnk_gpu( 'icedyn_rdgrft', strength )
+# else
+         CALL lbc_lnk(     'icedyn_rdgrft', strength, 'T', 1._wp )
 # endif
          !
       ELSE

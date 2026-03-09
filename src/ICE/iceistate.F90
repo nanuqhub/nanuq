@@ -209,7 +209,7 @@ CONTAINS
             !                           !---------------!
             zmsk(:,:) = MERGE( 1._wp, 0._wp,  ff_u(:,:) > 0._wp )
             !
-            CALL fld_read( kt, 1, si ) ! input fields provided at the current time-step
+            CALL fld_read( kt, si ) ! input fields provided at the current time-step
             !
             ! -- mandatory fields -- !
             zht_i_ini(:,:) = si(jp_hti)%fnow(:,:,1) * xmskt(:,:)

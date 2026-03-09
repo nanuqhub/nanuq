@@ -15,7 +15,7 @@
       ============================================================================================================
   -->
 
-  <field_group id="SBC" > <!-- time step automaticaly defined based on nn_fsbc -->
+  <field_group id="SBC" > <!-- time step automaticaly defined -->
 
     <!-- 2D variables -->
     <field_group id="SBC_2D" grid_ref="grid_T_2D" >
@@ -638,6 +638,50 @@
       <field id="strait_arfl"      long_name="Sea ice area flux through straits"      standard_name="sea_area_mass_transport_across_line"  unit="m2/s"  freq_op="1mo"  grid_ref="grid_4strait_ice" > xstrait_arfl + ystrait_arfl </field>
 
     </field_group> <!-- SBC_2D -->
+
+
+  <!-- ABL -->
+  <field_group id="ABL" >
+
+    <!-- variables available with ABL on atmospheric T grid-->
+    <field_group id="grid_ABL3D" grid_ref="grid_TA_3D" >
+      <field id="u_abl"      long_name="ABL i-horizontal velocity"     standard_name="abl_x_velocity" unit="m/s"      />
+      <field id="v_abl"      long_name="ABL j-horizontal velocity"     standard_name="abl_y_velocity" unit="m/s"      />
+      <field id="t_abl"      long_name="ABL potential temperature"     standard_name="abl_theta"      unit="K"        />
+      <field id="q_abl"      long_name="ABL specific humidity"         standard_name="abl_qspe"       unit="kg/kg"    />
+      <!-- debug (to be removed) -->
+      <field id="u_dta"      long_name="DTA i-horizontal velocity"     standard_name="dta_x_velocity" unit="m/s"      />
+      <field id="v_dta"      long_name="DTA j-horizontal velocity"     standard_name="dta_y_velocity" unit="m/s"      />
+      <field id="t_dta"      long_name="DTA potential temperature"     standard_name="dta_theta"      unit="K"        />
+      <field id="q_dta"      long_name="DTA specific humidity"         standard_name="dta_qspe"       unit="kg/kg"    />
+      <field id="u_geo"      long_name="GEO i-horizontal velocity"     standard_name="geo_x_velocity" unit="m/s"      />
+      <field id="v_geo"      long_name="GEO j-horizontal velocity"     standard_name="geo_y_velocity" unit="m/s"      />
+      <field id="tke_abl"    long_name="ABL turbulent kinetic energy"  standard_name="abl_tke"        unit="m2/s2"    />
+      <field id="avm_abl"    long_name="ABL turbulent viscosity"       standard_name="abl_avm"        unit="m2/s"     />
+      <field id="avt_abl"    long_name="ABL turbulent diffusivity"     standard_name="abl_avt"        unit="m2/s"     />
+      <field id="mxlm_abl"   long_name="ABL master mixing length"      standard_name="abl_mxlm"       unit="m"        />
+      <field id="mxld_abl"   long_name="ABL dissipative mixing length" standard_name="abl_mxld"       unit="m"        />
+    </field_group>
+
+    <field_group id="grid_ABL2D" grid_ref="grid_TA_2D" >
+      <field id="pblh"       long_name="ABL height"                    standard_name="abl_height"     unit="m"        />
+      <field id="uz1_abl"    long_name="ABL i-horizontal velocity"     standard_name="abl_x_velocity" unit="m/s"      />
+      <field id="vz1_abl"    long_name="ABL j-horizontal velocity"     standard_name="abl_y_velocity" unit="m/s"      />
+      <field id="uvz1_abl"   long_name="ABL wind speed module"         standard_name="abl_wind_speed" unit="m/s"       > sqrt( uz1_abl^2 + vz1_abl^2 ) </field>
+      <field id="tz1_abl"    long_name="ABL potential temperature"     standard_name="abl_theta"      unit="K"        />
+      <field id="qz1_abl"    long_name="ABL specific humidity"         standard_name="abl_qspe"       unit="kg/kg"    />
+      <field id="uz1_dta"    long_name="DTA i-horizontal velocity"     standard_name="dta_x_velocity" unit="m/s"      />
+      <field id="vz1_dta"    long_name="DTA j-horizontal velocity"     standard_name="dta_y_velocity" unit="m/s"      />
+      <field id="uvz1_dta"   long_name="DTA wind speed module"         standard_name="dta_wind_speed" unit="m/s"       > sqrt( uz1_dta^2 + vz1_dta^2 ) </field>
+      <field id="tz1_dta"    long_name="DTA potential temperature"     standard_name="dta_theta"      unit="K"        />
+      <field id="qz1_dta"    long_name="DTA specific humidity"         standard_name="dta_qspe"       unit="kg/kg"    />
+      <!-- debug (to be removed) -->
+      <field id="uz1_geo"    long_name="GEO i-horizontal velocity"     standard_name="geo_x_velocity" unit="m/s"      />
+      <field id="vz1_geo"    long_name="GEO j-horizontal velocity"     standard_name="geo_y_velocity" unit="m/s"      />
+      <field id="uvz1_geo"   long_name="GEO wind speed module"         standard_name="geo_wind_speed" unit="m/s"       > sqrt( uz1_geo^2 + vz1_geo^2 ) </field>
+    </field_group>
+
+  </field_group> <!-- ABL -->
 
     <!-- categories -->
     <field_group id="SBC_3D" grid_ref="grid_T_ncatice" >

@@ -92,12 +92,21 @@ CONTAINS
          &      qemp_ice(jpi,jpj)     , qevap_ice(jpi,jpj,jpl) , qemp_oce   (jpi,jpj)     ,   &
          &      qns_oce (jpi,jpj)     , qsr_oce  (jpi,jpj)     , emp_oce    (jpi,jpj)     ,   &
          &      emp_ice (jpi,jpj)                              , STAT= ierr(ii) )
-      !&      emp_ice (jpi,jpj)     , sstfrz   (jpi,jpj)     , STAT= ierr(ii) )
-
+      !
       sbc_ice_alloc = MAXVAL( ierr )
       CALL mpp_sum ( 'sbc_ice', sbc_ice_alloc )
       IF( sbc_ice_alloc > 0 )   CALL ctl_warn('sbc_ice_alloc: allocation of arrays failed')
-
+      !
+      wndm_ice(:,:)=0._wp
+      qns_ice (:,:,:)=0._wp ; qsr_ice  (:,:,:)=0._wp ;     qlw_ice(:,:,:)=0._wp
+      qla_ice (:,:,:)=0._wp ; qsb_ice  (:,:,:)=0._wp ;   dqla_ice (:,:,:)=0._wp
+      dqns_ice(:,:,:)=0._wp ; alb_ice  (:,:,:)=0._wp
+      qml_ice (:,:,:)=0._wp ; qcn_ice  (:,:,:)=0._wp ; qtr_ice_top(:,:,:)=0._wp
+      evap_ice(:,:,:)=0._wp ; devap_ice(:,:,:)=0._wp ; qprec_ice  (:,:)=0._wp
+      qemp_ice(:,:)=0._wp   ; qevap_ice(:,:,:)=0._wp ; qemp_oce   (:,:)=0._wp
+      qns_oce (:,:)=0._wp   ; qsr_oce  (:,:)=0._wp   ; emp_oce    (:,:)=0._wp
+      emp_ice (:,:)=0._wp
+      !
 # if defined _OPENACC
       PRINT *, ' * info GPU: sbc_ice_alloc() => adding SBC-related arrays to memory!'
       PRINT *, '             => utau_ice, vtau_ice'

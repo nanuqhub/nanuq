@@ -20,7 +20,11 @@ MODULE icesbc
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
    USE lib_fortran    ! fortran utilities (glob_sum + no signed zero)
+# if defined _OPENACC
+   USE lbclnk_gpu     ! lateral boundary conditions (or mpp links)
+# else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
+# endif
    USE timing         ! Timing
    USE fldread        !!GS: needed by agrif
 
@@ -83,13 +87,12 @@ CONTAINS
       INTEGER                     , INTENT(in ) ::   kt                   ! ocean time step
       INTEGER                     , INTENT(in ) ::   ksbc                 ! type of sbc flux
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   ptaux_ai, ptauy_ai   ! air-ice stress at T-points  [N/m2]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pCHi    ! sensible heat transfer coefficient [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pCEi    ! evap/sublim. transfer coefficient  [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   ptheta_zu_i ! air temperature adjusted at heaight `zu` [K]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pq_zu_i      ! air spec. hum. adjusted at heaight `zu` [kg/kg]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pCHi                 ! sensible heat transfer coefficient [-]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pCEi                 ! evap/sublim. transfer coefficient  [-]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   ptheta_zu_i          ! air temperature adjusted at heaight `zu` [K]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pq_zu_i              ! air spec. hum. adjusted at heaight `zu` [kg/kg]
       !!
       INTEGER  ::   ji, jj                 ! dummy loop index
-      REAL(wp), DIMENSION(jpi,jpj) ::   ztaux_ai, ztauy_ai
       !!-------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_sbc_tau')
       !$acc data present( ptaux_ai, ptauy_ai, pCHi, pCEi, ptheta_zu_i, pq_zu_i, fatm_u, fatm_v, fatm_theta, fatm_q, fatm_slp, u_ice, v_ice, tm_su )
@@ -101,19 +104,44 @@ CONTAINS
       ENDIF
       !
       SELECT CASE( ksbc )
-      CASE( jp_blk     )
-         CALL blk_ice_1( fatm_u, fatm_v, fatm_theta, fatm_q,  &   ! #LB: known from "sbc_oce" module...
-            &            fatm_slp, u_ice, v_ice, tm_su    ,   &   ! inputs
-            &            pCHi, pCEi, ptheta_zu_i, pq_zu_i,    &   ! outputs
-            &            putaui = ptaux_ai, pvtaui = ptauy_ai            )       ! outputs
-         !        CASE( jp_abl     )    ptaux_ai & ptauy_ai are computed in ablmod
-         !         CASE( jp_cpl_atm )   ;    CALL sbc_cpl_ice_tau( ptaux_ai , ptauy_ai )   ! Coupled      formulation LOLO: coupled with atmosphere, not ocean
+         !
+      CASE( jp_blk )
+         !
+         CALL blk_ice_1( fatm_u, fatm_v, fatm_theta, fatm_q,                             &   ! #LB: known from "sbc_oce" module...
+            &            fatm_slp, u_ice, v_ice, tm_su    ,                              &   ! inputs
+            &            pCHi=pCHi, pCEi=pCEi, ptheta_zu_i=ptheta_zu_i, pq_zu_i=pq_zu_i, &   ! outputs
+            &            putaui=ptaux_ai, pvtaui=ptauy_ai            )                       ! outputs
+         !
+         !
+         !
+      CASE( jp_abl ) !   ptaux_ai & ptauy_ai are computed in ablmod
+         CALL blk_ice_1( fatm_u, fatm_v, fatm_theta, fatm_q,                             &   ! #LB: known from "sbc_oce" module...
+            &            fatm_slp, u_ice, v_ice, tm_su    ,                              &   ! inputs
+            &            pCHi=pCHi, pCEi=pCEi )
+
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               ptheta_zu_i(ji,jj) = fatm_theta(ji,jj)
+               pq_zu_i(ji,jj)     = fatm_q(ji,jj)
+            END DO
+         END DO
+         !$acc end parallel loop
+         !
+         !
+         !
+         ! CASE( jp_cpl_atm )   ;    CALL sbc_cpl_ice_tau( ptaux_ai , ptauy_ai )   ! Coupled      formulation LOLO: coupled with atmosphere, not ocean
+         !
+         !
+         !
       END SELECT
-      
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'ice_sbc_tau', ptaux_ai,'T',-1._wp, ptauy_ai,'T',-1._wp )
+
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_sbc_tau', ptaux_ai, ptauy_ai )
+# else
+      CALL lbc_lnk(     'ice_sbc_tau', ptaux_ai,'T',-1._wp, ptauy_ai,'T',-1._wp )
 # endif
-      
+
       !$acc end data
       IF( ln_timing )   CALL timing_stop('ice_sbc_tau')
       !
@@ -337,8 +365,10 @@ CONTAINS
       ENDIF
 
 
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'icesbc', zfric, 'T',  1.0_wp, zvel, 'T', 1.0_wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'icesbc', zfric, zvel )
+# else
+      CALL lbc_lnk(     'icesbc', zfric, 'T',  1.0_wp, zvel, 'T', 1.0_wp )
 # endif
 
       !--------------------------------------------------------------------!

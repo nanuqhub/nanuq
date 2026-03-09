@@ -16,33 +16,25 @@ MODULE nanuqgcm
    !!   nanuq_closefile: close remaining open files
    !!   nanuq_alloc    : dynamical allocation
    !!----------------------------------------------------------------------
-   USE sbcmod         ! surface boundary condition       (sbc     routine)
-   USE ossmod         ! surface boundary condition       (sbc     routine)
-   USE oss_nnq !lolo, ONLY : lk_oasis_oce        ! surface boundary condition
+   USE sbcmod,  ONLY : sbc_init ! surface boundary condition       (sbc     routine)
+   USE ossmod,  ONLY : oss_init ! surface ocean state
+   USE oss_nnq, ONLY : lk_oasis_oce        ! surface boundary condition
    USE icestp,  ONLY : ice_init         ! surface boundary condition: SI3 sea-ice model
-   USE phycst         ! physical constant                  (par_cst routine)
-   USE domain         ! domain initialization   (dom_init & dom_cfg routines)
-   USE daymod         ! calendar
+   USE domain,  ONLY : dom_init, domain_cfg   ! domain initialization
+   USE daymod,  ONLY : day_init         ! calendar
+   !
    USE step           ! NANUQ time-stepping                 (stp     routine)
    USE cpl_oasis3     !
    USE bdyini         ! open boundary cond. setting       (bdy_init routine). mandatory for sea-ice
-   USE bdydta         ! open boundary cond. setting   (bdy_dta_init routine). mandatory for sea-ice
    !
    USE eosbn2, ONLY : eos_init ! equation of state of sea-water
    !
    USE stpctl         ! time stepping control            (stp_ctl routine)
    USE prtctl         ! Print control
    USE in_out_manager ! I/O manager
-   USE in_out_manager ! I/O manager
    USE iom            !
-   USE lib_mpp        ! distributed memory computing
    USE mppini         ! shared/distributed memory setting (mpp_init routine)
-   USE lib_fortran    ! Fortran utilities (allows no signed zero when 'key_nosignedzero' defined)
-
-   USE lbclnk
    USE timing          ! Timing
-   USE xios            ! I/O server
-
    USE halo_mng
 
 #if defined _OPENACC
@@ -136,6 +128,7 @@ CONTAINS
       IF(lwp) WRITE(numout,*) ''
 #endif
 
+
       !                                               !== set the model time-step  ==!
       !
       istp = nit000
@@ -157,15 +150,7 @@ CONTAINS
 
       END DO
       !
-      !
-      !*acc end data
-      !*acc end data
-      !*acc end data
-      !*acc end data
-      !*acc end data
-      !********************************************************************************************************************
-      !*acc end data
-      !********************************************************************************************************************
+
 
       !
       !                            !------------------------!
@@ -213,7 +198,7 @@ CONTAINS
       !!
       NAMELIST/namctl/ sn_cfctl, ln_timing, ln_diacfl,                                &
          &             nn_isplt,  nn_jsplt,  nn_ictls, nn_ictle, nn_jctls, nn_jctle
-      NAMELIST/namcfg/ ln_read_cfg, cn_domcfg, ln_write_cfg, cn_domcfg_out, ln_use_jattr
+      NAMELIST/namcfg/ ln_read_cfg, cn_domcfg, ln_write_cfg, cn_domcfg_out
       !!----------------------------------------------------------------------
       !
       !PRINT *, 'LOLO: entering `nanuq_init()`!, NAREA = ', narea
@@ -433,7 +418,6 @@ CONTAINS
          WRITE(numout,*) '         filename to be read                           cn_domcfg     = ', TRIM(cn_domcfg)
          WRITE(numout,*) '      create a configuration definition file        ln_write_cfg     = ', ln_write_cfg
          WRITE(numout,*) '         filename to be written                        cn_domcfg_out = ', TRIM(cn_domcfg_out)
-         WRITE(numout,*) '      use file attribute if exists as i/p j-start   ln_use_jattr     = ', ln_use_jattr
       ENDIF
       !
       !LOLOfixme:

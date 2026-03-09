@@ -60,8 +60,10 @@
       END DO
       !$acc end parallel loop
 
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'ice_var_agg_gpu',  hm_i,'T',1._wp, hm_s,'T',1._wp, ato_i,'T',1._wp, vt_i,'F',1._wp, vt_s,'T',1._wp, at_i,'F',1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_var_agg_gpu',  hm_i, hm_s, ato_i, vt_i, vt_s, at_i )
+# else
+      CALL lbc_lnk(     'ice_var_agg_gpu',  hm_i,'T',1._wp, hm_s,'T',1._wp, ato_i,'T',1._wp, vt_i,'T',1._wp, vt_s,'T',1._wp, at_i,'T',1._wp )
 # endif
 
 
@@ -129,8 +131,10 @@
          END DO
          !$acc end parallel loop
 
-# if ! defined _OPENACC
-         CALL lbc_lnk( 'ice_var_agg_gpu',  tm_su,'T',1._wp, et_s,'T',1._wp, et_i,'T',1._wp, st_i,'T',1._wp )
+# if defined _OPENACC
+         CALL lbc_lnk_gpu( 'ice_var_agg_gpu',  tm_su, et_s, et_i, st_i )
+# else
+         CALL lbc_lnk(     'ice_var_agg_gpu',  tm_su,'T',1._wp, et_s,'T',1._wp, et_i,'T',1._wp, st_i,'T',1._wp )
 # endif
 
 
@@ -141,7 +145,8 @@
             !$acc parallel loop collapse(2)
             DO jj=Njs0-nn_hls, Nje0+nn_hls
                DO ji=Nis0-nn_hls, Nie0+nn_hls
-                  om_i(ji,jj)  = 0._wp
+                  tm_si(ji,jj)= 0._wp
+                  om_i(ji,jj) = 0._wp
                   sm_i(ji,jj) = 0._wp
                   tm_i(ji,jj) = 0._wp
                   tm_s(ji,jj) = 0._wp
@@ -211,8 +216,10 @@
             END DO !DO jj=Njs0, Nje0
             !$acc end parallel loop
 
-# if ! defined _OPENACC
-            CALL lbc_lnk( 'ice_var_agg_gpu',  tm_si,'T',1._wp, om_i,'T',1._wp, sm_i,'F',1._wp, tm_i,'T',1._wp, tm_s,'F',1._wp )
+# if defined _OPENACC
+            CALL lbc_lnk_gpu( 'ice_var_agg_gpu',  tm_si, om_i, sm_i, tm_i, tm_s )
+# else
+            CALL lbc_lnk(     'ice_var_agg_gpu',  tm_si,'T',1._wp, om_i,'T',1._wp, sm_i,'T',1._wp, tm_i,'T',1._wp, tm_s,'T',1._wp )
 # endif
 
             ! mean melt pond depth
@@ -258,8 +265,10 @@
       END DO
       !$acc end parallel loop
 
-# if !defined _OPENACC
-      CALL lbc_lnk( 'ice_var_agg_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp,  au_i,'U',1._wp,  av_i,'V',1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_var_agg_gpu',  af_i, hm_i_f, au_i, av_i )
+# else
+      CALL lbc_lnk(     'ice_var_agg_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp,  au_i,'U',1._wp,  av_i,'V',1._wp )
 # endif
 
       !$acc parallel loop collapse(2)

@@ -83,7 +83,8 @@ CONTAINS
       ! --------------
       ! When are we during the day (from 0 to 1)
       zlo = ( REAL(nsec_day, wp) - 0.5_wp * rn_Dt ) / rday
-      zup = zlo + ( REAL(nn_fsbc, wp)     * rn_Dt ) / rday
+      !zup = zlo + ( REAL(nn*fsbc, wp)     * rn_Dt ) / rday
+      zup =     zlo   +                     rn_Dt  / rday
       !
       IF( nday_qsr == -1 ) THEN       ! first time step only
          IF(lwp) THEN
@@ -255,7 +256,8 @@ CONTAINS
             END DO
          END DO
          !
-         ztmp = rday / ( rn_Dt * REAL(nn_fsbc, wp) )
+         !ztmp = rday / ( rn_Dt * REAL(nn*fsbc, wp) )
+         ztmp = rday / rn_Dt
          rscal(:,:) = rscal(:,:) * ztmp
          !
       ENDIF !IF( nday_qsr /= nday )

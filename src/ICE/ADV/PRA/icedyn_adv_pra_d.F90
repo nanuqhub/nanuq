@@ -72,8 +72,7 @@ CONTAINS
       CHARACTER(len=64) :: cstr
       !
       CHARACTER(len=17), PARAMETER :: crtnm = 'ice_dyn_adv_pra_d'
-      REAL(wp), PARAMETER :: rr_scl_fct = 1.E-6_wp
-      REAL(wp), PARAMETER :: r1_scl_fct = 1.E6_wp
+      REAL(wp), PARAMETER :: r1_scl_fct = 1.E6_wp  ! because using km rather than m...
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start(crtnm)
       !$acc data present( pe1e2, p1_e1e2, pmsk, pUx, pVx, p1md )
@@ -93,11 +92,10 @@ CONTAINS
 
          ! --- Lateral boundary conditions --- !
          !     caution: for gradients (sx and sy) the sign changes
-         !# if defined _OPENACC
-         !         PRINT *, ' *** Skipping `lbc_lnk` for DAMAGE@T Prather !, kt =',kt
-         !# else
-# if ! defined _OPENACC
-         CALL lbc_lnk( crtnm, p1md,cgt,1._wp,     sx1md_t,cgt,-1._wp, sy1md_t,cgt,-1._wp,  &
+# if defined _OPENACC
+         CALL lbc_lnk_gpu( crtnm,  p1md, sx1md_t, sy1md_t, sxx1md_t, syy1md_t, sxy1md_t )
+# else
+         CALL lbc_lnk(     crtnm, p1md,cgt,1._wp,     sx1md_t,cgt,-1._wp, sy1md_t,cgt,-1._wp,  &
             &                 sxx1md_t,cgt,1._wp, syy1md_t,cgt,1._wp, sxy1md_t,cgt,1._wp  )
 # endif
          !
@@ -105,10 +103,11 @@ CONTAINS
 
          CALL adv_pra_2d( kt, zdt, pUx, pVx, pe1e2, p1_e1e2, pmsk,  p1md, sx1md_f, sxx1md_f, sy1md_f, syy1md_f, sxy1md_f ) !--- ice damage @ F
 
-         !                                                                  !--------------------------------------------!
          ! --- Lateral boundary conditions --- !
          !     caution: for gradients (sx and sy) the sign changes
-# if ! defined _OPENACC
+# if  defined _OPENACC
+         CALL lbc_lnk_gpu( crtnm,  p1md, sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f )
+# else
          CALL lbc_lnk( crtnm, p1md,cgt,1._wp,    sx1md_f,cgt,-1._wp, sy1md_f,cgt,-1._wp,  &
             &                 sxx1md_f,cgt,1._wp, syy1md_f,cgt,1._wp, sxy1md_f,cgt,1._wp  )
 # endif

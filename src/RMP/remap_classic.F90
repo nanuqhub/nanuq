@@ -773,10 +773,9 @@ CONTAINS
       !$acc end parallel loop
       !
 # if defined _OPENACC
-      IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'do_Voce', pVoce )
-      IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'do_Voce', pVoce )
+      CALL lbc_lnk_gpu( 'do_Voce', pVoce )
 # else
-      CALL lbc_lnk( 'do_Voce', pVoce(:,:,1),'U',-1._wp, pVoce(:,:,2),'V',-1._wp, pVoce(:,:,3),'V',-1._wp, pVoce(:,:,4),'U',-1._wp )
+      CALL lbc_lnk(     'do_Voce', pVoce(:,:,1),'U',-1._wp, pVoce(:,:,2),'V',-1._wp, pVoce(:,:,3),'V',-1._wp, pVoce(:,:,4),'U',-1._wp )
 # endif
       !
       !$acc end data
@@ -843,11 +842,13 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if ! defined _OPENACC
-      IF(PRESENT(lbcl)) THEN
-         IF( lbcl ) CALL lbc_lnk( 'do_rmpT2F@icedyn_rhg_bbm', pxf, 'F', 1._wp )
-      END IF
+      IF(PRESENT(lbcl)) THEN         
+# if defined _OPENACC
+         IF( lbcl ) CALL lbc_lnk_gpu( 'do_rmpT2F@icedyn_rhg_bbm', pxf )      
+# else
+         IF( lbcl ) CALL lbc_lnk(     'do_rmpT2F@icedyn_rhg_bbm', pxf, 'F', 1._wp )      
 # endif
+      END IF
       !$acc end data
       !!
    END SUBROUTINE do_rmpT2F

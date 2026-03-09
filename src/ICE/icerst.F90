@@ -14,7 +14,7 @@ MODULE icerst
    USE ice            ! sea-ice: variables
    USE dom_oce        ! ocean domain
    USE phycst  , ONLY : rt0
-   USE sbc_oce , ONLY : nn_fsbc, ln_cpl_atm
+   USE sbc_oce , ONLY : ln_cpl_atm
    USE oss_nnq , ONLY : nn_foss, ln_cpl_oce
    USE iceistate      ! sea-ice: initial state
    USE icectl         ! sea-ice: control
@@ -114,10 +114,9 @@ CONTAINS
 
       IF( ln_rst_list .OR. nn_stock /= -1 ) THEN
          ! in order to get better performances with NetCDF format, we open and define the ice restart file
-         ! one ice time step before writing the data (-> at nitrst - 2*nn_fsbc + 1), except if we write ice
-         ! restart files every ice time step or if an ice restart file was writen at nitend - 2*nn_fsbc + 1
-         IF( kt == nitrst - 2*nn_fsbc + 1 .OR. nn_stock == nn_fsbc    &
-            &                             .OR. ( kt == nitend - nn_fsbc + 1 .AND. .NOT. lrst_ice ) ) THEN
+         ! one ice time step before writing the data (-> at nitrst - 2*nn*fsbc + 1), except if we write ice
+         ! restart files every ice time step or if an ice restart file was writen at nitend - 2*nn*fsbc + 1
+         IF( kt==nitrst-1 .OR. nn_stock==1 .OR. ( kt == nitend .AND. .NOT. lrst_ice ) ) THEN
             IF( nitrst <= nitend .AND. nitrst > 0 ) THEN
                ! beware of the format used to write kt (default is i8.8, that should be large enough...)
                IF( nitrst > 99999999 ) THEN   ;   WRITE(clkt, *       ) nitrst
@@ -130,8 +129,8 @@ CONTAINS
                IF(lwp) THEN
                   WRITE(numout,*)
                   WRITE(numout,*) '             open ice restart NetCDF file: ',TRIM(clpath)//clname
-                  IF( kt == nitrst - 2*nn_fsbc + 1 ) THEN
-                     WRITE(numout,*) '             kt = nitrst - 2*nn_fsbc + 1 = ', kt,' date= ', ndastp
+                  IF( kt == nitrst - 1 ) THEN
+                     WRITE(numout,*) '             kt = nitrst - 1 = ', kt,' date= ', ndastp
                   ELSE
                      WRITE(numout,*) '             kt = '                         , kt,' date= ', ndastp
                   ENDIF
@@ -179,7 +178,7 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl) ::   z3d   ! 3D workspace
       !!----------------------------------------------------------------------
 
-      iter = kt + nn_fsbc - 1   ! ice restarts are written at kt == nitrst - nn_fsbc + 1
+      iter = kt   ! ice restarts are written at kt == nitrst
 
       IF( iter == nitrst ) THEN
          IF(lwp) WRITE(numout,*)
@@ -190,7 +189,7 @@ CONTAINS
       ! Write in numriw (if iter == nitrst)
       ! ------------------
       !                                                                        ! calendar control
-      CALL iom_rstput( iter, nitrst, numriw, 'nn_fsbc', REAL( nn_fsbc, wp ) )      ! time-step
+      !CALL iom_rstput( iter, nitrst, numriw, 'nn*fsbc', REAL( nn*fsbc, wp ) )      ! time-step
       CALL iom_rstput( iter, nitrst, numriw, 'kt_ice' , REAL( iter   , wp ) )      ! date
 
       IF(.NOT.lwxios) CALL iom_delay_rst( 'WRITE', 'ICE', numriw )   ! save only ice delayed global communication variables
@@ -261,7 +260,7 @@ CONTAINS
       INTEGER           ::   id0, id1, id2, id3, id4, id5   ! local integer
       CHARACTER(len=25) ::   znam
       CHARACTER(len=2)  ::   zchar, zchar1
-      REAL(wp)          ::   zfice, ziter
+      REAL(wp)          ::   ziter
       CHARACTER(lc)     ::   clpname
       REAL(wp), DIMENSION(jpi,jpj,jpl) ::   z3d   ! 3D workspace
       !!----------------------------------------------------------------------
@@ -293,7 +292,7 @@ CONTAINS
       IF( id0 > 0 ) THEN   ! == case of a normal restart == !
          !                 ! ------------------------------ !
          ! Time info
-         CALL iom_get( numrir, 'nn_fsbc', zfice )
+         !CALL iom_get( numrir, 'nn*fsbc', zfice )
          CALL iom_get( numrir, 'kt_ice' , ziter )
          IF(lwp) WRITE(numout,*) '   read ice restart file at time step    : ', ziter
          IF(lwp) WRITE(numout,*) '   in any case we force it to nit000 - 1 : ', nit000 - 1
@@ -303,10 +302,10 @@ CONTAINS
             &     CALL ctl_stop( 'ice_rst_read ===>>>> : problem with nit000 in ice restart',  &
             &                   '   verify the file or rerun with the value 0 for the',        &
             &                   '   control of time parameter  nrstdt' )
-         IF( NINT(zfice) /= nn_fsbc          .AND. ABS( nrstdt ) == 1 )   &
-            &     CALL ctl_stop( 'ice_rst_read ===>>>> : problem with nn_fsbc in ice restart',  &
-            &                   '   verify the file or rerun with the value 0 for the',         &
-            &                   '   control of time parameter  nrstdt' )
+         !IF( NINT(zfice) /= nn*fsbc          .AND. ABS( nrstdt ) == 1 )   &
+         !   &     CALL ctl_stop( 'ice_rst_read ===>>>> : problem with nn*fsbc in ice restart',  &
+         !   &                   '   verify the file or rerun with the value 0 for the',         &
+         !   &                   '   control of time parameter  nrstdt' )
 
          ! --- mandatory fields --- !
          CALL iom_get( numrir, jpdom_auto, 'v_i',   v_i   )

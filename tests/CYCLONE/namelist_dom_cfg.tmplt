@@ -94,7 +94,6 @@
 !-----------------------------------------------------------------------
 &namsbc        !   Surface Boundary Condition manager                   (default: NO selection)
 !-----------------------------------------------------------------------
-   nn_fsbc     = 1         !  frequency of SBC module call
    ln_blk      = .true.    !  Bulk formulation                          (T => fill namsbc_blk )
 /
 !-----------------------------------------------------------------------

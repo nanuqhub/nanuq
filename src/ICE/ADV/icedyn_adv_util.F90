@@ -299,10 +299,10 @@ CONTAINS
       DO jj=Njs0-1, Nje0+1
          DO ji=Nis0-1, Nie0+1
             DO jl = 1, jpl
-               
+
                zV = pv_i(ji,jj,jl)
                zA = pa_i(ji,jj,jl)
-               
+
                IF ( zV > 0._wp .AND. zA > 0._wp ) THEN
                   !
                   !                               ! -- check h_i -- !
@@ -368,7 +368,7 @@ CONTAINS
                ENDIF
 
                pa_i(ji,jj,jl) = zA
-               
+
             END DO !DO jl = 1, jpl
          END DO !DO ji=Nis0-1, Nie0+1
       END DO !DO jj=Njs0-1, Nje0+1
@@ -574,15 +574,15 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(in ) ::   pice   ! input
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(out) ::   pmax   ! output
       !
-      INTEGER  ::   ji, jj, jl   ! dummy loop indices
+      INTEGER  ::   ji, jj, jl, kh   ! dummy loop indices
       !!----------------------------------------------------------------------
-      ! basic version: get the max of epsi20 + 9 neighbours
-
       !$acc data present( pice, pmax )
 
+      kh = MAX( nn_hls-1, 1)
+
       !$acc parallel loop collapse(3)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
+      DO jj=Njs0-kh, Nje0+kh
+         DO ji=Nis0-kh, Nie0+kh
             DO jl = 1, jpl
                pmax(ji,jj,jl) = MAX( epsi20, pice(ji-1,jj-1,jl), pice(ji,jj-1,jl), pice(ji+1,jj-1,jl),   &
                   &                          pice(ji-1,jj  ,jl), pice(ji,jj  ,jl), pice(ji+1,jj  ,jl),   &
@@ -607,17 +607,17 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(in ) ::   pv     ! volume of X
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(out) ::   pmax   !
       !!----------------------------------------------------------------------
-      INTEGER  ::   ji, jj, jl   ! dummy loop indices
+      INTEGER  ::   ji, jj, jl, kh   ! dummy loop indices
       REAL(wp) ::   zv
       REAL(wp), DIMENSION(jpi,jpj,jpl) ::   zc
       !!----------------------------------------------------------------------
       !$acc data present( pcv, pv, pmax ) create( zc )
 
-      ! basic version: get the max of epcvi20 + 9 neighbours
+      kh = MAX( nn_hls-1, 1)
 
       !$acc parallel loop collapse(3)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
             DO jl = 1, jpl
                zv = MAX( pv(ji,jj,jl), epsi20 )
                zc(ji,jj,jl) = MERGE( pcv(ji,jj,jl) / zv, 0._wp,  zv >= epsi10 )
@@ -625,11 +625,9 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
-
       !$acc parallel loop collapse(3)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
+      DO jj=Njs0-kh, Nje0+kh
+         DO ji=Nis0-kh, Nie0+kh
             DO jl = 1, jpl
                pmax(ji,jj,jl) = MAX( epsi20, zc(ji-1,jj-1,jl), zc(ji,jj-1,jl), zc(ji+1,jj-1,jl),   &
                   &                          zc(ji-1,jj  ,jl), zc(ji,jj  ,jl), zc(ji+1,jj  ,jl),   &
@@ -654,17 +652,16 @@ CONTAINS
       REAL(wp), DIMENSION(:,:,:,:), INTENT(in ) ::   pice   ! input
       REAL(wp), DIMENSION(:,:,:,:), INTENT(out) ::   pmax   ! output
       !
-      INTEGER  ::   jlay, ji, jj, jk, jl   ! dummy loop indices
+      INTEGER  ::   jlay, ji, jj, jk, jl, kh   ! dummy loop indices
       !!----------------------------------------------------------------------
+      !$acc data present( pice, pmax )
       jlay = SIZE( pice , 3 )   ! size of input arrays
       !
-      !$acc data present( pice, pmax )
-
-      ! basic version: get the max of epsi20 + 9 neighbours
-
+      kh = MAX( nn_hls-1, 1)
+      !
       !$acc parallel loop collapse(4)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
+      DO jj=Njs0-kh, Nje0+kh
+         DO ji=Nis0-kh, Nie0+kh
             DO jl = 1, jpl
                DO jk = 1, jlay
                   !
@@ -695,24 +692,25 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,     jpl), INTENT(in ) ::   pv     ! volume   of X
       REAL(wp), DIMENSION(jpi,jpj,klay,jpl), INTENT(out) ::   pmax   ! output
       !
-      INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
+      INTEGER  ::   ji, jj, jk, jl, kh   ! dummy loop indices
       REAL(wp) :: zv
       REAL(wp), DIMENSION(jpi,jpj,klay,jpl) ::   ze     ! enthalpy of X / volume of x
       !!----------------------------------------------------------------------
       !$acc data present( pe, pv, pmax ) create( ze )
-
+      !
       !jlay = SIZE( pe , 3 )   ! size of input arrays
       !
       ! basic version: get the max of epsi20 + 9 neighbours
+      kh = MAX( nn_hls-1, 1)
 
       !$acc parallel loop collapse(3)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
             DO jl = 1, jpl
                !
                zv = MAX( pv(ji,jj,jl), epsi20 )
                !$acc loop seq
-               DO jk = 1, klay                  
+               DO jk = 1, klay
                   ze(ji,jj,jk,jl) = MERGE( pe(ji,jj,jk,jl) / zv, 0._wp,  zv >= epsi10 )
                END DO
                !
@@ -720,10 +718,9 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
       !$acc parallel loop collapse(4)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
+      DO jj=Njs0-kh, Nje0+kh
+         DO ji=Nis0-kh, Nie0+kh
             DO jl = 1, jpl
                DO jk = 1, klay
                   !
@@ -739,7 +736,7 @@ CONTAINS
 
       ! optimized version : does a little bit more than 2 max of epsi20 + 3 neighbours
       !   ==> screws up on GPU !!!!
-      
+
       !$acc end data
    END SUBROUTINE icemax4D_cnt
 

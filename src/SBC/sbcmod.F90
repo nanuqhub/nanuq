@@ -38,7 +38,7 @@ MODULE sbcmod
 # endif
    !
    USE in_out_manager ! I/O manager
-   USE lib_mpp, ONLY : ncom_fsbc, ctl_nam, ctl_stop, ctl_warn
+   USE lib_mpp, ONLY : ctl_nam, ctl_stop, ctl_warn
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -74,8 +74,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER ::   ios, icpt                         ! local integer
       !!
-      NAMELIST/namsbc/ nn_fsbc, ln_flx, ln_blk, ln_abl,                      &
-         &             ln_cpl_atm, nn_lsm
+      NAMELIST/namsbc/ ln_flx, ln_blk, ln_abl, ln_cpl_atm, nn_lsm
       !!----------------------------------------------------------------------
       !
       IF(lwp) THEN
@@ -91,13 +90,8 @@ CONTAINS
       !902   IF( ios >  0 )   CALL ctl_nam ( ios , 'namsbc in configuration namelist' )
       IF(lwm) WRITE( numond, namsbc )
       !
-#if ! defined key_mpi_off
-      ncom_fsbc = nn_fsbc    ! make nn_fsbc available for lib_mpp
-#endif
-      !
       IF(lwp) THEN                  !* Control print
          WRITE(numout,*) '   Namelist namsbc (partly overwritten with CPP key setting)'
-         WRITE(numout,*) '      frequency update of sbc (and ice)             nn_fsbc       = ', nn_fsbc
          WRITE(numout,*) '      Type of air-sea fluxes : '
          WRITE(numout,*) '         flux         formulation                   ln_flx        = ', ln_flx
          WRITE(numout,*) '         bulk         formulation                   ln_blk        = ', ln_blk
@@ -181,38 +175,14 @@ CONTAINS
       ENDIF
       !
       !                             !* OASIS initialization
-      !
-      !IF( lk_oasis_atm )   CALL sbc_cpl_init( 2 )   ! Must be done before: (1) first time step
-      !                                          !                      (2) the use of nn_fsbc
-      !     nn_fsbc initialization if NANUQ-ATMO coupling via OASIS
-      !     NANUQ time-step has to be declared in OASIS (mandatory) -> nn_fsbc has to be modified accordingly
-      IF( ln_cpl_atm ) THEN !LOLO!!!
-         nn_fsbc = cpl_freq('I_SFLX') / NINT(rn_Dt)
-         !
+      IF( ln_cpl_atm ) THEN
          IF(lwp)THEN
             WRITE(numout,*)
-            WRITE(numout,*)" * NANUQ is coupled to an atmospheric model via OASIS : nn_fsbc re-defined from OASIS namcouple ", nn_fsbc
+            WRITE(numout,*)" * NANUQ is coupled to an atmospheric model via OASIS !"
             WRITE(numout,*)
+            CALL ctl_stop( 'sbc_init : coupling with atmospheric model not ready yet !!!' )           
          ENDIF
       ENDIF
-      !
-      !                             !* check consistency between model timeline and nn_fsbc
-      IF( ln_rst_list .OR. nn_stock /= -1 ) THEN   ! we will do restart files
-         IF( MOD( nitend - nit000 + 1, nn_fsbc) /= 0 ) THEN
-            WRITE(ctmp1,*) 'sbc_init : experiment length (', nitend - nit000 + 1, ') is NOT a multiple of nn_fsbc (', nn_fsbc, ')'
-            CALL ctl_stop( ctmp1, 'Impossible to properly do model restart' )
-         ENDIF
-         IF( .NOT. ln_rst_list .AND. MOD( nn_stock, nn_fsbc) /= 0 ) THEN   ! we don't use nn_stock if ln_rst_list
-            WRITE(ctmp1,*) 'sbc_init : nn_stock (', nn_stock, ') is NOT a multiple of nn_fsbc (', nn_fsbc, ')'
-            CALL ctl_stop( ctmp1, 'Impossible to properly do model restart' )
-         ENDIF
-      ENDIF
-      !
-      IF( MOD( rday, REAL(nn_fsbc, wp) * rn_Dt ) /= 0 )   &
-         &  CALL ctl_warn( 'sbc_init : nn_fsbc is NOT a multiple of the number of time steps in a day' )
-      !
-      IF( ln_dm2dc .AND. NINT(rday) / ( nn_fsbc * NINT(rn_Dt) ) < 8  )   &
-         &   CALL ctl_warn( 'sbc_init : diurnal cycle for qsr: the sampling of the diurnal cycle is too small...' )
       !
       !                       !**  associated modules : initialization
       !
@@ -289,7 +259,7 @@ CONTAINS
          !
       CASE( jp_cpl_atm )                           ! Coupling to an atmosphere GCM
          CALL ctl_stop( 'sbc : CREATE the `sbc_cpl_rcv` routine for atmo GCM coupling!!!')
-         !CALL sbc_cpl_rcv   ( kt, nn_fsbc, 2 )  ! pure coupled formulation
+         !CALL sbc_cpl_rcv   ( kt, nn*fsbc, 2 )  ! pure coupled formulation
          !
          !
       END SELECT

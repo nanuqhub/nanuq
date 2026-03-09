@@ -26,7 +26,7 @@ MODULE iom
    USE iom_nf90        ! NetCDF format with native NetCDF library
    USE in_out_manager  ! I/O manager
    USE lib_mpp           ! MPP library
-   USE sbc_oce  , ONLY :   nn_fsbc, ght_abl, ghw_abl, e3t_abl, e3w_abl, jpka, jpkam1
+   USE sbc_oce  , ONLY :   ght_abl, ghw_abl, e3t_abl, e3w_abl, jpka, jpkam1
    USE par_ice  , ONLY :   jpl
    USE phycst          ! physical constants
 #if defined key_xios
@@ -2386,9 +2386,9 @@ CONTAINS
       f_op%timestep = 1        ;  f_of%timestep =  0  ; CALL iom_set_field_attr('field_definition', freq_op=f_op, freq_offset=f_of)
       f_op%timestep = 2        ;  f_of%timestep =  0  ; CALL iom_set_field_attr('trendT_even'     , freq_op=f_op, freq_offset=f_of)
       f_op%timestep = 2        ;  f_of%timestep = -1  ; CALL iom_set_field_attr('trendT_odd'      , freq_op=f_op, freq_offset=f_of)
-      f_op%timestep = nn_fsbc  ;  f_of%timestep =  0  ; CALL iom_set_field_attr('SBC'             , freq_op=f_op, freq_offset=f_of)
-      f_op%timestep = nn_fsbc  ;  f_of%timestep =  0  ; CALL iom_set_field_attr('SBC_scalar'      , freq_op=f_op, freq_offset=f_of)
-      f_op%timestep = nn_fsbc  ;  f_of%timestep =  0  ; CALL iom_set_field_attr('ABL'             , freq_op=f_op, freq_offset=f_of)
+      f_op%timestep = 1        ;  f_of%timestep =  0  ; CALL iom_set_field_attr('SBC'             , freq_op=f_op, freq_offset=f_of)
+      f_op%timestep = 1        ;  f_of%timestep =  0  ; CALL iom_set_field_attr('SBC_scalar'      , freq_op=f_op, freq_offset=f_of)
+      f_op%timestep = 1        ;  f_of%timestep =  0  ; CALL iom_set_field_attr('ABL'             , freq_op=f_op, freq_offset=f_of)
 
       ! output file names (attribut: name)
       DO ji = 1, 9

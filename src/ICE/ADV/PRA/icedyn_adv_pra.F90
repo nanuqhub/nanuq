@@ -97,8 +97,7 @@ CONTAINS
       !
       CHARACTER(len=15), PARAMETER :: crtnm = 'ice_dyn_adv_pra'
       CHARACTER(len=1),  PARAMETER :: cgt    = 'T'
-      REAL(wp), PARAMETER :: rr_scl_fct = 1.E-6_wp
-      REAL(wp), PARAMETER :: r1_scl_fct = 1.E6_wp
+      REAL(wp), PARAMETER :: r1_scl_fct = 1.E6_wp ! because using km rather than m...
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start(crtnm)
       !$acc data present( pmsk, pUu, pVv, ph_i, ph_s, pato_i, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i, pszv_i, e1e2t, r1_e1e2t )
@@ -122,23 +121,23 @@ CONTAINS
             ! Enthalpies
             CALL icemax4D_cnt( nlay_i, pe_i,   pv_i,  sei_max )
             CALL icemax4D_cnt( nlay_s, pe_s,   pv_s,  ses_max )
+            
+# if ! defined _OPENACC
+            IF( nn_hls <= 2 ) THEN   ! (maybe even `<= 1` would do it actually, but not tested yet...)
+               IF( nn_icesal == 4 ) THEN
+                  CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp )   ! 3D
+                  CALL lbc_lnk( crtnm, sei_max,cgt,1._wp, sszi_max,cgt,1._wp )  ! 4D / nlay_i
+               ELSE
+                  CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp,  ssi_max,cgt,1._wp )   ! 3D
+                  CALL lbc_lnk( crtnm, sei_max,cgt,1._wp )                      ! 4D / nlay_i
+               ENDIF
+               CALL lbc_lnk(    crtnm, ses_max,cgt,1._wp )                      ! 4D / nlay_s
+            ELSE
+               CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp ) ! 3D
+            ENDIF
+# endif
          ENDIF !IF( ln_icethd )
 
-         !! LOLO: with my wide halos, the following might not be needed:
-# if ! defined _OPENACC
-         IF( ln_icethd ) THEN
-            IF( nn_icesal == 4 ) THEN
-               CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp )   ! 3D
-               CALL lbc_lnk( crtnm, sei_max,cgt,1._wp, sszi_max,cgt,1._wp )  ! 4D / nlay_i
-            ELSE
-               CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp,  ssi_max,cgt,1._wp )   ! 3D
-               CALL lbc_lnk( crtnm, sei_max,cgt,1._wp )                      ! 4D / nlay_i
-            ENDIF
-            CALL lbc_lnk(    crtnm, ses_max,cgt,1._wp )                      ! 4D / nlay_s
-         ELSE
-            CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp ) ! 3D
-         ENDIF
-# endif
       ENDIF !IF( .NOT. ln_pureADV2D )
 
       zdt = rDt_ice
@@ -199,12 +198,12 @@ CONTAINS
 
 
       ! --- Lateral boundary conditions --- !
-      !# if defined _OPENACC
-      !      PRINT *, ' *** Skipping `lbc_lnk` for now in Prather !, kt =',kt
-      !#else
+      !        caution: for gradients (sx and sy) the sign changes
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( crtnm,  pv_i,  sxice,  syice,  pv_s,   sxsnw,   sysnw,  pa_i,    sxa,    sya    )
+      CALL lbc_lnk_gpu( crtnm,  sxxice, syyice, sxyice, sxxsnw,  syysnw,  sxysnw, sxxa,   syya,   sxya  )
       !
-# if ! defined _OPENACC
-      !     caution: for gradients (sx and sy) the sign changes
+# else
       CALL lbc_lnk( crtnm, pv_i,cgt,1._wp,  sxice,cgt,-1._wp,  syice,cgt,-1._wp,  & ! ice volume
          &               sxxice,cgt,1._wp, syyice,cgt, 1._wp, sxyice,cgt, 1._wp,  &
          &                 pv_s,cgt,1._wp,   sxsnw,cgt,-1._wp,   sysnw,cgt,-1._wp,  & ! snw volume
@@ -266,8 +265,10 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-# if ! defined _OPENACC
-      CALL lbc_lnk( crtnm, pato_i,cgt,1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( crtnm, pato_i )
+# else
+      CALL lbc_lnk(     crtnm, pato_i,cgt,1._wp )
 # endif
 
       !IF( ln_icediachk ) THEN

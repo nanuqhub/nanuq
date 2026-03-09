@@ -16,17 +16,10 @@ MODULE par_oce
    !!                   namcfg namelist parameters
    !!----------------------------------------------------------------------
    LOGICAL       ::   ln_read_cfg      !: (=T) read the domain configuration file or (=F) not
-   CHARACTER(lc) ::      cn_domcfg        !: filename the configuration file to be read
+   CHARACTER(lc) ::   cn_domcfg        !: filename the configuration file to be read
    LOGICAL       ::   ln_write_cfg     !: (=T) create the domain configuration file
-   CHARACTER(lc) ::      cn_domcfg_out    !: filename the configuration file to be read
-   !
-   LOGICAL       ::   ln_use_jattr     !: input file read offset
-   !                                   !  Use file global attribute: open_ocean_jstart to determine start j-row
-   !                                   !  when reading input from those netcdf files that have the
-   !                                   !  attribute defined. This is designed to enable input files associated
-   !                                   !  with the extended grids used in the under ice shelf configurations to
-   !                                   !  be used without redundant rows when the ice shelves are not in use.
-   
+   CHARACTER(lc) ::   cn_domcfg_out    !: filename the configuration file to be read
+
    !!---------------------------------------------------------------------
    !! Domain Matrix size
    !!---------------------------------------------------------------------
@@ -64,7 +57,7 @@ MODULE par_oce
    INTEGER, PUBLIC ::   jci   ! = jpi - 2*nn_hls                                   !: first  dimension ignoring the halo frames
    INTEGER, PUBLIC ::   jcj   ! = jpj - 2*nn_hls                                   !: second dimension ignoring the halo frames
 
-   
+
    ! Domain tiling
    INTEGER, PUBLIC ::   nijtile    !: number of tiles in total
    INTEGER, PUBLIC ::   ntile      !: current tile number
@@ -101,7 +94,7 @@ MODULE par_oce
    INTEGER, PUBLIC ::   Ni_0, Nj_0       !: local domain size without halo
    INTEGER, PUBLIC ::   Ni0glo, Nj0glo   !: global domain size without halo
    !$acc declare create( nn_hls, Nis0, Nie0, Njs0, Nje0 )
-   
+
    !!----------------------------------------------------------------------
    !! NANUQ 0.1 beta, Brodeau (2024)
    !! $Id: par_oce.F90 15119 2021-07-13 14:43:22Z jchanut $

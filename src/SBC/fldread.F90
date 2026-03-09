@@ -38,9 +38,8 @@ MODULE fldread
    USE ioipsl  , ONLY : ymds2ju, ju2ymds   ! for calendar
    USE lib_mpp        ! MPP library
    USE lbclnk         ! ocean lateral boundary conditions (online interpolation case)
+   USE timing         !
 
-   USE timing         ! Timing
-   
    IMPLICIT NONE
    PRIVATE
 
@@ -82,6 +81,7 @@ MODULE fldread
       REAL(wp), POINTER, DIMENSION(:,:,:  ) ::   fnow   ! input fields interpolated to now time step
       REAL(wp), POINTER, DIMENSION(:,:,:,:) ::   fdta   ! 2 consecutive record of input fields
       CHARACTER(len = 256)            ::   wgtname      ! current name of the NetCDF weight file acting as a key
+      REAL(wp)                        ::   vdefault     ! default value for non-interpolated points when wgtname is provided
       !                                                 ! into the WGTLIST structure
       CHARACTER(len = 34)             ::   vcomp        ! symbolic name for a vector component that needs rotation
       LOGICAL, DIMENSION(2)           ::   rotn         ! flag to indicate whether before/after field has been rotated
@@ -96,7 +96,6 @@ MODULE fldread
       LOGICAL                         ::   lzint        !   T if it requires a vertical interpolation
    END TYPE FLD
 
-   !$AGRIF_DO_NOT_TREAT
 
    !! keep list of all weights variables so they're only read in once
    !! need to add AGRIF directives not to process this structure
@@ -109,12 +108,14 @@ MODULE fldread
       INTEGER , DIMENSION(2)                  ::   topright     ! top right corner of box
       INTEGER                                 ::   jpiwgt       ! width of box on input grid
       INTEGER                                 ::   jpjwgt       ! height of box on input grid
-      INTEGER                                 ::   numwgt       ! number of weights (4=bilinear, 16=bicubic)
+      INTEGER                                 ::   numnei       ! max number of neighbours used for interpolations
+      INTEGER                                 ::   numwgt       ! max number of interpolation weights (16=bicubic, numnei=other)
       INTEGER                                 ::   nestid       ! for agrif, keep track of nest we're in
       INTEGER                                 ::   overlap      ! =0 when cyclic grid has no overlapping EW columns
       !                                                         ! =>1 when they have one or more overlapping columns
       !                                                         ! =-1 not cyclic
       LOGICAL                                 ::   cyclic       ! east-west cyclic or not
+      LOGICAL,  DIMENSION(:,:  ), POINTER     ::   lnointerp    ! true if non-interpolated point
       INTEGER,  DIMENSION(:,:,:), POINTER     ::   data_jpi     ! array of source integers
       INTEGER,  DIMENSION(:,:,:), POINTER     ::   data_jpj     ! array of source integers
       REAL(wp), DIMENSION(:,:,:), POINTER     ::   data_wgt     ! array of weights on model grid
@@ -128,18 +129,17 @@ MODULE fldread
    INTEGER                            ::   nflag = 0
    REAL(wp), PARAMETER                ::   undeff_lsm = -999.00_wp
 
-   !$AGRIF_END_DO_NOT_TREAT
 
    !! * Substitutions
-#  include "single_precision_substitute.h90"
+   !!#  include "domzgr_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: fldread.F90 15023 2021-06-18 14:35:25Z gsamson $
+   !! NANUQ 1.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE fld_read( kt, kn_fsbc, sd, kit, pt_offset, Kmm )
+   SUBROUTINE fld_read( kt, sd, kit, pt_offset, Kmm )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_read  ***
       !!
@@ -152,7 +152,6 @@ CONTAINS
       !!      blahblahblah....
       !!----------------------------------------------------------------------
       INTEGER  , INTENT(in   )               ::   kt        ! ocean time step
-      INTEGER  , INTENT(in   )               ::   kn_fsbc   ! sbc computation period (in time step)
       TYPE(FLD), INTENT(inout), DIMENSION(:) ::   sd        ! input field related variables
       INTEGER  , INTENT(in   ), OPTIONAL     ::   kit       ! subcycle timestep for timesplitting option
       REAL(wp) , INTENT(in   ), OPTIONAL     ::   pt_offset ! provide fields at time other than "now"
@@ -169,13 +168,17 @@ CONTAINS
       CHARACTER(LEN=1000) ::   clfmt  ! write format
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('fld_read')
-      
+
       ll_firstcall = kt == nit000
       IF( PRESENT(kit) )   ll_firstcall = ll_firstcall .and. kit == 1
 
+      !#LOLOfixme:
+      !IF( nn_components == jp_iam_sas ) THEN
+      !   zt_offset = 1._wp
+      !ELSE
       zt_offset = 0._wp
-      
-      IF( ln_cpl_atm .OR. ln_cpl_oce ) zt_offset = REAL( nn_fsbc, wp )  !#lolo?
+      !ENDIF
+      IF( ln_cpl_atm .OR. ln_cpl_oce ) zt_offset = 1._wp  !#lolo?
 
       IF( PRESENT(pt_offset) )   zt_offset = pt_offset
 
@@ -184,7 +187,7 @@ CONTAINS
          isecsbc = nsec_year + nsec1jan000 + NINT( (     REAL(      kit,wp) + zt_offset ) * rn_Dt / REAL(nn_e,wp) )
       ELSE                      ! middle of sbc time step
          ! note: we use kn_fsbc-1 because nsec_year is defined at the middle of the current time step
-         isecsbc = nsec_year + nsec1jan000 + NINT( ( 0.5*REAL(kn_fsbc-1,wp) + zt_offset ) * rn_Dt )
+         isecsbc = nsec_year + nsec1jan000 + NINT( zt_offset * rn_Dt )
       ENDIF
       imf = SIZE( sd )
       !
@@ -195,51 +198,46 @@ CONTAINS
          END DO
          IF( lwp ) CALL wgt_print()                ! control print
       ENDIF
-      !                                            ! ====================================== !
-      IF( MOD( kt-1, kn_fsbc ) == 0 ) THEN         ! update field at each kn_fsbc time-step !
-         !                                         ! ====================================== !
+      !
+      DO jf = 1, imf                            ! ---   loop over field   --- !
          !
-         DO jf = 1, imf                            ! ---   loop over field   --- !
-            !
-            IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
-            CALL fld_update( isecsbc, sd(jf), Kmm )
-            !
-         END DO                                    ! --- end loop over field --- !
+         IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
+         CALL fld_update( isecsbc, sd(jf), Kmm )
+         !
+      END DO                                    ! --- end loop over field --- !
 
-         CALL fld_rot( kt, sd )                    ! rotate vector before/now/after fields if needed
+      CALL fld_rot( kt, sd )                    ! rotate vector before/now/after fields if needed
 
-         DO jf = 1, imf                            ! ---   loop over field   --- !
-            !
-            IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
-            !
-            ibb = sd(jf)%nbb   ;   iaa = sd(jf)%naa
-            !
-            IF( sd(jf)%ln_tint ) THEN              ! temporal interpolation
-               IF(lwp .AND. ( kt - nit000 <= 30 .OR. nitend - kt <= 30 ) ) THEN
-                  clfmt = "('   fld_read: var ', a, ' kt = ', i8, ' (', f9.4,' days), Y/M/D = ', i4.4,'/', i2.2,'/', i2.2," //   &
-                     &    "', records b/a: ', i6.4, '/', i6.4, ' (days ', f9.4,'/', f9.4, ')')"
-                  WRITE(numout, clfmt)  TRIM( sd(jf)%clvar ), kt, REAL(isecsbc,wp)/rday, nyear, nmonth, nday,   &
-                     & sd(jf)%nrec(1,ibb), sd(jf)%nrec(1,iaa), REAL(sd(jf)%nrec(2,ibb),wp)/rday, REAL(sd(jf)%nrec(2,iaa),wp)/rday
-                  IF( zt_offset /= 0._wp )   WRITE(numout, *) '      zt_offset is : ', zt_offset
-               ENDIF
-               ! temporal interpolation weights
-               ztinta =  REAL( isecsbc - sd(jf)%nrec(2,ibb), wp ) / REAL( sd(jf)%nrec(2,iaa) - sd(jf)%nrec(2,ibb), wp )
-               ztintb =  1. - ztinta
-               sd(jf)%fnow(:,:,:) = ztintb * sd(jf)%fdta(:,:,:,ibb) + ztinta * sd(jf)%fdta(:,:,:,iaa)
-            ELSE   ! nothing to do...
-               IF(lwp .AND. ( kt - nit000 <= 30 .OR. nitend - kt <= 30 ) ) THEN
-                  clfmt = "('   fld_read: var ', a, ' kt = ', i8,' (', f9.4,' days), Y/M/D = ', i4.4,'/', i2.2,'/', i2.2," //   &
-                     &    "', record: ', i6.4, ' (days ', f9.4, ' <-> ', f9.4, ')')"
-                  WRITE(numout, clfmt) TRIM(sd(jf)%clvar), kt, REAL(isecsbc,wp)/rday, nyear, nmonth, nday,    &
-                     &                 sd(jf)%nrec(1,iaa), REAL(sd(jf)%nrec(2,ibb),wp)/rday, REAL(sd(jf)%nrec(2,iaa),wp)/rday
-               ENDIF
+      DO jf = 1, imf                            ! ---   loop over field   --- !
+         !
+         IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
+         !
+         ibb = sd(jf)%nbb   ;   iaa = sd(jf)%naa
+         !
+         IF( sd(jf)%ln_tint ) THEN              ! temporal interpolation
+            IF(lwp .AND. ( kt - nit000 <= 30 .OR. nitend - kt <= 30 ) ) THEN
+               clfmt = "('   fld_read: var ', a, ' kt = ', i8, ' (', f9.4,' days), Y/M/D = ', i4.4,'/', i2.2,'/', i2.2," //   &
+                  &    "', records b/a: ', i6.4, '/', i6.4, ' (days ', f9.4,'/', f9.4, ')')"
+               WRITE(numout, clfmt)  TRIM( sd(jf)%clvar ), kt, REAL(isecsbc,wp)/rday, nyear, nmonth, nday,   &
+                  & sd(jf)%nrec(1,ibb), sd(jf)%nrec(1,iaa), REAL(sd(jf)%nrec(2,ibb),wp)/rday, REAL(sd(jf)%nrec(2,iaa),wp)/rday
+               IF( zt_offset /= 0._wp )   WRITE(numout, *) '      zt_offset is : ', zt_offset
             ENDIF
-            !
-            IF( kt == nitend - kn_fsbc + 1 )   CALL iom_close( sd(jf)%num )   ! Close the input files
-
-         END DO                                    ! --- end loop over field --- !
+            ! temporal interpolation weights
+            ztinta =  REAL( isecsbc - sd(jf)%nrec(2,ibb), wp ) / REAL( sd(jf)%nrec(2,iaa) - sd(jf)%nrec(2,ibb), wp )
+            ztintb =  1. - ztinta
+            sd(jf)%fnow(:,:,:) = ztintb * sd(jf)%fdta(:,:,:,ibb) + ztinta * sd(jf)%fdta(:,:,:,iaa)
+         ELSE   ! nothing to do...
+            IF(lwp .AND. ( kt - nit000 <= 30 .OR. nitend - kt <= 30 ) ) THEN
+               clfmt = "('   fld_read: var ', a, ' kt = ', i8,' (', f9.4,' days), Y/M/D = ', i4.4,'/', i2.2,'/', i2.2," //   &
+                  &    "', record: ', i6.4, ' (days ', f9.4, ' <-> ', f9.4, ')')"
+               WRITE(numout, clfmt) TRIM(sd(jf)%clvar), kt, REAL(isecsbc,wp)/rday, nyear, nmonth, nday,    &
+                  &                 sd(jf)%nrec(1,iaa), REAL(sd(jf)%nrec(2,ibb),wp)/rday, REAL(sd(jf)%nrec(2,iaa),wp)/rday
+            ENDIF
+         ENDIF
          !
-      ENDIF
+         IF( kt == nitend )   CALL iom_close( sd(jf)%num )   ! Close the input files
+
+      END DO                                    ! --- end loop over field --- !
       !
       IF( ln_timing )   CALL timing_stop('fld_read')
       !
@@ -281,7 +279,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  ,           INTENT(in   ) ::   ksecsbc   !
       TYPE(FLD),           INTENT(inout) ::   sdjf      ! input field related variables
-      INTEGER  , OPTIONAL, INTENT(in   ) ::   Kmm    ! ocean time level index
+      INTEGER  , OPTIONAL, INTENT(in   ) ::   Kmm       ! ocean time level index
       !
       INTEGER  ::   ja           ! end of this record (in seconds)
       INTEGER  ::   ibb, iaa     ! shorter name for sdjf%nbb and sdjf%naa
@@ -295,7 +293,7 @@ CONTAINS
          DO WHILE ( ksecsbc >= sdjf%nrecsec(ja) .AND. ja < sdjf%nreclast )   ! Warning: make sure ja <= sdjf%nreclast in this test
             ja = ja + 1
          END DO
-         IF( ksecsbc > sdjf%nrecsec(ja) )   ja = ja + 1   ! in case ksecsbc > sdjf%nrecsec(sdjf%nreclast)
+         IF( ksecsbc > sdjf%nrecsec(ja) )   ja = ja + 1         ! in case ksecsbc > sdjf%nrecsec(sdjf%nreclast)
 
          ! if ln_tint and if the new after is not ja+1, we need also to update after data before the swap
          ! so, after the swap, sdjf%nrec(2,ibb) will still be the closest value located just before ksecsbc
@@ -358,6 +356,7 @@ CONTAINS
       INTEGER  , OPTIONAL, INTENT(in   ) ::   Kmm    ! ocean time level index
       !
       INTEGER ::   ipk      ! number of vertical levels of sdjf%fdta ( 2D: ipk=1 ; 3D: ipk=jpk )
+      INTEGER ::   ipi, ipj ! needed to discriminate 1D timeseries from 2D field
       INTEGER ::   iaa      ! shorter name for sdjf%naa
       INTEGER ::   iw       ! index into wgts array
       INTEGER ::   idvar    ! variable ID
@@ -372,6 +371,8 @@ CONTAINS
       ELSE
          dta_alias => sdjf%fnow(:,:,:    )
       ENDIF
+      ipi = SIZE( dta_alias, 1 )
+      ipj = SIZE( dta_alias, 2 )
       ipk = SIZE( dta_alias, 3 )
       !
       IF( LEN_TRIM(sdjf%vcomp) > 0 ) THEN
@@ -385,14 +386,19 @@ CONTAINS
             &          sdjf%imap, sdjf%igrd, sdjf%ibdy, sdjf%ltotvel, sdjf%lzint, Kmm )
       ELSE IF( LEN(TRIM(sdjf%wgtname)) > 0 ) THEN   ! On-the-fly interpolation
          CALL wgt_list( sdjf, iw )
-         CALL fld_interp( sdjf%num, sdjf%clvar, iw, ipk, dta_alias(:,:,:), sdjf%nrec(1,iaa), sdjf%lsmname )
+         CALL fld_interp( sdjf%num, sdjf%clvar, iw, ipk, dta_alias(:,:,:), sdjf%nrec(1,iaa), sdjf%lsmname, sdjf%vdefault )
          CALL lbc_lnk( 'fldread', dta_alias(:,:,:), sdjf%cltype, zsgn, kfillmode = jpfillcopy )
       ELSE                                          ! default case
          idvar  = iom_varid( sdjf%num, sdjf%clvar )
          idmspc = iom_file ( sdjf%num )%ndims( idvar )
          IF( iom_file( sdjf%num )%luld( idvar ) )   idmspc = idmspc - 1   ! id of the last spatial dimension
-         CALL iom_get( sdjf%num,  jpdom_global, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
-            &          sdjf%cltype, zsgn, kfill = jpfillcopy )
+         IF( ipi /= 1 .AND. ipj /= 1 ) THEN
+            CALL iom_get( sdjf%num,  jpdom_global, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
+               &          sdjf%cltype, zsgn, kfill = jpfillcopy )
+         ELSE
+            CALL iom_get( sdjf%num,  jpdom_unknown, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
+               &          sdjf%cltype, zsgn, kfill = jpfillcopy )
+         ENDIF
       ENDIF
       !
       sdjf%rotn(iaa) = .false.   ! vector not yet rotated
@@ -454,11 +460,53 @@ CONTAINS
       !
       ALLOCATE( zz_read( idimsz(1), idimsz(2), ipkb ) )  ! ++++++++ !!! this can be very big...
       !
-      !IF( ipk == 1 ) THEN
+      IF( ipk == 1 ) THEN
 
-      IF( ipkb /= 1 ) CALL ctl_stop( 'fld_map : we must have ipkb = 1 to read surface data' )
-      CALL iom_get ( knum, jpdom_unknown, cdvar, zz_read(:,:,1), krec )   ! call iom_get with a 2D file
-      CALL fld_map_core( zz_read, kmap, pdta )
+         IF( ipkb /= 1 ) CALL ctl_stop( 'fld_map : we must have ipkb = 1 to read surface data' )
+         CALL iom_get ( knum, jpdom_unknown, cdvar, zz_read(:,:,1), krec )   ! call iom_get with a 2D file
+         CALL fld_map_core( zz_read, kmap, pdta )
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+         ! Do we include something here to adjust barotropic velocities !
+         ! in case of a depth difference between bdy files and          !
+         ! bathymetry in the case ln_totvel = .false. and ipkb>0?       !
+         ! [as the enveloping and parital cells could change H]         !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      ELSE
+         !
+         CALL iom_get ( knum, jpdom_unknown, cdvar, zz_read(:,:,:), krec )   ! call iom_get with a 3D file
+         !
+         !IF( ipkb /= ipk .OR. llzint ) THEN   ! boundary data not on model vertical grid : vertical interpolation
+         !   !
+         !   IF( ipk == jpk .AND. iom_varid(knum,'gdep'//cltype(kgrd)) /= -1 .AND. iom_varid(knum,'e3'//cltype(kgrd)) /= -1 ) THEN
+         !
+         !      ALLOCATE( zdta_read(ipi,ipj,ipkb), zdta_read_z(ipi,ipj,ipkb), zdta_read_dz(ipi,ipj,ipkb) )
+         !
+         !      CALL fld_map_core( zz_read, kmap, zdta_read )
+         !      CALL iom_get ( knum, jpdom_unknown, 'gdep'//cltype(kgrd), zz_read )   ! read only once? Potential temporal evolution?
+         !      CALL fld_map_core( zz_read, kmap, zdta_read_z )
+         !      CALL iom_get ( knum, jpdom_unknown,   'e3'//cltype(kgrd), zz_read )   ! read only once? Potential temporal evolution?
+         !      CALL fld_map_core( zz_read, kmap, zdta_read_dz )
+         !
+         !      CALL iom_getatt(knum, '_FillValue', zfv, cdvar=cdvar )
+         !      CALL fld_bdy_interp(zdta_read, zdta_read_z, zdta_read_dz, pdta, kgrd, kbdy, zfv, ldtotvel, Kmm)
+         !      DEALLOCATE( zdta_read, zdta_read_z, zdta_read_dz )
+         !
+         !   ELSE
+         !      IF( ipk /= jpk ) CALL ctl_stop( 'fld_map : this should be an impossible case...' )
+         !      WRITE(ctmp1,*) 'fld_map : vertical interpolation for bdy variable '//TRIM(cdvar)//' requires '
+         !      IF( iom_varid(knum, 'gdep'//cltype(kgrd)) == -1 ) CALL ctl_stop( ctmp1//'gdep'//cltype(kgrd)//' variable' )
+         !      IF( iom_varid(knum,   'e3'//cltype(kgrd)) == -1 ) CALL ctl_stop( ctmp1//  'e3'//cltype(kgrd)//' variable' )
+         !
+         !   ENDIF
+         !   !
+         !ELSE                            ! bdy data assumed to be the same levels as bdy variables
+         !
+         CALL fld_map_core( zz_read, kmap, pdta )
+         !
+         !ENDIF   ! ipkb /= ipk
+      ENDIF   ! ipk == 1
 
       DEALLOCATE( zz_read )
 
@@ -476,7 +524,7 @@ CONTAINS
       REAL(wp), DIMENSION(:,:,:), INTENT(  out) ::   pdta_bdy     ! bdy output field on model grid
       !!
       INTEGER,  DIMENSION(3) ::   idim_read,  idim_bdy            ! arrays dimensions
-      INTEGER                ::   ji, jj, jb                  ! loop counters
+      INTEGER                ::   ji, jj, jk, jb                  ! loop counters
       INTEGER                ::   im1
       !!---------------------------------------------------------------------
       !
@@ -488,20 +536,23 @@ CONTAINS
       ! structured BDY with rimwidth == 1 or unstructured BDY: idim_read(2) == 1
       !
       IF( idim_read(2) > 1 ) THEN    ! structured BDY with rimwidth > 1
-         DO jb = 1, idim_bdy(1)
-            im1 = kmap(jb) - 1
-            jj = im1 / idim_read(1) + 1
-            ji = MOD( im1, idim_read(1) ) + 1
-            pdta_bdy(jb,1,1) =  pdta_read(ji,jj,1)
+         DO jk = 1, idim_bdy(3)
+            DO jb = 1, idim_bdy(1)
+               im1 = kmap(jb) - 1
+               jj = im1 / idim_read(1) + 1
+               ji = MOD( im1, idim_read(1) ) + 1
+               pdta_bdy(jb,1,jk) =  pdta_read(ji,jj,jk)
+            END DO
          END DO
       ELSE
-         DO jb = 1, idim_bdy(1)   ! horizontal remap of bdy data on the local bdy
-            pdta_bdy(jb,1,1) = pdta_read(kmap(jb),1,1)
+         DO jk = 1, idim_bdy(3)
+            DO jb = 1, idim_bdy(1)   ! horizontal remap of bdy data on the local bdy
+               pdta_bdy(jb,1,jk) = pdta_read(kmap(jb),1,jk)
+            END DO
          END DO
       ENDIF
 
    END SUBROUTINE fld_map_core
-
 
 
    SUBROUTINE fld_rot( kt, sd )
@@ -513,13 +564,14 @@ CONTAINS
       INTEGER                , INTENT(in   ) ::   kt   ! ocean time step
       TYPE(FLD), DIMENSION(:), INTENT(inout) ::   sd   ! input field related variables
       !
-      INTEGER ::   ju, jv, jn  ! loop indices
+      INTEGER ::   ju, jv, jk, jn  ! loop indices
       INTEGER ::   imf             ! size of the structure sd
       INTEGER ::   ill             ! character length
       INTEGER ::   iv              ! indice of V component
+      INTEGER ::   ipi, ipj
       CHARACTER (LEN=100)          ::   clcomp       ! dummy weight name
-      REAL(wp), DIMENSION(jpi,jpj) ::   utmp, vtmp   ! temporary arrays for vector rotation
-      REAL(wp), DIMENSION(:,:,:), POINTER ::   dta_u, dta_v    ! short cut
+      REAL(wp), DIMENSION(:,:), ALLOCATABLE ::   utmp, vtmp   ! temporary arrays for vector rotation
+      REAL(wp), DIMENSION(:,:,:), POINTER   ::   dta_u, dta_v    ! short cut
       !!---------------------------------------------------------------------
       !
       !! (sga: following code should be modified so that pairs arent searched for each time
@@ -546,9 +598,14 @@ CONTAINS
                         dta_u => sd(ju)%fnow(:,:,:   )
                         dta_v => sd(iv)%fnow(:,:,:   )
                      ENDIF
-                     CALL rot_rep( dta_u(:,:,1), dta_v(:,:,1), 'T', 'en->i', utmp(:,:) )
-                     CALL rot_rep( dta_u(:,:,1), dta_v(:,:,1), 'T', 'en->j', vtmp(:,:) )
-                     dta_u(:,:,1) = utmp(:,:)   ;   dta_v(:,:,1) = vtmp(:,:)
+                     ipi = SIZE(dta_u,1)   ;   ipj = SIZE(dta_u,2)
+                     ALLOCATE( utmp(ipi,ipj), vtmp(ipi,ipj) )
+                     DO jk = 1, SIZE( sd(ju)%fnow, 3 )
+                        CALL rot_rep( dta_u(:,:,jk), dta_v(:,:,jk), 'T', 'en->i', utmp(:,:) )
+                        CALL rot_rep( dta_u(:,:,jk), dta_v(:,:,jk), 'T', 'en->j', vtmp(:,:) )
+                        dta_u(:,:,jk) = utmp(:,:)   ;   dta_v(:,:,jk) = vtmp(:,:)
+                     END DO
+                     DEALLOCATE( utmp, vtmp )
                      sd(ju)%rotn(jn) = .TRUE.               ! vector was rotated
                      IF( lwp .AND. kt == nit000 )   WRITE(numout,*)   &
                         &   'fld_read: vector pair ('//TRIM(sd(ju)%clvar)//', '//TRIM(sd(iv)%clvar)//') rotated on to model grid'
@@ -565,11 +622,18 @@ CONTAINS
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_def  ***
       !!
-      !! ** Purpose :   define the record(s) of the file and its name
+      !! ** Purpose :   Compute the record(s) of the file and define its name.
+      !!                By default, the current file is defined according to the current time step calendar
+      !!                variables (nyear, month, day, nsec_month, nsec_year... see daymod.F90)
+      !!                Records time (seconds since Jan. 1st 00h of nit000 year) is stored in sdjf%nrecsec
+      !!                if sdjf%ln_tint = .TRUE.
+      !!                   sdjf%nrecsec(1:sdjf%nreclast) = middle of each record
+      !!                if sdjf%ln_tint = .FALSE.
+      !!                   sdjf%nrecsec(0:sdjf%nreclast) = beginning/end of each record
       !!----------------------------------------------------------------------
       TYPE(FLD)        , INTENT(inout) ::   sdjf       ! input field related variables
-      LOGICAL, OPTIONAL, INTENT(in   ) ::   ldprev     !
-      LOGICAL, OPTIONAL, INTENT(in   ) ::   ldnext     !
+      LOGICAL, OPTIONAL, INTENT(in   ) ::   ldprev     ! True if sdjf must be defined for the previous file
+      LOGICAL, OPTIONAL, INTENT(in   ) ::   ldnext     ! True if sdjf must be defined for the next file
       !
       INTEGER  :: jt
       INTEGER  :: idaysec               ! number of seconds in 1 day = NINT(rday)
@@ -687,14 +751,11 @@ CONTAINS
       IF( ALLOCATED(sdjf%nrecsec) )   DEALLOCATE( sdjf%nrecsec )
       ALLOCATE( sdjf%nrecsec( 0:ireclast ) )
       !
-      IF( NINT(sdjf%freqh) == -12 ) THEN                                     ! yearly mean and yearly file
+      IF    ( NINT(sdjf%freqh) == -12 ) THEN                                     ! yearly mean and yearly file
          SELECT CASE( indexyr )
-         CASE(0)
-            sdjf%nrecsec(0) = nsec1jan000 - nyear_len( 0 ) * idaysec
-         CASE(1)
-            sdjf%nrecsec(0) = nsec1jan000
-         CASE(2)
-            sdjf%nrecsec(0) = nsec1jan000 + nyear_len( 1 ) * idaysec
+         CASE(0)   ;   sdjf%nrecsec(0) = nsec1jan000 - nyear_len( 0 ) * idaysec
+         CASE(1)   ;   sdjf%nrecsec(0) = nsec1jan000
+         CASE(2)   ;   sdjf%nrecsec(0) = nsec1jan000 + nyear_len( 1 ) * idaysec
          ENDSELECT
          sdjf%nrecsec(1) = sdjf%nrecsec(0) + nyear_len( indexyr ) * idaysec
       ELSEIF( NINT(sdjf%freqh) ==  -1 ) THEN                                     ! monthly mean:
@@ -730,7 +791,7 @@ CONTAINS
          irecshft = NINT( sdjf%rec_shft * (sdjf%nrecsec(1) - sdjf%nrecsec(0)) )
          sdjf%nrecsec(1:sdjf%nreclast) = sdjf%nrecsec(0:sdjf%nreclast-1) / 2 + sdjf%nrecsec(1:sdjf%nreclast) / 2 + &
             & MAX( MOD( sdjf%nrecsec(0:sdjf%nreclast-1), 2 ), MOD( sdjf%nrecsec(1:sdjf%nreclast), 2 ) ) + irecshft
-      END IF
+      ENDIF
       !
       sdjf%clname = fld_filename( sdjf, idy, imt, iyr )
       !
@@ -784,7 +845,7 @@ CONTAINS
    END SUBROUTINE fld_clopn
 
 
-   SUBROUTINE fld_fill( sdf, sdf_n, cdir, cdcaller, cdtitle, cdnam, knoprint )
+   SUBROUTINE fld_fill( sdf, sdf_n, cdir, cdcaller, cdtitle, cdnam, knoprint, pdefault )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_fill  ***
       !!
@@ -798,6 +859,7 @@ CONTAINS
       CHARACTER(len=*)                   , INTENT(in   ) ::   cdtitle    ! description of the calling routine
       CHARACTER(len=*)                   , INTENT(in   ) ::   cdnam      ! name of the namelist from which sdf_n comes
       INTEGER                  , OPTIONAL, INTENT(in   ) ::   knoprint   ! no calling routine information printed
+      REAL(wp), DIMENSION(:)   , OPTIONAL, INTENT(in   ) ::   pdefault   ! default value used for non-interpolated points
       !
       INTEGER  ::   jf   ! dummy indices
       !!---------------------------------------------------------------------
@@ -826,8 +888,16 @@ CONTAINS
          sdf(jf)%num        = -1
          sdf(jf)%nbb        = 1  ! start with before data in 1
          sdf(jf)%naa        = 2  ! start with after  data in 2
-         sdf(jf)%wgtname    = " "
-         IF( LEN( TRIM(sdf_n(jf)%wname) ) > 0 )   sdf(jf)%wgtname = TRIM( cdir )//sdf_n(jf)%wname
+         IF( LEN_TRIM(sdf_n(jf)%wname) > 0 ) THEN
+            IF( PRESENT(pdefault) ) THEN
+               sdf(jf)%vdefault = pdefault(jf)
+            ELSE
+               sdf(jf)%vdefault = HUGE(1._wp)   ! flag value
+            ENDIF
+            sdf(jf)%wgtname = TRIM( cdir )//sdf_n(jf)%wname
+         ELSE
+            sdf(jf)%wgtname = " "
+         ENDIF
          sdf(jf)%lsmname = " "
          IF( LEN( TRIM(sdf_n(jf)%lname) ) > 0 )   sdf(jf)%lsmname = TRIM( cdir )//sdf_n(jf)%lname
          sdf(jf)%vcomp      = sdf_n(jf)%vcomp
@@ -889,7 +959,7 @@ CONTAINS
       !! because agrif nest part of filenames are now added in iom_open
       !! to distinguish between weights files on the different grids, need to track
       !! nest number explicitly
-      nestid = 0
+      nestid = Agrif_Fixed()
       DO kw = 1, nxt_wgt-1
          IF( ref_wgts(kw)%wgtname == sd%wgtname .AND. &
             ref_wgts(kw)%nestid  == nestid) THEN
@@ -950,7 +1020,7 @@ CONTAINS
       CHARACTER (len=5) ::   clname   !
       INTEGER , DIMENSION(4) ::   ddims
       INTEGER                ::   isrc
-      REAL(dp), DIMENSION(jpi,jpj) ::   data_tmp
+      REAL(wp), DIMENSION(jpi,jpj) ::   data_tmp
       !!----------------------------------------------------------------------
       !
       IF( nxt_wgt > tot_wgts ) THEN
@@ -989,28 +1059,43 @@ CONTAINS
          ref_wgts(nxt_wgt)%wgtname = sd%wgtname
          ref_wgts(nxt_wgt)%overlap = zwrap
          ref_wgts(nxt_wgt)%cyclic = cyclical
-         ref_wgts(nxt_wgt)%nestid = 0
-         !! weights file is stored as a set of weights (wgt01->wgt04 or wgt01->wgt16)
-         !! for each weight wgtNN there is an integer array srcNN which gives the point in
-         !! the input data grid which is to be multiplied by the weight
-         !! they are both arrays on the model grid so the result of the multiplication is
-         !! added into an output array on the model grid as a running sum
+         ref_wgts(nxt_wgt)%nestid = Agrif_Fixed()
 
-         !! two possible cases: bilinear (4 weights) or bicubic (16 weights)
-         id = iom_varid(inum, 'src05', ldstop=.FALSE.)
-         IF( id <= 0 ) THEN
-            ref_wgts(nxt_wgt)%numwgt = 4
-         ELSE
+         ! find the maximum nulber of neighbours: look for srcXX variables with XX ranging from 01 to 08
+         ref_wgts(nxt_wgt)%numnei = 0
+         DO jn = 1,8   ! try up to a max of 8 neighbours, e.g. for distance weighted average remapping, could be less or more than 8
+            WRITE(clname,'(a3,i2.2)') 'src', jn
+            id = iom_varid(inum, clname, ldstop=.FALSE.)
+            IF( id <= 0 ) EXIT
+            ref_wgts(nxt_wgt)%numnei = ref_wgts(nxt_wgt)%numnei + 1
+         END DO
+
+         ! do we do bicubic interpolation ?
+         id = iom_varid(inum, 'wgt16', ldstop=.FALSE.)
+         IF( id > 0 ) THEN
+            ref_wgts(nxt_wgt)%numnei = 4   ! bicubic uses only 4 neighbours (even if duplicated neighbours are defined in the file)
             ref_wgts(nxt_wgt)%numwgt = 16
+         ELSE
+            ref_wgts(nxt_wgt)%numwgt = ref_wgts(nxt_wgt)%numnei
          ENDIF
 
-         ALLOCATE( ref_wgts(nxt_wgt)%data_jpi(Nis0:Nie0,Njs0:Nje0,4) )
-         ALLOCATE( ref_wgts(nxt_wgt)%data_jpj(Nis0:Nie0,Njs0:Nje0,4) )
-         ALLOCATE( ref_wgts(nxt_wgt)%data_wgt(Nis0:Nie0,Njs0:Nje0,ref_wgts(nxt_wgt)%numwgt) )
+         ALLOCATE( ref_wgts(nxt_wgt)%data_jpi(jpi,jpj,ref_wgts(nxt_wgt)%numnei) )
+         ALLOCATE( ref_wgts(nxt_wgt)%data_jpj(jpi,jpj,ref_wgts(nxt_wgt)%numnei) )
+         ALLOCATE( ref_wgts(nxt_wgt)%data_wgt(jpi,jpj,ref_wgts(nxt_wgt)%numwgt) )
+         !#LOLO: never hurts!
+         ref_wgts(nxt_wgt)%data_jpi(:,:,:) = 0._wp
+         ref_wgts(nxt_wgt)%data_jpj(:,:,:) = 0._wp
+         ref_wgts(nxt_wgt)%data_wgt(:,:,:) = 0._wp
+         !#LOLO.
 
-         DO jn = 1,4
-            WRITE(clname,'(a3,i2.2)') 'src',jn
+
+         DO jn = 1,ref_wgts(nxt_wgt)%numnei
+            WRITE(clname,'(a3,i2.2)') 'src', jn
             CALL iom_get ( inum, jpdom_global, clname, data_tmp(:,:), cd_type = 'Z' )   !  no call to lbc_lnk
+            !#LOLObug:
+            ! Yes... And it turns out to be a horrible mistake not to lbc_lnk !!!
+            CALL lbc_lnk( 'fldread', data_tmp(:,:),sd%cltype,sd%zsgn, kfillmode = jpfillcopy )
+            !#LOLObug.
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
                   isrc = NINT(data_tmp(ji,jj)) - 1
@@ -1031,11 +1116,15 @@ CONTAINS
          END DO
          CALL iom_close (inum)
 
-         ! find min and max indices in grid
-         ref_wgts(nxt_wgt)%botleft( 1) = MINVAL(ref_wgts(nxt_wgt)%data_jpi(:,:,:))
-         ref_wgts(nxt_wgt)%botleft( 2) = MINVAL(ref_wgts(nxt_wgt)%data_jpj(:,:,:))
-         ref_wgts(nxt_wgt)%topright(1) = MAXVAL(ref_wgts(nxt_wgt)%data_jpi(:,:,:))
-         ref_wgts(nxt_wgt)%topright(2) = MAXVAL(ref_wgts(nxt_wgt)%data_jpj(:,:,:))
+         ! find min and max indices in grid. Do not take into account points with a 0 weight that can have -1 as src address
+         ref_wgts(nxt_wgt)%botleft( 1) =   &
+            &   MINVAL(ref_wgts(nxt_wgt)%data_jpi(:,:,:), mask = ref_wgts(nxt_wgt)%data_wgt(:,:,1:ref_wgts(nxt_wgt)%numnei) /= 0.)
+         ref_wgts(nxt_wgt)%botleft( 2) =   &
+            &   MINVAL(ref_wgts(nxt_wgt)%data_jpj(:,:,:), mask = ref_wgts(nxt_wgt)%data_wgt(:,:,1:ref_wgts(nxt_wgt)%numnei) /= 0.)
+         ref_wgts(nxt_wgt)%topright(1) =   &
+            &   MAXVAL(ref_wgts(nxt_wgt)%data_jpi(:,:,:), mask = ref_wgts(nxt_wgt)%data_wgt(:,:,1:ref_wgts(nxt_wgt)%numnei) /= 0.)
+         ref_wgts(nxt_wgt)%topright(2) =    &
+            &   MAXVAL(ref_wgts(nxt_wgt)%data_jpj(:,:,:), mask = ref_wgts(nxt_wgt)%data_wgt(:,:,1:ref_wgts(nxt_wgt)%numnei) /= 0.)
 
          ! and therefore dimensions of the input box
          ref_wgts(nxt_wgt)%jpiwgt = ref_wgts(nxt_wgt)%topright(1) - ref_wgts(nxt_wgt)%botleft(1) + 1
@@ -1044,6 +1133,21 @@ CONTAINS
          ! shift indexing of source grid
          ref_wgts(nxt_wgt)%data_jpi(:,:,:) = ref_wgts(nxt_wgt)%data_jpi(:,:,:) - ref_wgts(nxt_wgt)%botleft(1) + 1
          ref_wgts(nxt_wgt)%data_jpj(:,:,:) = ref_wgts(nxt_wgt)%data_jpj(:,:,:) - ref_wgts(nxt_wgt)%botleft(2) + 1
+
+         ! set a default address for points with 0 weight. Will be used in fld_interp with the addresses 1, 2 or 3
+         WHERE( ref_wgts(nxt_wgt)%data_wgt(:,:,1:ref_wgts(nxt_wgt)%numnei) == 0. )
+            ref_wgts(nxt_wgt)%data_jpi(:,:,:) = 1
+            ref_wgts(nxt_wgt)%data_jpj(:,:,:) = 1
+         END WHERE
+
+         ! look for points whith no interpolated values (i.e. sum of weights = 0)
+         ALLOCATE( ref_wgts(nxt_wgt)%lnointerp(jpi,jpj) )
+         ref_wgts(nxt_wgt)%lnointerp(:,:) = SUM(ref_wgts(nxt_wgt)%data_wgt(:,:,1:ref_wgts(nxt_wgt)%numnei), dim = 3) == 0.
+         IF( COUNT(ref_wgts(nxt_wgt)%lnointerp) > 0 ) THEN
+            IF(lwp)   WRITE(numout,*) '   weight ', TRIM(ref_wgts(nxt_wgt)%wgtname),' contains non-interpolated points'
+         ELSE
+            DEALLOCATE(ref_wgts(nxt_wgt)%lnointerp)   ! no missing point -> deallocate
+         ENDIF
 
          ! create input grid, give it a halo to allow gradient calculations
          ! SA: +3 stencil is a patch to avoid out-of-bound computation in some configuration.
@@ -1166,26 +1270,29 @@ CONTAINS
    END SUBROUTINE seaoverland
 
 
-   SUBROUTINE fld_interp( num, clvar, kw, kk, dta, nrec, lsmfile)
+   SUBROUTINE fld_interp( num, clvar, kw, kk, dta, nrec, lsmfile, pdefault )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_interp  ***
       !!
       !! ** Purpose :   apply weights to input gridded data to create data
       !!                on model grid
       !!----------------------------------------------------------------------
-      INTEGER                   , INTENT(in   ) ::   num     ! stream number
-      CHARACTER(LEN=*)          , INTENT(in   ) ::   clvar   ! variable name
-      INTEGER                   , INTENT(in   ) ::   kw      ! weights number
-      INTEGER                   , INTENT(in   ) ::   kk      ! vertical dimension of kk
-      REAL(wp), DIMENSION(:,:,:), INTENT(inout) ::   dta     ! output field on model grid
-      INTEGER                   , INTENT(in   ) ::   nrec    ! record number to read (ie time slice)
-      CHARACTER(LEN=*)          , INTENT(in   ) ::   lsmfile ! land sea mask file name
+      INTEGER                   , INTENT(in   ) ::   num      ! stream number
+      CHARACTER(LEN=*)          , INTENT(in   ) ::   clvar    ! variable name
+      INTEGER                   , INTENT(in   ) ::   kw       ! weights number
+      INTEGER                   , INTENT(in   ) ::   kk       ! vertical dimension of kk
+      REAL(wp), DIMENSION(:,:,:), INTENT(inout) ::   dta      ! output field on model grid
+      INTEGER                   , INTENT(in   ) ::   nrec     ! record number to read (ie time slice)
+      CHARACTER(LEN=*)          , INTENT(in   ) ::   lsmfile  ! land sea mask file name
+      REAL(wp)                  , INTENT(in   ) ::   pdefault ! default value used for non-interpolated points
       !
       INTEGER, DIMENSION(3) ::   rec1, recn           ! temporary arrays for start and length
       INTEGER, DIMENSION(3) ::   rec1_lsm, recn_lsm   ! temporary arrays for start and length in case of seaoverland
       INTEGER ::   ii_lsm1,ii_lsm2,ij_lsm1,ij_lsm2    ! temporary indices
-      INTEGER ::   ji, jj, jn, jir, jjr           ! loop counters
-      INTEGER ::   ipk
+      INTEGER ::   ji, jj, jk, jn, jir, jjr           ! loop counters
+      INTEGER ::   ipi, ipj, ipk
+      INTEGER ::   iisht, ijsht
+      INTEGER ::   ii, ij
       INTEGER ::   ni, nj                             ! lengths
       INTEGER ::   jpimin,jpiwid                      ! temporary indices
       INTEGER ::   jpimin_lsm,jpiwid_lsm              ! temporary indices
@@ -1196,12 +1303,15 @@ CONTAINS
       INTEGER ::   itmpi,itmpj,itmpz                     ! lengths
       REAL(wp),DIMENSION(:,:,:), ALLOCATABLE ::   ztmp_fly_dta                 ! local array of values on input grid
       !!----------------------------------------------------------------------
+      ipi = SIZE(dta, 1)
+      ipj = SIZE(dta, 2)
       ipk = SIZE(dta, 3)
+      iisht = ( jpi - ipi ) / 2
+      ijsht = ( jpj - ipj ) / 2
       !
-      !! for weighted interpolation we have weights at four corners of a box surrounding
-      !! a model grid point, each weight is multiplied by a grid value (bilinear case)
+      !! for weighted interpolation we have weights at neighbours surrounding
+      !! a model grid point, each weight is multiplied by a grid value (bilinear or distwgt case)
       !! or by a grid value and gradients at the corner point (bicubic case)
-      !! so we need to have a 4 by 4 subgrid surrounding each model point to cover both cases
 
       !! sub grid from non-model input grid which encloses all grid points in this nemo process
       jpimin = ref_wgts(kw)%botleft(1)
@@ -1247,7 +1357,6 @@ CONTAINS
          jpi2_lsm = jpi1_lsm + recn_lsm(1) - 1
          jpj2_lsm = jpj1_lsm + recn_lsm(2) - 1
 
-
          itmpi=jpi2_lsm-jpi1_lsm+1
          itmpj=jpj2_lsm-jpj1_lsm+1
          itmpz=kk
@@ -1287,17 +1396,21 @@ CONTAINS
       !! data_jpi, data_jpj have already been shifted to (1,1) corresponding to botleft
       !! note that we have to offset by 1 into fly_dta array because of halo added to fly_dta (rec1 definition)
       dta(:,:,:) = 0._wp
-      DO jn = 1,4
+      DO jn = 1,ref_wgts(kw)%numnei
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
-               ni = ref_wgts(kw)%data_jpi(ji,jj,jn) + 1
-               nj = ref_wgts(kw)%data_jpj(ji,jj,jn) + 1
-               dta(ji,jj,1) = dta(ji,jj,1) + ref_wgts(kw)%data_wgt(ji,jj,jn) * ref_wgts(kw)%fly_dta(ni,nj,1)
+               DO jk=1, ipk
+                  ni = ref_wgts(kw)%data_jpi(ji,jj,jn) + 1
+                  nj = ref_wgts(kw)%data_jpj(ji,jj,jn) + 1
+                  ii = ji - iisht
+                  ij = jj - ijsht
+                  dta(ii,ij,jk) = dta(ii,ij,jk) + ref_wgts(kw)%data_wgt(ji,jj,jn) * ref_wgts(kw)%fly_dta(ni,nj,jk)
+               END DO
             END DO
          END DO
       END DO
 
-      IF(ref_wgts(kw)%numwgt .EQ. 16) THEN
+      IF(ref_wgts(kw)%numwgt .EQ. 16) THEN   ! this is bicubic interpolation
 
          !! fix up halo points that we couldnt read from file
          IF( jpi1 == 2 ) THEN
@@ -1336,38 +1449,60 @@ CONTAINS
          DO jn = 1,4
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
-                  ni = ref_wgts(kw)%data_jpi(ji,jj,jn)
-                  nj = ref_wgts(kw)%data_jpj(ji,jj,jn)
-                  ! gradient in the i direction
-                  dta(ji,jj,1) = dta(ji,jj,1) + ref_wgts(kw)%data_wgt(ji,jj,jn+4) * 0.5_wp *         &
-                     &                (ref_wgts(kw)%fly_dta(ni+2,nj+1,1) - ref_wgts(kw)%fly_dta(ni  ,nj+1,1))
+                  DO jk=1, ipk
+                     ni = ref_wgts(kw)%data_jpi(ji,jj,jn)
+                     nj = ref_wgts(kw)%data_jpj(ji,jj,jn)
+                     ii = ji - iisht
+                     ij = jj - ijsht
+                     ! gradient in the i direction
+                     dta(ii,ij,jk) = dta(ii,ij,jk) + ref_wgts(kw)%data_wgt(ji,jj,jn+4) * 0.5_wp *         &
+                        &                (ref_wgts(kw)%fly_dta(ni+2,nj+1,jk) - ref_wgts(kw)%fly_dta(ni  ,nj+1,jk))
+                  END DO
                END DO
             END DO
          END DO
          DO jn = 1,4
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
-                  ni = ref_wgts(kw)%data_jpi(ji,jj,jn)
-                  nj = ref_wgts(kw)%data_jpj(ji,jj,jn)
-                  ! gradient in the j direction
-                  dta(ji,jj,1) = dta(ji,jj,1) + ref_wgts(kw)%data_wgt(ji,jj,jn+8) * 0.5_wp *         &
-                     &                (ref_wgts(kw)%fly_dta(ni+1,nj+2,1) - ref_wgts(kw)%fly_dta(ni+1,nj  ,1))
+                  DO jk=1, ipk
+                     ni = ref_wgts(kw)%data_jpi(ji,jj,jn)
+                     nj = ref_wgts(kw)%data_jpj(ji,jj,jn)
+                     ii = ji - iisht
+                     ij = jj - ijsht
+                     ! gradient in the j direction
+                     dta(ii,ij,jk) = dta(ii,ij,jk) + ref_wgts(kw)%data_wgt(ji,jj,jn+8) * 0.5_wp *         &
+                        &                (ref_wgts(kw)%fly_dta(ni+1,nj+2,jk) - ref_wgts(kw)%fly_dta(ni+1,nj  ,jk))
+                  END DO
                END DO
             END DO
          END DO
          DO jn = 1,4
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
-                  ni = ref_wgts(kw)%data_jpi(ji,jj,jn)
-                  nj = ref_wgts(kw)%data_jpj(ji,jj,jn)
-                  ! gradient in the ij direction
-                  dta(ji,jj,1) = dta(ji,jj,1) + ref_wgts(kw)%data_wgt(ji,jj,jn+12) * 0.25_wp * (     &
-                     &                (ref_wgts(kw)%fly_dta(ni+2,nj+2,1) - ref_wgts(kw)%fly_dta(ni  ,nj+2,1)) -   &
-                     &                (ref_wgts(kw)%fly_dta(ni+2,nj  ,1) - ref_wgts(kw)%fly_dta(ni  ,nj  ,1)))
+                  DO jk=1, ipk
+                     ni = ref_wgts(kw)%data_jpi(ji,jj,jn)
+                     nj = ref_wgts(kw)%data_jpj(ji,jj,jn)
+                     ii = ji - iisht
+                     ij = jj - ijsht
+                     ! gradient in the ij direction
+                     dta(ii,ij,jk) = dta(ii,ij,jk) + ref_wgts(kw)%data_wgt(ji,jj,jn+12) * 0.25_wp * (     &
+                        &                (ref_wgts(kw)%fly_dta(ni+2,nj+2,jk) - ref_wgts(kw)%fly_dta(ni  ,nj+2,jk)) -   &
+                        &                (ref_wgts(kw)%fly_dta(ni+2,nj  ,jk) - ref_wgts(kw)%fly_dta(ni  ,nj  ,jk)))
+                  END DO
                END DO
             END DO
          END DO
          !
+      ENDIF
+      !
+      IF( ASSOCIATED(ref_wgts(kw)%lnointerp) ) THEN   ! set non-interpolated points to their default value
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               DO jk=1, ipk
+                  IF( ref_wgts(kw)%lnointerp(ji,jj) )   dta(ji-iisht,jj-ijsht,jk) = pdefault
+               END DO
+            END DO
+         END DO
       ENDIF
       !
    END SUBROUTINE fld_interp

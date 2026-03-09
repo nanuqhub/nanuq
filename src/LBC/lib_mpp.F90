@@ -182,7 +182,6 @@ MODULE lib_mpp
    CHARACTER(len=lca), DIMENSION(:), ALLOCATABLE ::   crname_glb                   !: names of global comm calling routines
    CHARACTER(len=lca), DIMENSION(:), ALLOCATABLE ::   crname_dlg                   !: names of delayed global comm calling routines
    INTEGER, PUBLIC                               ::   ncom_stp = 0                 !: copy of time step # istp
-   INTEGER, PUBLIC                               ::   ncom_fsbc = 1                !: copy of sbc time step # nn_fsbc
    INTEGER, PUBLIC                               ::   ncom_freq                    !: frequency of comm diagnostic
    INTEGER, PUBLIC , DIMENSION(:,:), ALLOCATABLE ::   ncomm_sequence               !: size of communicated arrays (halos)
    INTEGER, PARAMETER, PUBLIC                    ::   ncom_rec_max = 5000          !: max number of communication record
@@ -1256,7 +1255,7 @@ CONTAINS
       IF( PRESENT(ld_dlg) ) ll_dlg = ld_dlg
       !
       ! find the smallest common frequency: default = frequency product, if multiple, choose the larger of the 2 frequency
-      ncom_freq = ncom_fsbc
+      ncom_freq = 1
       !
       IF ( ncom_stp == nit000+ncom_freq ) THEN   ! avoid to count extra communications in potential initializations at nit000
          IF( ll_lbc ) THEN

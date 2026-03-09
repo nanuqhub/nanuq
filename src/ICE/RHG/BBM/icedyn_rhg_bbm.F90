@@ -14,7 +14,6 @@ MODULE icedyn_rhg_bbm
    !!----------------------------------------------------------------------
    USE phycst         ! Physical constant
    USE dom_oce        ! Ocean domain
-   USE sbc_oce , ONLY : nn_fsbc
    USE oss_nnq , ONLY : ssh_m, ln_ice_embd
    USE sbc_ice , ONLY : utau_ice, vtau_ice, snwice_mass_b
    USE par_ice
@@ -159,20 +158,9 @@ CONTAINS
             END DO
          END DO
          !$acc end parallel loop
-         CALL do_rmpT2F( zht, zhf, lconserv=.TRUE. )
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               zhf(ji,jj) = MAX( zhf(ji,jj) , 0._wp)
-            END DO
-         END DO
-         !$acc end parallel loop
-# if ! defined _OPENACC
-         CALL lbc_lnk( 'icedyn_rhg_bbm', zhf,'F',1._wp )
-# endif
+         CALL do_rmpT2F( zht, zhf, lbcl=.TRUE., lconserv=.TRUE. )
          !
       ELSE
-         !
          !$acc parallel loop collapse(2)
          DO jj=Njs0-nn_hls, Nje0+nn_hls
             DO ji=Nis0-nn_hls, Nie0+nn_hls
@@ -183,7 +171,6 @@ CONTAINS
          !$acc end parallel loop
          !
       ENDIF !IF( l_use_v_for_h )
-      !
 
 
       !------------------------------------------------------------------------------!
@@ -192,57 +179,39 @@ CONTAINS
       ! sea surface height
       !    embedded sea ice: compute representative ice top surface
       !    non-embedded sea ice: use ocean surface for slope calculation
-      ! `zxpCt` & `zxpCf` are used as temporary arrays for SSH@T & SSH@F, respectively !
-      CALL ice_var_sshdyn( ssh_m, snwice_mass_b, zxpCt )
+      ! `ztmp1` & `ztmp2` are used as temporary arrays for SSH@T & SSH@F, respectively !
+      CALL ice_var_sshdyn( ssh_m, snwice_mass_b, ztmp1 )
 
-      CALL do_rmpT2F( zxpCt, zxpCf )  ! `zxpCf` -> SSH at F-points
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            kmsk00x(ji,jj)  = 1
-            kmsk00y(ji,jj)  = 1
-            kmsk01x(ji,jj)  = 1
-            kmsk01y(ji,jj)  = 1
-            zgrdSH(ji,jj,1) = 0._wp
-            zgrdSH(ji,jj,2) = 0._wp
-            zgrdSH(ji,jj,3) = 0._wp
-            zgrdSH(ji,jj,4) = 0._wp
-            !
-            ! Ice/snow mass (kg/m^2):
-            zr  = ( rhos*vt_s(ji  ,jj  ) + rhoi*vt_i(ji  ,jj  ) ) * e1e2t(ji  ,jj  )  ! mass @T [kg]
-            zr1 = ( rhos*vt_s(ji+1,jj  ) + rhoi*vt_i(ji+1,jj  ) ) * e1e2t(ji+1,jj  )
-            zr2 = ( rhos*vt_s(ji  ,jj+1) + rhoi*vt_i(ji  ,jj+1) ) * e1e2t(ji  ,jj+1)
-            ztmp3(ji,jj) = 0.5_wp*( zr + zr1 )*r1_e1e2u(ji,jj)*umask(ji,jj,1) ! ztmp3 -> mass @ U [kg/m^2]
-            ztmp4(ji,jj) = 0.5_wp*( zr + zr2 )*r1_e1e2v(ji,jj)*vmask(ji,jj,1) ! ztmp4 -> mass @ V [kg/m^2]
-         END DO
-      END DO
-      !$acc end parallel loop
+      CALL do_rmpT2F( ztmp1, ztmp2 )  ! `ztmp2` -> SSH at F-points
 
       !$acc parallel loop collapse(2) present(umask,vmask)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
-            zmassU = ztmp3(ji,jj)
-            zmassV = ztmp4(ji,jj)
+            ! Ice/snow mass (kg/m^2):
+            zr  = ( rhos*vt_s(ji  ,jj  ) + rhoi*vt_i(ji  ,jj  ) ) * e1e2t(ji  ,jj  )  ! mass @T [kg]
+            zr1 = ( rhos*vt_s(ji+1,jj  ) + rhoi*vt_i(ji+1,jj  ) ) * e1e2t(ji+1,jj  )
+            zr2 = ( rhos*vt_s(ji  ,jj+1) + rhoi*vt_i(ji  ,jj+1) ) * e1e2t(ji  ,jj+1)
+            zmassU = 0.5_wp*( zr + zr1 )*r1_e1e2u(ji,jj)*umask(ji,jj,1) ! -> mass @ U [kg/m^2]
+            zmassV = 0.5_wp*( zr + zr2 )*r1_e1e2v(ji,jj)*vmask(ji,jj,1) ! -> mass @ V [kg/m^2]
 
             ! m/dt
             zmU_dt(ji,jj)   = zmassU * r1_dtbbm
             zmV_dt(ji,jj)   = zmassV * r1_dtbbm
 
             ! Surface pressure gradient (- m*g*GRAD(ssh)) at U-V points
-            zgrdSH(ji,jj,1) = - zmassU * grav * ( zxpCt(ji+1,jj) - zxpCt(ji,jj)   ) * r1_e1u(ji,jj)
-            zgrdSH(ji,jj,2) = - zmassV * grav * ( zxpCt(ji,jj+1) - zxpCt(ji,jj)   ) * r1_e2v(ji,jj)
-            zgrdSH(ji,jj,3) = - zmassV * grav * ( zxpCf(ji,jj)   - zxpCf(ji-1,jj) ) * r1_e1v(ji,jj)  ! `zxpCf` is `zxpCt` interpolated  @F !
-            zgrdSH(ji,jj,4) = - zmassU * grav * ( zxpCf(ji,jj)   - zxpCf(ji,jj-1) ) * r1_e2u(ji,jj)  ! `zxpCf` is `zxpCt` interpolated  @F !
+            zgrdSH(ji,jj,1) = - zmassU * grav * ( ztmp1(ji+1,jj) - ztmp1(ji,jj)   ) * r1_e1u(ji,jj)
+            zgrdSH(ji,jj,2) = - zmassV * grav * ( ztmp1(ji,jj+1) - ztmp1(ji,jj)   ) * r1_e2v(ji,jj)
+            zgrdSH(ji,jj,3) = - zmassV * grav * ( ztmp2(ji,jj)   - ztmp2(ji-1,jj) ) * r1_e1v(ji,jj)  ! `ztmp2` is `ztmp1` interpolated  @F !
+            zgrdSH(ji,jj,4) = - zmassU * grav * ( ztmp2(ji,jj)   - ztmp2(ji,jj-1) ) * r1_e2u(ji,jj)  ! `ztmp2` is `ztmp1` interpolated  @F !
 
             ! masks
-            IF( zmassU<=0._wp .OR. umask(ji,jj,1)<0.1_wp ) kmsk00x(ji,jj) = 0
-            IF( zmassV<=0._wp .OR. vmask(ji,jj,1)<0.1_wp ) kmsk00y(ji,jj) = 0
+            kmsk00x(ji,jj) = MERGE( 0 , 1 , zmassU<=0._wp .OR. umask(ji,jj,1)<0.1_wp )
+            kmsk00y(ji,jj) = MERGE( 0 , 1 , zmassV<=0._wp .OR. vmask(ji,jj,1)<0.1_wp )
 
             ! switches
-            IF( zmassU <= rmass_min .AND. au_i(ji,jj) <= rconc_min )  kmsk01x(ji,jj) = 0
-            IF( zmassV <= rmass_min .AND. av_i(ji,jj) <= rconc_min )  kmsk01y(ji,jj) = 0
+            kmsk01x(ji,jj) = MERGE( 0 , 1 , zmassU <= rmass_min .AND. au_i(ji,jj) <= rconc_min )
+            kmsk01y(ji,jj) = MERGE( 0 , 1 , zmassV <= rmass_min .AND. av_i(ji,jj) <= rconc_min )
 
          END DO
       ENDDO
@@ -256,15 +225,11 @@ CONTAINS
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
                zmsk = xmskt(ji,jj)
+               ! * zr => temp. difference between bottom and surface: 
+               zr = MERGE( t_bo(ji,jj) - tm_su(ji,jj) , -1.8_wp + 25._wp ,  ln_icethd ) ! use a "fake" one when no thermo...               
                zr1 = 1._wp / MAX(at_i(ji,jj),epsi06)
                zr3 = rcnd_i*vt_s(ji,jj)*zr1 / MAX( rcnd_s*vt_i(ji,jj)*zr1, epsi06 ) * zmsk   ! => `C` of the
-               IF(ln_icethd) THEN ! Thermo is on, normal stuff
-                  ztmp1(ji,jj) = (t_bo(ji,jj) - tm_su(ji,jj)) / (1._wp + zr3 ) * zmsk ! temp. difference between bottom and surface
-               ELSE
-                  !! Thermo is off, yet we want som refreezing!
-                  ztmp1(ji,jj) = (-1.8_wp + 25._wp) / (1._wp + zr3 ) * zmsk ! faked temp. difference between bottom and surface
-               END IF
-               !
+               ztmp1(ji,jj) = zr / (1._wp + zr3 ) * zmsk 
                ztmp2(ji,jj) = rdt_ice * MIN( ztmp1(ji,jj) / rn_kth , 1._wp/rdt_ice )  ! dt * 1/T_relax => `1-d` increment @ T
             END DO
          END DO
@@ -275,8 +240,10 @@ CONTAINS
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
                ! Apply healing on damage:
-               IF( ztmp1(ji,jj) > 0._wp )  dmdt(ji,jj) = dmdt(ji,jj) + ztmp2(ji,jj)
-               IF( ztmp3(ji,jj) > 0._wp )  dmdf(ji,jj) = dmdf(ji,jj) + ztmp4(ji,jj)
+               zr1 = MERGE( ztmp2(ji,jj) , 0._wp ,  ztmp1(ji,jj) > 0._wp )
+               zr3 = MERGE( ztmp4(ji,jj) , 0._wp ,  ztmp3(ji,jj) > 0._wp )
+               dmdt(ji,jj) = dmdt(ji,jj) + zr1
+               dmdf(ji,jj) = dmdf(ji,jj) + zr3
             END DO
          END DO
          !
@@ -287,15 +254,11 @@ CONTAINS
 
       zravrg = 1._wp/REAL(nbbm) ! going to average (set to 0 before accumulating during the `nbbm` sub time steps)
 
+
+      ! We do not want to do the following stuff `nbbm` times below because they remain unchanged as they only depend on `A`: 
       !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            u_ice(ji,jj) = 0._wp
-            v_ice(ji,jj) = 0._wp
-            uVice(ji,jj) = 0._wp
-            vUice(ji,jj) = 0._wp
-            !
-            ! We do not want to do the following stuff `nbbm` times below because they remain unchanged:
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
             zzt = EXP( rn_C0*(1._wp - at_i(ji,jj)) )
             zzf = EXP( rn_C0*(1._wp - af_i(ji,jj)) )
             zxpCt(ji,jj) = zzt
@@ -312,10 +275,21 @@ CONTAINS
       ENDDO
       !$acc end parallel loop
 
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            u_ice(ji,jj) = 0._wp
+            v_ice(ji,jj) = 0._wp
+            uVice(ji,jj) = 0._wp
+            vUice(ji,jj) = 0._wp
+         ENDDO
+      ENDDO
+      !$acc end parallel loop
 
-      !$acc loop seq                                  ! ==================== !
+      
+      !$acc loop seq                               ! ==================== !
       DO jter = 1 , nbbm                           !    loop over jter    !
-         !                                            ! ==================== !
+         !                                         ! ==================== !
 
          ! ---  Updates the components of the vertically-integrated internal stress tensor and the damage in both T- & F-centric worlds ---
          !           => based on previously computed ice velocities...
@@ -330,10 +304,9 @@ CONTAINS
          !CALL update_uv_rk3( jter, rdtbbm, au_i, av_i, zmU_dt, zmV_dt, SIGMAt, SIGMAf, zgrdSH, V_oce, Tau_ai, kmsk01x, kmsk01y, kmsk00x, kmsk00y,  V_ts )
          !
 #if defined _OPENACC
-         IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', V_ts )
-         IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', V_ts )
+         CALL lbc_lnk_gpu( 'icedyn_rhg_bbm', V_ts )
 #else
-         CALL lbc_lnk( 'icedyn_rhg_bbm',  V_ts(:,:,1),'U',-1._wp, V_ts(:,:,2),'V',-1._wp,  V_ts(:,:,3),'V',-1._wp, V_ts(:,:,4),'U',-1._wp )
+         CALL lbc_lnk(     'icedyn_rhg_bbm', V_ts(:,:,1),'U',-1._wp, V_ts(:,:,2),'V',-1._wp,  V_ts(:,:,3),'V',-1._wp, V_ts(:,:,4),'U',-1._wp )
 #endif
 
          IF( ln_bdy ) THEN
@@ -344,7 +317,8 @@ CONTAINS
             CALL bdy_ice_dmg( kt, jter, V_ts )
          ENDIF
 
-         ! Average the velocity (to be used for advection at the big time step):
+         !! Average the velocity (to be used for advection at the big time step):
+         !!  ==> MIND: this is the ice velocity at time level `kt+1/2` (not `kt+1`)
          !$acc parallel loop collapse(2)
          DO jj=Njs0-nn_hls, Nje0+nn_hls
             DO ji=Nis0-nn_hls, Nie0+nn_hls
@@ -366,8 +340,10 @@ CONTAINS
       !------------------------------------------------------------------------------!
       CALL strain_rate_dsd( 'T', u_ice, v_ice, uVice, vUice, r1_e1e2t, e2u, e1v, r1_e2u, r1_e1v, e1t2, e2t2, xmskt, &
          &                       pdivu_i, pshear_i, pdelta_i )
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'icedyn_rhg_bbm', pdivu_i,'T',1._wp, pshear_i,'T',1._wp, pdelta_i,'T',1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'icedyn_rhg_bbm', pdivu_i, pshear_i, pdelta_i )
+# else
+      CALL lbc_lnk(     'icedyn_rhg_bbm', pdivu_i,'T',1._wp, pshear_i,'T',1._wp, pdelta_i,'T',1._wp )
 # endif
 
       !! sigma_1, sigma_2 & sigma_12 in Pa.m:
@@ -431,33 +407,39 @@ CONTAINS
       zdts = 0.5_wp*(zdx_m/zce)      ! largest possible small time-step to consider... #LOLO: Clem uses `0.9` rather than `0.5`
       icycle = CEILING( rDt_ice / zdts )        ! number of iterations (local to init, cf below for nbbm)
       icycle = icycle + MOD(icycle, 2)          ! + make it an odd number
-      rdtbbm   = rDt_ice / REAL( icycle, wp )   ! small time step used here
-      r1_dtbbm = 1._wp / rdtbbm
-      !
+      !PRINT *, ' LOLO RM: initial rdtbbm =', REAL(rDt_ice / REAL( icycle, wp ),4)
+      !rdtbbm   = rDt_ice / REAL( icycle, wp )   ! small time step used here
+      !r1_dtbbm = 1._wp / rdtbbm
+      !      
       nflt = FLOOR( rn_bbm_flt * icycle ) ! number of iterations over which u_ice is averaged
-      nflt = nflt + MOD( nflt, 2)         ! + make it an odd number
-      nbbm = icycle + nflt/2              ! total number of iterations
-
+      !nflt = nflt + MOD( nflt, 2)         ! + make it an odd number
+      !nbbm = icycle + nflt/2              ! total number of iterations
+      nbbm = nflt + MOD( nflt, 2)      
+      rdtbbm   = rDt_ice/REAL(nbbm,wp)
+      r1_dtbbm = 1._wp / rdtbbm
+      
       CALL cross_nudging_init()
 
       IF( lwp ) THEN
-         WRITE(numout,*) '  * Big time step (advection & thermo)  => rdt_ice  =', rdt_ice, ' [s]'
+         WRITE(numout,*) '  * Big time step (advection & thermo)  => rdt_ice  =', REAL(rdt_ice,4), ' [s]'
          WRITE(numout,*) '  * Min `dx` of wet computational domain = ', REAL(zdx_m/1000._wp,4), ' [km]'
-         WRITE(numout,*) '     ==> propagation speed of shearing elastic waves =>',  zce, '[m/s]'
-         WRITE(numout,*) '     ==> time-step requirement to resolve these waves: dt = 0.5*(dx/c_e) =', zdts, ' [s]'
+         WRITE(numout,*) '     ==> propagation speed of shearing elastic waves => c_e =', REAL(zce,4), '[m/s]'
+         WRITE(numout,*) '     ==> time-step requirement to resolve these waves: dt = 0.5*(dx/c_e) =', REAL(zdts,4), ' [s]'
          WRITE(numout,*) '     ==> implies a `nbbm` =', INT(nbbm,2)
-         WRITE(numout,*) '     ==> implies a `nflt` =', INT(nflt,2)
-         WRITE(numout,*) '     ==> implies a small time step (rheology) => rdtbbm =', rdtbbm,  ' [s]'
+         !WRITE(numout,*) '     ==> implies a `nflt` =', INT(nflt,2)
+         WRITE(numout,*) '     ==> implies a small time step (rheology) => rdtbbm =', REAL(rdtbbm,4),  ' [s]'
          IF(ln_x_MC_test) WRITE(numout,*) '  * Will perform only 1 Mohr-Coulomb test, at mid-point between T & F points!'
          IF(l_CN) THEN
             WRITE(numout,*) '  * About cross-nudging:'
-            WRITE(numout,*) '      - CN parameter (gamma) => rn_crndg =', rn_crndg,' [-]'
+            WRITE(numout,*) '      - CN parameter (gamma) => rn_crndg =', REAL(rn_crndg,4),' [-]'
          ENDIF
          WRITE(numout,*) '  * (scaled) Compression threshod => N_lim =',REAL(rn_Nref*SQRT( rn_l_ref/zdx_m ),4),' [Pa]'
          WRITE(numout,*) ''
       ENDIF
 
-      IF(rdtbbm>zdts) CALL ctl_warn( 'ice_dyn_rhg_bbm_init: `nbbm` is probably to small' )
+      !PRINT *, ' LOLO RM: rdtbbm , zdts  =', REAL(rdtbbm,4), REAL(zdts,4)
+      
+      IF(rdtbbm>zdts) CALL ctl_stop( 'ice_dyn_rhg_bbm_init: `nbbm` is probably to small' )
 
       IF( lwp ) THEN
          WRITE(numout,*) '**********************************************************************'
@@ -468,7 +450,10 @@ CONTAINS
          &        ztmp1(jpi,jpj), ztmp2(jpi,jpj),      ztmp3(jpi,jpj), ztmp4(jpi,jpj), zht(jpi,jpj), zhf(jpi,jpj),         &
          &        zxpCt(jpi,jpj), zxpCf(jpi,jpj),   zgrdSH(jpi,jpj,4), zPmax_t(jpi,jpj), zPmax_f(jpi,jpj),                 &
          &     zxpCtbet(jpi,jpj), zxpCfbet(jpi,jpj), zSclH_t(jpi,jpj), zSclH_f(jpi,jpj),      STAT = ierr )
-
+      !
+      kmsk01x(:,:) = 0 ;  kmsk01y(:,:) = 0 ; kmsk00x(:,:) = 0 ; kmsk00y(:,:) = 0
+      zgrdSH(:,:,:) = 0._wp
+      
       CALL mpp_sum( 'ice_dyn_rhg_bbm_init', ierr )
       IF( ierr /= 0 )   CALL ctl_stop('STOP', 'ice_dyn_rhg_bbm_init : unable to allocate work arrays')
 
@@ -505,34 +490,28 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmf           ! F-centric vertically-integrated stress tensor [N/m^2*m]
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf    ! `1 - ice damage` @T & @F
       !!----------------------------------------------------------------------
-      REAL(wp)                       :: zfc, zml, zmsk
+      REAL(wp)                       :: zfc, zml, zmsk, zdum
       REAL(wp)                       :: zh, zE, zeta, zL, zang, zc0, zmul
       REAL(wp)                       :: zE1, zE2
       REAL(wp)                       :: ze11t, ze22t, ze12t, ze11f, ze22f, ze12f
       REAL(wp)                       :: zxpC, z1md, zsigI, zsigII, zPmax, zPtld
-      REAL(wp)                       :: z1_zsigI
-      INTEGER :: ji, jj, km, kp
+      REAL(wp)                       :: z1_sigI
+      INTEGER :: ji, jj
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('update_sigma_d')
       !$acc data present( pV4, pxpCt, pxpCf, pht, phf, psgmt, psgmf, p1mdt, p1mdf )
 
       IF( (.NOT. l_CN).AND.(kt==nit000).AND.(lwp) ) WRITE(numout,*) ' *** MIND: no cross-nudging will be applied between stress tensors!'
 
-      !LOLOfix:
-      !IF( l_CN ) THEN
-      kp = 0
-      km = 0
-      !ELSE
-      !   kp = MIN( nn_hls, 2 )
-      !   km = kp - 1
-      !ENDIF
-      !LOLOfix.
+      !$acc parallel loop collapse(2) present( r1_e2u, r1_e1v, r1_e2v, r1_e1u )
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
 
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-km, Nje0+kp
-         DO ji=Nis0-km, Nie0+kp
-
-            zh = pht(ji,jj)
+            !! *** T-centric grid ***
+            !! ~~~~~~~~~~~~~~~~~~~~~~
+            
+            zmsk = xmskt(ji,jj)
+            zh   = pht(ji,jj)
 
             ! --- Strain rate tensors ---
             !     *******************
@@ -547,22 +526,18 @@ CONTAINS
 
             ! --- Predictor estimate of stress tensor at k+1 ---
             !     ******************************************
-            zml = zmul * xmskt(ji,jj)
+            zml = zmul * zmsk
             zfc =  zh * zE * pdt
             psgmt(ji,jj,1) = zml * ( zfc * ( rk11*ze11t + rk12*ze22t) + psgmt(ji,jj,1) )
             psgmt(ji,jj,2) = zml * ( zfc * ( rk12*ze11t + rk22*ze22t) + psgmt(ji,jj,2) )
             psgmf(ji,jj,3) = zml * ( zfc *        rk33 * ze12t        + psgmf(ji,jj,3) )
-            !
-         END DO !DO ji=Nis0-1, Nie0+2
-      END DO !DO jj=Njs0-1, Nje0+2
-      !$acc end parallel loop
 
 
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-kp, Nje0+km
-         DO ji=Nis0-kp, Nie0+km
-
-            zh = phf(ji,jj)
+            !! *** F-centric grid ***
+            !! ~~~~~~~~~~~~~~~~~~~~~~
+            
+            zmsk = xmskf(ji,jj)
+            zh   = phf(ji,jj)
 
             ! --- Strain rate tensors ---
             !     *******************
@@ -577,25 +552,24 @@ CONTAINS
 
             ! --- Predictor estimate of stress tensor at k+1 ---
             !     ******************************************
-            zml = zmul * xmskf(ji,jj)
+            zml = zmul * zmsk
             zfc = zh * zE * pdt
             psgmf(ji,jj,1) = zml * ( zfc * ( rk11*ze11f + rk12*ze22f) + psgmf(ji,jj,1) )
             psgmf(ji,jj,2) = zml * ( zfc * ( rk12*ze11f + rk22*ze22f) + psgmf(ji,jj,2) )
             psgmt(ji,jj,3) = zml * ( zfc *        rk33 * ze12f        + psgmt(ji,jj,3) )
-            !
-         END DO !DO ji=Nis0-kp, Nie0+km
-      END DO !DO jj=Njs0-kp, Nje0+km
-      !$acc end parallel loop
 
+            
+         END DO !DO ji=Nis0, Nie0
+      END DO !DO jj=Njs0, Nje0
+      !$acc end parallel loop
 
 
       !! --- lbc-linking of updated stress tensors ---
 #if defined _OPENACC
-      IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', psgmt, psgmf )
-      IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', psgmt, psgmf )
+      CALL lbc_lnk_gpu( 'icedyn_rhg_bbm', psgmt, psgmf )
 #else
-      CALL lbc_lnk( 'icedyn_rhg_bbm', psgmt(:,:,1),'T',1._wp, psgmt(:,:,2),'T', 1._wp, psgmt(:,:,3),'F', 1._wp, &
-         &                            psgmf(:,:,1),'F',1._wp, psgmf(:,:,2),'F', 1._wp, psgmf(:,:,3),'T', 1._wp  )
+      CALL lbc_lnk(     'icedyn_rhg_bbm', psgmt(:,:,1),'T',1._wp, psgmt(:,:,2),'T', 1._wp, psgmt(:,:,3),'F', 1._wp, &
+         &                                psgmf(:,:,1),'F',1._wp, psgmf(:,:,2),'F', 1._wp, psgmf(:,:,3),'T', 1._wp  )
 #endif
 
       IF( l_CN ) THEN
@@ -605,7 +579,7 @@ CONTAINS
          !      !!          !        => @T uses `ji+1` & `jj+1`  result => ok on whole `Nis0:Nie0,Njs0:Nje0`
          !      !!          !        => @F uses `ji-1` & `jj-1`  result => ok on whole      "          "
       ENDIF
-
+      
       IF( ln_x_MC_test ) THEN
          CALL mohr_coulomb_dmg_mp( pdt, pxpCt, pxpCf, zSclH_t, zSclH_f, p1mdt, p1mdf, psgmt, psgmf )
       ELSE
@@ -616,11 +590,10 @@ CONTAINS
 
       !! --- lbc-linking of updated stress tensors and `1-d` ---
 #if defined _OPENACC
-      IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', psgmt, psgmf, p1mdt, p1mdf )
-      IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', psgmt, psgmf, p1mdt, p1mdf )
+      CALL lbc_lnk_gpu( 'icedyn_rhg_bbm', psgmt, psgmf, p1mdt, p1mdf )
 #else
-      CALL lbc_lnk( 'icedyn_rhg_bbm', psgmt(:,:,1),'T',1._wp, psgmt(:,:,2),'T', 1._wp, psgmt(:,:,3),'F', 1._wp, p1mdt,'T',1._wp, &
-         &                            psgmf(:,:,1),'F',1._wp, psgmf(:,:,2),'F', 1._wp, psgmf(:,:,3),'T', 1._wp, p1mdf,'F',1._wp  )
+      CALL lbc_lnk(     'icedyn_rhg_bbm', psgmt(:,:,1),'T',1._wp, psgmt(:,:,2),'T', 1._wp, psgmt(:,:,3),'F', 1._wp, p1mdt,'T',1._wp, &
+         &                                psgmf(:,:,1),'F',1._wp, psgmf(:,:,2),'F', 1._wp, psgmf(:,:,3),'T', 1._wp, p1mdf,'F',1._wp  )
 #endif
 
       !$acc end data
@@ -757,7 +730,7 @@ CONTAINS
          !$acc update self( dmdt, dmdf, u_ice, v_ice, uVice, vUice, V_ts, SIGMAt, SIGMAf )
          !
          IF(lwp) WRITE(numout,*) '---- rhg-rst ----'
-         iter = kt + nn_fsbc - 1             ! ice restarts are written at kt == nitrst - nn_fsbc + 1
+         iter = kt             ! ice restarts are written at kt == nitrst
          !
          CALL iom_rstput( iter, nitrst, numriw, 'dmdt' , dmdt  )
          CALL iom_rstput( iter, nitrst, numriw, 'dmdf' , dmdf  )

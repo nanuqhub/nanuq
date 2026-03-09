@@ -12,12 +12,11 @@ MODULE ablrst
    USE abl            ! abl variables
    USE par_abl        ! abl parameters
    USE dom_oce        ! ocean domain
-   USE sbc_oce , ONLY : nn_fsbc, jpka
+   USE sbc_oce , ONLY : jpka
    !
    USE in_out_manager ! I/O manager
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
-   USE lib_fortran    ! fortran utilities (glob_sum + no signed zero)
 
    IMPLICIT NONE
    PRIVATE
@@ -27,8 +26,8 @@ MODULE ablrst
    PUBLIC   abl_rst_read    ! called by abl_init
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: ablrst.F90 11413 2019-08-06 15:59:22Z gsamson $
+   !! NANUQ 1.0, Brodeau (2026)
+   !! NEMO/ABL 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -51,10 +50,9 @@ CONTAINS
 
       IF( ln_rst_list .OR. nn_stock /= -1 ) THEN
          ! in order to get better performances with NetCDF format, we open and define the abl restart file
-         ! one abl time step before writing the data (-> at nitrst - 2*nn_fsbc + 1), except if we write abl
-         ! restart files every abl time step or if an abl restart file was writen at nitend - 2*nn_fsbc + 1
-         IF( kt == nitrst - 2*nn_fsbc + 1 .OR. nn_stock == nn_fsbc    &
-            &                             .OR. ( kt == nitend - nn_fsbc + 1 .AND. .NOT. lrst_abl ) ) THEN
+         ! one abl time step before writing the data (-> at nitrst - 2*nn*fsbc + 1), except if we write abl
+         ! restart files every abl time step or if an abl restart file was writen at nitend - 2*nn*fsbc + 1
+         IF( kt==nitrst-1 .OR. nn_stock==1 .OR. ( kt==nitend .AND. .NOT. lrst_abl ) ) THEN
             IF( nitrst <= nitend .AND. nitrst > 0 ) THEN
                ! beware of the format used to write kt (default is i8.8, that should be large enough...)
                IF( nitrst > 99999999 ) THEN
@@ -69,17 +67,16 @@ CONTAINS
                IF(lwp) THEN
                   WRITE(numout,*)
                   WRITE(numout,*) '             open abl restart NetCDF file: ',TRIM(clpath)//clname
-                  IF( kt == nitrst - 2*nn_fsbc + 1 ) THEN
-                     WRITE(numout,*) '             kt = nitrst - 2*nn_fsbc + 1 = ', kt,' date= ', ndastp
+                  IF( kt == nitrst - 1 ) THEN
+                     WRITE(numout,*) '             kt = nitrst -1 = ', kt,' date= ', ndastp
                   ELSE
-                     WRITE(numout,*) '             kt = '                         , kt,' date= ', ndastp
+                     WRITE(numout,*) '             kt = '            , kt,' date= ', ndastp
                   ENDIF
                ENDIF
                !
                IF(.NOT.lwxios) THEN
                   CALL iom_open( TRIM(clpath)//TRIM(clname), numraw, ldwrt = .TRUE., kdlev = jpka, cdcomp = 'ABL' )
                ELSE
-#if defined key_xios
                   cw_ablrst_cxt = "rstwa_"//TRIM(ADJUSTL(clkt))
                   IF( TRIM(Agrif_CFixed()) == '0' ) THEN
                      clpname = clname
@@ -89,9 +86,6 @@ CONTAINS
                   numraw = iom_xios_setid(TRIM(clpath)//TRIM(clpname))
                   CALL iom_init( cw_ablrst_cxt, kdid = numraw, ld_closedef = .FALSE. )
                   CALL iom_swap( cxios_context )
-#else
-                  CALL ctl_stop( 'Can not use XIOS in rst_opn' )
-#endif
                ENDIF
                lrst_abl = .TRUE.
             ENDIF
@@ -112,7 +106,7 @@ CONTAINS
       INTEGER ::   iter
       !!----------------------------------------------------------------------
 
-      iter = kt + nn_fsbc - 1   ! abl restarts are written at kt == nitrst - nn_fsbc + 1
+      iter = kt   ! abl restarts are written at kt == nitrst
 
       IF( iter == nitrst ) THEN
          IF(lwp) WRITE(numout,*)
@@ -123,10 +117,8 @@ CONTAINS
       ! Write in numraw (if iter == nitrst)
       ! ------------------
       !                                                                        ! calendar control
-      CALL iom_rstput( iter, nitrst, numraw, 'nn_fsbc', REAL( nn_fsbc, wp ) )      ! time-step
+      !CALL iom_rstput( iter, nitrst, numraw, 'nn*fsbc', REAL( nn*fsbc, wp ) )      ! time-step
       CALL iom_rstput( iter, nitrst, numraw, 'kt_abl' , REAL( iter   , wp ) )      ! date
-
-      IF(.NOT.lwxios) CALL iom_delay_rst( 'WRITE', 'ABL', numraw )   ! save only abl delayed global communication variables
 
       ! Prognostic (after timestep + swap time indices = now timestep) variables
       CALL iom_rstput( iter, nitrst, numraw,   'u_abl',   u_abl(:,:,:,nt_n      ) )
@@ -162,7 +154,7 @@ CONTAINS
       !!
       !! ** purpose  :   read restart file
       !!----------------------------------------------------------------------
-      REAL(wp)          ::   zfabl, ziter
+      REAL(wp)          ::    ziter
       !!----------------------------------------------------------------------
 
       IF(lwp) THEN
@@ -177,16 +169,11 @@ CONTAINS
       IF( lrxios) THEN
          cr_ablrst_cxt = 'abl_rst'
          IF(lwp) WRITE(numout,*) 'Enable restart reading by XIOS for ABL'
-         !         IF( TRIM(Agrif_CFixed()) == '0' ) THEN
-         !            clpname = cn_ablrst_in
-         !         ELSE
-         !            clpname = TRIM(Agrif_CFixed())//"_"//cn_ablrst_in
-         !         ENDIF
          CALL iom_init( cr_ablrst_cxt, kdid = numrar, ld_closedef = .TRUE. )
       ENDIF
 
       ! Time info
-      CALL iom_get( numrar, 'nn_fsbc', zfabl )
+      !CALL iom_get( numrar, 'nn*fsbc', zfabl )
       CALL iom_get( numrar, 'kt_abl' , ziter )
       IF(lwp) WRITE(numout,*) '   read abl restart file at time step    : ', ziter
       IF(lwp) WRITE(numout,*) '   in any case we force it to nit000 - 1 : ', nit000 - 1
@@ -196,23 +183,21 @@ CONTAINS
          &     CALL ctl_stop( 'abl_rst_read ===>>>> : problem with nit000 in abl restart',  &
          &                   '   verify the file or rerun with the value 0 for the',        &
          &                   '   control of time parameter  nrstdt' )
-      IF( NINT(zfabl) /= nn_fsbc          .AND. ABS( nrstdt ) == 1 )   &
-         &     CALL ctl_stop( 'abl_rst_read ===>>>> : problem with nn_fsbc in abl restart',  &
-         &                   '   verify the file or rerun with the value 0 for the',         &
-         &                   '   control of time parameter  nrstdt' )
+      !IF( NINT(zfabl) /= nn*fsbc          .AND. ABS( nrstdt ) == 1 )   &
+      !   &     CALL ctl_stop( 'abl_rst_read ===>>>> : problem with nn*fsbc in abl restart',  &
+      !   &                   '   verify the file or rerun with the value 0 for the',         &
+      !   &                   '   control of time parameter  nrstdt' )
 
       ! --- mandatory fields --- !
-      CALL iom_get( numrar, jpdom_auto,   'u_abl',   u_abl(:,:,:,nt_n      ), cd_type = 'U', psgn = -1._wp )
-      CALL iom_get( numrar, jpdom_auto,   'v_abl',   v_abl(:,:,:,nt_n      ), cd_type = 'V', psgn = -1._wp )
-      CALL iom_get( numrar, jpdom_auto,   't_abl',  tq_abl(:,:,:,nt_n,jp_ta) )
+      CALL iom_get( numrar, jpdom_auto,   'u_abl',   u_abl(:,:,:,nt_n      ), cd_type = 'T', psgn = -1._wp )
+      CALL iom_get( numrar, jpdom_auto,   'v_abl',   v_abl(:,:,:,nt_n      ), cd_type = 'T', psgn = -1._wp )
+      CALL iom_get( numrar, jpdom_auto,   't_abl',  tq_abl(:,:,:,nt_n,jp_ta) ) !, kfill = jpfillcopy )
       CALL iom_get( numrar, jpdom_auto,   'q_abl',  tq_abl(:,:,:,nt_n,jp_qa) )
       CALL iom_get( numrar, jpdom_auto, 'tke_abl', tke_abl(:,:,:,nt_n      ) )
-      CALL iom_get( numrar, jpdom_auto, 'avm_abl', avm_abl(:,:,:           ) )
+      CALL iom_get( numrar, jpdom_auto, 'avm_abl', avm_abl(:,:,:           ) ) !, kfill = jpfillcopy )
       CALL iom_get( numrar, jpdom_auto, 'avt_abl', avt_abl(:,:,:           ) )
-      CALL iom_get( numrar, jpdom_auto,'mxld_abl',mxld_abl(:,:,:           ) )
-      CALL iom_get( numrar, jpdom_auto,    'pblh',    pblh(:,:             ) )
-
-      IF(.NOT.lrxios) CALL iom_delay_rst( 'READ', 'ABL', numrar )   ! read only abl delayed global communication variables
+      CALL iom_get( numrar, jpdom_auto,'mxld_abl',mxld_abl(:,:,:           ) ) !, kfill = jpfillcopy )
+      CALL iom_get( numrar, jpdom_auto,    'pblh',    pblh(:,:             ), kfill = jpfillcopy )
 
    END SUBROUTINE abl_rst_read
 

@@ -26,6 +26,7 @@ MODULE par_abl
    INTEGER , PUBLIC            ::   nn_dyn_restore !: restoring option for dynamical ABL variables
    LOGICAL , PUBLIC            ::   ln_geos_winds  !: large-scale restoring of ABL winds toward geostrophic winds
    LOGICAL , PUBLIC            ::   ln_hpgls_frc   !: forcing of ABL winds by large-scale pressure gradient
+   LOGICAL , PUBLIC            ::   ln_pga_abl     !: ABL pressure gradient anomaly forcing
    LOGICAL , PUBLIC            ::   ln_smth_pblh   !: smoothing of atmospheric PBL height
    !LOGICAL , PUBLIC            ::   ln_topbc_neumann = .FALSE.  !: idealised testcases only
 
@@ -60,7 +61,6 @@ MODULE par_abl
    REAL(wp), PUBLIC            ::   rn_ltra_min                   !: namelist parameter
    REAL(wp), PUBLIC            ::   rn_ltra_max                   !: namelist parameter
    REAL(wp), PUBLIC            ::   rn_Ric                        !: critical Richardson number
-   REAL(wp), PUBLIC            ::   rn_vfac                       !: multiplicative factor for ocean/ice velocity
 
    !!---------------------------------------------------------------------
    !! ABL parameters for the vertical profile of the restoring term
@@ -97,8 +97,8 @@ MODULE par_abl
    REAL(wp), PUBLIC, PARAMETER ::   bmx5 =  -72.076052686380677_wp
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: sbc_oce.F90 10882 2019-04-17 15:40:17Z clem $
+   !! NANUQ 1.0, Brodeau (2026)
+   !! NEMO/ABL 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!======================================================================
 END MODULE par_abl

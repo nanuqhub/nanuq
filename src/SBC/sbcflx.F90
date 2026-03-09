@@ -118,46 +118,43 @@ CONTAINS
          !
       ENDIF
 
-      CALL fld_read( kt, nn_fsbc, sf )                            ! input fields provided at the current time-step
+      CALL fld_read( kt, sf )                            ! input fields provided at the current time-step
 
-      IF( MOD( kt-1, nn_fsbc ) == 0 ) THEN                        ! update ocean fluxes at each SBC frequency
-
-         IF( ln_dm2dc ) THEN   ! modify now Qsr to include the diurnal cycle
-            qsr(:,:) = sbc_dcy( sf(jp_qsr)%fnow(:,:,1) ) * tmask(:,:,1)
-         ELSE
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  qsr(ji,jj) =     sf(jp_qsr)%fnow(ji,jj,1) * tmask(ji,jj,1)
-               END DO
-            END DO
-         ENDIF
-
+      IF( ln_dm2dc ) THEN   ! modify now Qsr to include the diurnal cycle
+         qsr(:,:) = sbc_dcy( sf(jp_qsr)%fnow(:,:,1) ) * tmask(:,:,1)
+      ELSE
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
-               utau(ji,jj) =   sf(jp_utau)%fnow(ji,jj,1)                              * umask(ji,jj,1)
-               vtau(ji,jj) =   sf(jp_vtau)%fnow(ji,jj,1)                              * vmask(ji,jj,1)
-               qns (ji,jj) = ( sf(jp_qtot)%fnow(ji,jj,1) - sf(jp_qsr)%fnow(ji,jj,1) ) * tmask(ji,jj,1)
-               emp (ji,jj) =   sf(jp_emp )%fnow(ji,jj,1)                              * tmask(ji,jj,1)
+               qsr(ji,jj) =     sf(jp_qsr)%fnow(ji,jj,1) * tmask(ji,jj,1)
             END DO
          END DO
-         !                                                        ! add to qns the heat due to e-p
-         !!clem: I do not think it is needed
-         !!qns(:,:) = qns(:,:) - emp(:,:) * sst_m(:,:) * rcp        ! mass flux is at SST
-         !
-         IF( nitend-nit000 <= 100 .AND. lwp ) THEN                ! control print (if less than 100 time-step asked)
-            WRITE(numout,*)
-            WRITE(numout,*) '        read daily momentum, heat and freshwater fluxes OK'
-            DO jf = 1, jpfld
-               IF( jf == jp_utau .OR. jf == jp_vtau )   zfact =     1.
-               IF( jf == jp_qtot .OR. jf == jp_qsr  )   zfact =     0.1
-               IF( jf == jp_emp                     )   zfact = 86400.
-               WRITE(numout,*)
-               WRITE(numout,*) ' day: ', ndastp , TRIM(sf(jf)%clvar), ' * ', zfact
-            END DO
-         ENDIF
-         !
       ENDIF
-      !                                                           ! module of wind stress and wind speed at T-point
+
+      DO jj=Njs0-1, Nje0+1
+         DO ji=Nis0-1, Nie0+1
+            utau(ji,jj) =   sf(jp_utau)%fnow(ji,jj,1)                              * umask(ji,jj,1)
+            vtau(ji,jj) =   sf(jp_vtau)%fnow(ji,jj,1)                              * vmask(ji,jj,1)
+            qns (ji,jj) = ( sf(jp_qtot)%fnow(ji,jj,1) - sf(jp_qsr)%fnow(ji,jj,1) ) * tmask(ji,jj,1)
+            emp (ji,jj) =   sf(jp_emp )%fnow(ji,jj,1)                              * tmask(ji,jj,1)
+         END DO
+      END DO
+      !                                                        ! add to qns the heat due to e-p
+      !!clem: I do not think it is needed
+      !!qns(:,:) = qns(:,:) - emp(:,:) * sst_m(:,:) * rcp        ! mass flux is at SST
+      !
+      IF( nitend-nit000 <= 100 .AND. lwp ) THEN                ! control print (if less than 100 time-step asked)
+         WRITE(numout,*)
+         WRITE(numout,*) '        read daily momentum, heat and freshwater fluxes OK'
+         DO jf = 1, jpfld
+            IF( jf == jp_utau .OR. jf == jp_vtau )   zfact =     1.
+            IF( jf == jp_qtot .OR. jf == jp_qsr  )   zfact =     0.1
+            IF( jf == jp_emp                     )   zfact = 86400.
+            WRITE(numout,*)
+            WRITE(numout,*) ' day: ', ndastp , TRIM(sf(jf)%clvar), ' * ', zfact
+         END DO
+      ENDIF
+      !
+
       ! Note the use of 0.5*(2-umask) in order to unmask the stress along coastlines
       zcoef = 1. / ( zrhoa * zcdrag )
       DO jj=Njs0, Nje0

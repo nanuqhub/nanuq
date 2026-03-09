@@ -34,7 +34,7 @@ MODULE step
    USE par_ice, ONLY : ln_dynADV2D
    !
    USE xios
-
+   
    IMPLICIT NONE
    PRIVATE
 
@@ -71,7 +71,7 @@ CONTAINS
       ENDIF
       IF( kstp /= nit000 )   CALL day( kstp )             ! Calendar (day was already called at nit000 in day_init)
 
-      IF(((kstp + nn_fsbc - 1) == nitrst) .AND. lwxios) THEN
+      IF((kstp == nitrst) .AND. lwxios) THEN
          CALL iom_swap(      cw_icerst_cxt          )
          CALL iom_init_closedef(cw_icerst_cxt)
          CALL iom_setkt( kstp - nit000 + 1,      cw_icerst_cxt          )

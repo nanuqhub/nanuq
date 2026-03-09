@@ -56,9 +56,6 @@
       !
    ln_write_cfg = .false.    !  (=T) create the domain configuration file
       cn_domcfg_out = 'domain_cfg_out' ! newly created domain configuration filename
-      !
-   ln_use_jattr = .false.    !  use (T) the file attribute: open_ocean_jstart, if present
-   !                         !  in netcdf input files, as the start j-row for reading
 /
 !!
 !!
@@ -91,9 +88,9 @@
 !-----------------------------------------------------------------------
    ln_ssxread   = .true.      !  =T Read in file ;  =F set all to 0. (see ossssm)
       ln_3d_uve   = .false.   !  specify whether we are supplying a 3D u,v and e3 field
-      ln_read_e3t = .false.   !  specify whether we must read `e3t`
+      ln_read_e3t = .false.   !  specify whether we must read `e3t` or not
          rn_e3t_0 = 1.        !  if `ln_read_e3t=F` prescribed thickness of 1st ocean level to impose (m)
-      ln_read_frq = .false.   !  specify whether we must read `frq`
+      ln_read_frq = .false.   !  specify whether we must read `frq` or not
          rn_frq_0 = 0.65      !  if `ln_read_frq=F` prescr. solar flux penetr. through 1st ocean level
    !
    ! Relevant if `ln_prs_oce=T`:
@@ -140,8 +137,6 @@
 !-----------------------------------------------------------------------
 &namsbc        !   Surface Boundary Condition manager                   (default: NO selection)
 !-----------------------------------------------------------------------
-   nn_fsbc     = 1         !  frequency of SBC module call
-      !                    !  (control sea-ice & iceberg model call)
                      ! Type of air-sea fluxes
    ln_flx      = .false.   !  flux formulation                          (T => fill namsbc_flx )
    ln_blk      = .false.   !  Bulk formulation                          (T => fill namsbc_blk )

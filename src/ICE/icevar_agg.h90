@@ -39,7 +39,7 @@
          END DO
       END DO
 
-      CALL lbc_lnk( 'ice_var_agg',  hm_i,'T',1._wp, hm_s,'T',1._wp, ato_i,'T',1._wp, vt_i,'F',1._wp, vt_s,'T',1._wp, at_i,'F',1._wp )
+      CALL lbc_lnk( 'ice_var_agg',  hm_i,'T',1._wp, hm_s,'T',1._wp, ato_i,'T',1._wp, vt_i,'T',1._wp, vt_s,'T',1._wp, at_i,'T',1._wp )
    
 
       IF( ln_icethd ) THEN
@@ -111,7 +111,6 @@
                END DO
             END DO
             !
-            tm_si(:,:) = 0._wp
             tm_i (:,:) = 0._wp
             tm_s (:,:) = 0._wp
             DO jl = 1, jpl
@@ -148,7 +147,7 @@
                tm_s (:,:) = rt0
             END WHERE
 
-            CALL lbc_lnk( 'ice_var_agg',  tm_si,'T',1._wp, om_i,'T',1._wp, sm_i,'F',1._wp, tm_i,'T',1._wp, tm_s,'F',1._wp )
+            CALL lbc_lnk( 'ice_var_agg',  tm_si,'T',1._wp, om_i,'T',1._wp, sm_i,'T',1._wp, tm_i,'T',1._wp, tm_s,'T',1._wp )
    
             ! mean melt pond depth
             !WHERE( at_ip(:,:) > epsi20 )

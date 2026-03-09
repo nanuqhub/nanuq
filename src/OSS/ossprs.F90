@@ -98,8 +98,8 @@ CONTAINS
       IF( ln_timing )   CALL timing_start( 'oss_prs_rcv')
 
       IF ( ln_ssxread ) THEN
-         IF( nfld_3d > 0 ) CALL fld_read( kt, 1, sf_ssm_3d )      !==   read data at kt time step   ==!
-         IF( nfld_2d > 0 ) CALL fld_read( kt, 1, sf_ssm_2d )      !==   read data at kt time step   ==!
+         IF( nfld_3d > 0 ) CALL fld_read( kt, sf_ssm_3d )      !==   read data at kt time step   ==!
+         IF( nfld_2d > 0 ) CALL fld_read( kt, sf_ssm_2d )      !==   read data at kt time step   ==!
          !
          IF( TRIM(sf_ssm_2d(jf_usp)%clrootname)=='NOT USED' )  sf_ssm_2d(jf_usp)%fnow(:,:,1) = 0._wp
          IF( TRIM(sf_ssm_2d(jf_vsp)%clrootname)=='NOT USED' )  sf_ssm_2d(jf_vsp)%fnow(:,:,1) = 0._wp

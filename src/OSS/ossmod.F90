@@ -292,14 +292,6 @@ CONTAINS
       ! -- mean surface ocean current
       CALL do_Voce( ssu_m, ssv_m,  V_oce )
 
-      !#LOLO.
-# if defined _TRDBG
-      !$acc update self( ssu_m, ssv_m )
-      CALL TRDBG( 'ice_stp 000000000000000000000', 'ssu_m, ssv_m', ssu_m, ssv_m )
-# endif
-
-
-
 
       IF( ln_timing )   CALL timing_stop('oss')
 
@@ -383,17 +375,6 @@ CONTAINS
          END DO
          !$acc end parallel loop
       ENDIF
-
-
-# if defined _TRDBG
-      !$acc update self( t_bo, om_i, sst_m, sst_s, sss_m, sss_s )
-      CALL TRDBG( 'ice_stp', 't_bo', t_bo )
-      CALL TRDBG( 'ice_stp', 'om_i', om_i )
-      CALL TRDBG( 'ice_stp', 'sst_m', sst_m )
-      CALL TRDBG( 'ice_stp', 'sst_s', sst_s )
-      CALL TRDBG( 'ice_stp', 'sst_m', sss_m )
-      CALL TRDBG( 'ice_stp', 'sss_s', sss_s )
-# endif
 
 
       IF( iom_use( 'sss_s') ) CALL iom_put (  'sss_s' ,  sss_s         *xmskt )

@@ -45,21 +45,25 @@
             !$acc end parallel loop
 
 # if defined _OPENACC
-            IF( l_Iperio ) CALL lbc_lnk_EW_gpu( 'icedyn_rhg_bbm', v_ice )
-            IF( l_Jperio ) CALL lbc_lnk_NS_gpu( 'icedyn_rhg_bbm', v_ice )
+            CALL lbc_lnk_gpu( 'icedyn_rhg_evp', v_ice )
 # else
-            CALL lbc_lnk( 'icedyn_rhg_evp', v_ice,'V',-1._wp )
+            CALL lbc_lnk(     'icedyn_rhg_evp', v_ice,'V',-1._wp )
 # endif
 
             ! Since we have just updated `v_ice` it is now time to update `vUice`:
             !      energy conserving formulation:
             !$acc parallel loop collapse(2)
-            DO jj=Njs0-nn_hls+1, Nje0+nn_hls
-               DO ji=Nis0-nn_hls, Nie0+nn_hls-1
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
                   vUice(ji,jj) = 0.25_wp * r1_e1u(ji,jj) * umask(ji,jj,1) &
-                     &           * ( e1v(ji,jj)*v_ice(ji,jj) + e1v(ji,jj-1)*v_ice(ji,jj-1) + e1v(ji+1,jj)*v_ice(ji+1,jj) + e1v(ji+1,jj-1)*v_ice(ji+1,jj-1) )
+                     &           * (  e1v(ji,jj  )*v_ice(ji,jj  ) + e1v(ji,jj-1  )*v_ice(ji,jj-1  ) &
+                     &              + e1v(ji+1,jj)*v_ice(ji+1,jj) + e1v(ji+1,jj-1)*v_ice(ji+1,jj-1) )
                END DO
             END DO
             !$acc end parallel loop
 
-            !LOLOfixme lbc_lnk ? Probably of for now with `nn_hls=3` !
+# if defined _OPENACC
+            CALL lbc_lnk_gpu( 'icedyn_rhg_evp', vUice )
+# else
+            CALL lbc_lnk(     'icedyn_rhg_evp', vUice,'U',-1._wp )
+# endif

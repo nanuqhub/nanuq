@@ -24,7 +24,11 @@ MODULE iceupdate
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
    USE lib_fortran    ! fortran utilities (glob_sum + no signed zero)
+# if defined _OPENACC
+   USE lbclnk_gpu     ! lateral boundary conditions (or mpp links)
+# else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
+# endif
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -228,8 +232,10 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'ice_update_flx', emp,'T',1._wp )   ! IMPORTANT            
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_update_flx', emp )             ! IMPORTANT
+# else
+      CALL lbc_lnk(     'ice_update_flx', emp,'T',1._wp )   ! IMPORTANT
 # endif
 
       ! Snow/ice albedo (only if sent to coupler, useless in forced mode)
@@ -374,7 +380,7 @@ CONTAINS
       !!
       !! ** Purpose : Update the ocean surface stresses due to the ice
       !!
-      !! ** Action  : * at each ice time step (every nn_fsbc time step):
+      !! ** Action  : * at each ice time step (every time step):
       !!                - compute the modulus of ice-ocean relative velocity
       !!                  (*rho*Cd) at T-point (C-grid) or I-point (B-grid)
       !!                      ztmod_io = rhoco * | U_ice-U_oce |
@@ -463,8 +469,10 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if ! defined _OPENACC
-      CALL lbc_lnk( 'ice_update_tau', taum,'T',1._wp, utau,'U',-1._wp, vtau,'V',-1._wp )   ! lateral boundary condition
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( 'ice_update_tau', taum, utau, vtau )                                   ! lateral boundary condition
+# else
+      CALL lbc_lnk(     'ice_update_tau', taum,'T',1._wp, utau,'U',-1._wp, vtau,'V',-1._wp )   ! lateral boundary condition
 # endif
 
       !$acc end data
@@ -538,7 +546,7 @@ CONTAINS
       ELSEIF( TRIM(cdrw) == 'WRITE' ) THEN   ! Create restart file
          !                                   ! -------------------
          IF(lwp) WRITE(numout,*) '---- update-rst ----'
-         iter = kt + nn_fsbc - 1             ! ice restarts are written at kt == nitrst - nn_fsbc + 1
+         iter = kt             ! ice restarts are written at kt == nitrst
          !
          !$acc update self( snwice_mass, snwice_mass_b )
          CALL iom_rstput( iter, nitrst, numriw, 'snwice_mass'  , snwice_mass   )

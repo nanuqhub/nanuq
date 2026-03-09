@@ -420,9 +420,9 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, June 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!-------------------------------------------------------------------------------
-      REAL(wp), INTENT(in) :: ptak           ! air temperature             [K]
+      REAL(wp), INTENT(in) :: ptak           ! air absolute temperature    [K]
       REAL(wp), INTENT(in) :: pqa            ! air specific humidity   [kg/kg]
-      REAL(wp), INTENT(in) :: ppa           ! pressure in                [Pa]
+      REAL(wp), INTENT(in) :: ppa            ! pressure in                [Pa]
       REAL(wp)             :: rho_air_sclr   ! density of moist air   [kg/m^3]
       !!-------------------------------------------------------------------------------
       !$acc routine

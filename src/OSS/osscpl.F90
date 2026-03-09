@@ -310,7 +310,7 @@ CONTAINS
 
 
 
-   SUBROUTINE oss_cpl_rcv( kt, k_fsbc, k_ice )
+   SUBROUTINE oss_cpl_rcv( kt, k_foss, k_ice )
       !!----------------------------------------------------------------------
       !!             ***  ROUTINE oss_cpl_rcv  ***
       !!
@@ -358,7 +358,7 @@ CONTAINS
       !USE zdf_oce,  ONLY :   ln_zdfswm
       !
       INTEGER, INTENT(in) ::   kt          ! ocean model time step index
-      INTEGER, INTENT(in) ::   k_fsbc      ! frequency of sbc (-> ice model) computation
+      INTEGER, INTENT(in) ::   k_foss      ! frequency of sbc (-> ice model) computation
       INTEGER, INTENT(in) ::   k_ice       ! ice management in the sbc (=0/1/2/3)
       !!
       LOGICAL  ::   llnewtx, llnewtau      ! update wind stress components and module??

@@ -14,7 +14,7 @@ MODULE icedia
    USE dom_oce        ! ocean domain
    USE phycst         ! physical constant
    USE daymod         ! model calendar
-   USE sbc_oce , ONLY : sfx, nn_fsbc   ! surface boundary condition: ocean fields
+   USE sbc_oce , ONLY : sfx  ! surface boundary condition: ocean fields
    USE par_ice
    USE ice            ! sea-ice: variables
    USE icerst         ! sea-ice: restart
@@ -269,7 +269,7 @@ CONTAINS
          !
       ELSEIF( TRIM(cdrw) == 'WRITE' ) THEN   ! Create restart file
          !                                   ! -------------------
-         iter = kt + nn_fsbc - 1   ! ice restarts are written at kt == nitrst - nn_fsbc + 1
+         iter = kt   ! ice restarts are written at kt == nitrst
          !
          IF( iter == nitrst ) THEN
             IF(lwp) WRITE(numout,*)

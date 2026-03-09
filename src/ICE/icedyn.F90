@@ -112,7 +112,7 @@ CONTAINS
       !$acc end parallel loop
 
       IF( ln_landfast_L16 ) THEN
-         CALL fld_read( kt, 1, sf_icbmsk )
+         CALL fld_read( kt, sf_icbmsk )
          icb_mask(:,:) = sf_icbmsk(1)%fnow(:,:,1)
       ENDIF
 
@@ -127,6 +127,7 @@ CONTAINS
 
       CASE ( np_dynRHGADV  )       !==  no ridge/raft & no corrections ==!
          !
+
          CALL ice_dyn_rhg( kt )                                     ! -- rheology
          !PRINT *, ' LOLOdyn1' ; CALL test4inf( ' a_i@icedyn 3 ice_dyn  ', a_i )
 
@@ -195,6 +196,8 @@ CONTAINS
 
       END SELECT
 
+
+      !#LOLOfixmeLBC:
 # if ! defined _OPENACC
       ! --- Lateral boundary conditions --- !
       !     caution: t_su update needed from itd_reb
@@ -212,7 +215,8 @@ CONTAINS
          CALL lbc_lnk( 'icedyn', a_i ,'T',1._wp, v_i ,'T',1._wp, v_s ,'T',1._wp )
       ENDIF
 # endif
-
+      !#LOLOfixmeLBC.
+      
       IF( ln_timing )   CALL timing_stop ('ice_dyn')
       !
    END SUBROUTINE ice_dyn
@@ -327,7 +331,7 @@ CONTAINS
       fmask(:,:,:) = 0._wp
       !
       IF( rn_ishlat == 0._wp ) THEN
-         IF(lwp )PRINT *, ' * IMPORTANT: `icedyn.F90` building sea-ice `fmask` (shear) with rn_ishlat=0 !'
+         IF(lwp) PRINT *, ' * IMPORTANT: `icedyn.F90` building sea-ice `fmask` (shear) with rn_ishlat=0 !'
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
                fmask(ji,jj,1) = xmskt(ji,jj) * xmskt(ji+1,jj) * xmskt(ji,jj+1) * xmskt(ji+1,jj+1)
@@ -335,7 +339,7 @@ CONTAINS
          END DO
          !
       ELSE
-         IF(lwp )PRINT *, ' * IMPORTANT: `icedyn.F90` building sea-ice `fmask` (shear) with rn_ishlat/=0 !'
+         IF(lwp) PRINT *, ' * IMPORTANT: `icedyn.F90` building sea-ice `fmask` (shear) with rn_ishlat/=0 !'
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
                fmask(ji,jj,1) = xmskt(ji,jj) * xmskt(ji+1,jj) * xmskt(ji,jj+1) * xmskt(ji+1,jj+1)

@@ -16,25 +16,26 @@ MODULE lbclnk_gpu
    USE lib_mpp        ! distributed memory computing library
    USE in_out_manager ! I/O manager
 
+   USE par_ice, ONLY : jpl
+
    IMPLICIT NONE
    PRIVATE
 
-
    INTERFACE lbc_lnk_gpu
-      MODULE PROCEDURE lbc_lnk_1f2d_r8, lbc_lnk_2f2d_r8, lbc_lnk_3f2d_r8, lbc_lnk_4f2d_r8, lbc_lnk_6f2d_r8, lbc_lnk_1f3d4_r8, lbc_lnk_2f3d3_r8, lbc_lnk_2f3d3_2f2d_r8
+      MODULE PROCEDURE lbc_lnk_1f2d_r8, lbc_lnk_2f2d_r8, lbc_lnk_3f2d_r8, lbc_lnk_4f2d_r8, lbc_lnk_5f2d_r8, lbc_lnk_6f2d_r8, lbc_lnk_9f2d_r8, &
+         &             lbc_lnk_1f3d4_r8, lbc_lnk_2f3d3_r8, lbc_lnk_2f3d3_2f2d_r8, lbc_lnk_9f3dc_r8
    END INTERFACE lbc_lnk_gpu
 
-   INTERFACE lbc_lnk_EW_gpu
-      MODULE PROCEDURE lbc_lnk_EW_1f2d_r8, lbc_lnk_EW_2f2d_r8, lbc_lnk_EW_3f2d_r8, lbc_lnk_EW_4f2d_r8, lbc_lnk_EW_1f3d4_r8, lbc_lnk_EW_2f3d3_r8, lbc_lnk_EW_2f3d3_2f2d_r8
-   END INTERFACE lbc_lnk_EW_gpu
 
-   INTERFACE lbc_lnk_NS_gpu
-      MODULE PROCEDURE lbc_lnk_NS_1f2d_r8, lbc_lnk_NS_2f2d_r8, lbc_lnk_NS_3f2d_r8, lbc_lnk_NS_4f2d_r8, lbc_lnk_NS_1f3d4_r8, lbc_lnk_NS_2f3d3_r8, lbc_lnk_NS_2f3d3_2f2d_r8
-   END INTERFACE lbc_lnk_NS_gpu
+   INTERFACE fill_halo_0
+      MODULE PROCEDURE fill_halo_0_1f2d_r8, fill_halo_0_2f2d_r8, fill_halo_0_3f2d_r8, fill_halo_0_4f2d_r8, fill_halo_0_5f2d_r8, &
+         &             fill_halo_0_6f2d_r8, fill_halo_0_7f2d_r8, fill_halo_0_8f2d_r8
+   END INTERFACE fill_halo_0
+
+
 
    PUBLIC   lbc_lnk_gpu
-   PUBLIC   lbc_lnk_EW_gpu
-   PUBLIC   lbc_lnk_NS_gpu
+   PUBLIC   fill_halo_0
 
 CONTAINS
 
@@ -327,6 +328,84 @@ CONTAINS
 
 
    !!##################################################################################################
+   !!            * 5 2D arrays (real 8)
+   !!##################################################################################################
+   SUBROUTINE lbc_lnk_5f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d1, pf2d2, pf2d3, pf2d4, pf2d5
+      !!----------------------------------------------------------------------
+      IF( l_Iperio ) CALL lbc_lnk_EW_5f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5 )
+      IF( l_Jperio ) CALL lbc_lnk_NS_5f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5 )
+      !!
+   END SUBROUTINE lbc_lnk_5f2d_r8
+   !
+   SUBROUTINE lbc_lnk_EW_5f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d1, pf2d2, pf2d3, pf2d4, pf2d5
+      !!----------------------------------------------------------------------
+      INTEGER    :: jj, jh, jc
+      !!----------------------------------------------------------------------
+      !$acc data present(pf2d1, pf2d2, pf2d3, pf2d4, pf2d5)
+      !$acc loop seq
+      DO jh = 1, nn_hls
+         jc = 2*nn_hls - jh
+         !$acc parallel loop
+         DO jj = 1, jpj
+            pf2d1(    jh  ,jj) = pf2d1(jpi-jc  ,jj)
+            pf2d1(jpi-jh+1,jj) = pf2d1(    jc+1,jj)
+            pf2d2(    jh  ,jj) = pf2d2(jpi-jc  ,jj)
+            pf2d2(jpi-jh+1,jj) = pf2d2(    jc+1,jj)
+            pf2d3(    jh  ,jj) = pf2d3(jpi-jc  ,jj)
+            pf2d3(jpi-jh+1,jj) = pf2d3(    jc+1,jj)
+            pf2d4(    jh  ,jj) = pf2d4(jpi-jc  ,jj)
+            pf2d4(jpi-jh+1,jj) = pf2d4(    jc+1,jj)
+            pf2d5(    jh  ,jj) = pf2d5(jpi-jc  ,jj)
+            pf2d5(jpi-jh+1,jj) = pf2d5(    jc+1,jj)
+         END DO
+         !$acc end parallel loop
+      END DO
+      !$acc end data
+   END SUBROUTINE lbc_lnk_EW_5f2d_r8
+   !
+   SUBROUTINE lbc_lnk_NS_5f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d1, pf2d2, pf2d3, pf2d4, pf2d5
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jh, jc
+      !!----------------------------------------------------------------------
+      !$acc data present(pf2d1, pf2d2, pf2d3, pf2d4, pf2d5)
+      !$acc loop seq
+      DO jh = 1, nn_hls
+         jc = 2*nn_hls - jh
+         !$acc parallel loop
+         DO ji = 1, jpi
+            pf2d1(ji,    jh  ) = pf2d1(ji,jpj-jc  )
+            pf2d1(ji,jpj-jh+1) = pf2d1(ji,    jc+1)
+            pf2d2(ji,    jh  ) = pf2d2(ji,jpj-jc  )
+            pf2d2(ji,jpj-jh+1) = pf2d2(ji,    jc+1)
+            pf2d3(ji,    jh  ) = pf2d3(ji,jpj-jc  )
+            pf2d3(ji,jpj-jh+1) = pf2d3(ji,    jc+1)
+            pf2d4(ji,    jh  ) = pf2d4(ji,jpj-jc  )
+            pf2d4(ji,jpj-jh+1) = pf2d4(ji,    jc+1)
+            pf2d5(ji,    jh  ) = pf2d5(ji,jpj-jc  )
+            pf2d5(ji,jpj-jh+1) = pf2d5(ji,    jc+1)
+         END DO
+         !$acc end parallel loop
+      END DO
+      !$acc end data
+   END SUBROUTINE lbc_lnk_NS_5f2d_r8
+   !!##################################################################################################
+
+
+
+
+   !!##################################################################################################
    !!            * 6 2D arrays (real 8)
    !!##################################################################################################
    SUBROUTINE lbc_lnk_6f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6 )
@@ -409,6 +488,100 @@ CONTAINS
 
 
    !!##################################################################################################
+   !!            * 9 2D arrays (real 8)
+   !!##################################################################################################
+   SUBROUTINE lbc_lnk_9f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9
+      !!----------------------------------------------------------------------
+      IF( l_Iperio ) CALL lbc_lnk_EW_9f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9 )
+      IF( l_Jperio ) CALL lbc_lnk_NS_9f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9 )
+      !!
+   END SUBROUTINE lbc_lnk_9f2d_r8
+   !
+   SUBROUTINE lbc_lnk_EW_9f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9
+      !!----------------------------------------------------------------------
+      INTEGER    :: jj, jh, jc
+      !!----------------------------------------------------------------------
+      !$acc data present(pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9)
+      !$acc loop seq
+      DO jh = 1, nn_hls
+         jc = 2*nn_hls - jh
+         !$acc parallel loop
+         DO jj = 1, jpj
+            pf2d1(    jh  ,jj) = pf2d1(jpi-jc  ,jj)
+            pf2d1(jpi-jh+1,jj) = pf2d1(    jc+1,jj)
+            pf2d2(    jh  ,jj) = pf2d2(jpi-jc  ,jj)
+            pf2d2(jpi-jh+1,jj) = pf2d2(    jc+1,jj)
+            pf2d3(    jh  ,jj) = pf2d3(jpi-jc  ,jj)
+            pf2d3(jpi-jh+1,jj) = pf2d3(    jc+1,jj)
+            pf2d4(    jh  ,jj) = pf2d4(jpi-jc  ,jj)
+            pf2d4(jpi-jh+1,jj) = pf2d4(    jc+1,jj)
+            pf2d5(    jh  ,jj) = pf2d5(jpi-jc  ,jj)
+            pf2d5(jpi-jh+1,jj) = pf2d5(    jc+1,jj)
+            pf2d6(    jh  ,jj) = pf2d6(jpi-jc  ,jj)
+            pf2d6(jpi-jh+1,jj) = pf2d6(    jc+1,jj)
+            pf2d7(    jh  ,jj) = pf2d7(jpi-jc  ,jj)
+            pf2d7(jpi-jh+1,jj) = pf2d7(    jc+1,jj)
+            pf2d8(    jh  ,jj) = pf2d8(jpi-jc  ,jj)
+            pf2d8(jpi-jh+1,jj) = pf2d8(    jc+1,jj)
+            pf2d9(    jh  ,jj) = pf2d9(jpi-jc  ,jj)
+            pf2d9(jpi-jh+1,jj) = pf2d9(    jc+1,jj)
+         END DO
+         !$acc end parallel loop
+      END DO
+      !$acc end data
+   END SUBROUTINE lbc_lnk_EW_9f2d_r8
+   !
+   SUBROUTINE lbc_lnk_NS_9f2d_r8( cdname, pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jh, jc
+      !!----------------------------------------------------------------------
+      !$acc data present(pf2d1, pf2d2, pf2d3, pf2d4, pf2d5, pf2d6, pf2d7, pf2d8, pf2d9)
+      !$acc loop seq
+      DO jh = 1, nn_hls
+         jc = 2*nn_hls - jh
+         !$acc parallel loop
+         DO ji = 1, jpi
+            pf2d1(ji,    jh  ) = pf2d1(ji,jpj-jc  )
+            pf2d1(ji,jpj-jh+1) = pf2d1(ji,    jc+1)
+            pf2d2(ji,    jh  ) = pf2d2(ji,jpj-jc  )
+            pf2d2(ji,jpj-jh+1) = pf2d2(ji,    jc+1)
+            pf2d3(ji,    jh  ) = pf2d3(ji,jpj-jc  )
+            pf2d3(ji,jpj-jh+1) = pf2d3(ji,    jc+1)
+            pf2d4(ji,    jh  ) = pf2d4(ji,jpj-jc  )
+            pf2d4(ji,jpj-jh+1) = pf2d4(ji,    jc+1)
+            pf2d5(ji,    jh  ) = pf2d5(ji,jpj-jc  )
+            pf2d5(ji,jpj-jh+1) = pf2d5(ji,    jc+1)
+            pf2d6(ji,    jh  ) = pf2d6(ji,jpj-jc  )
+            pf2d6(ji,jpj-jh+1) = pf2d6(ji,    jc+1)
+            pf2d7(ji,    jh  ) = pf2d7(ji,jpj-jc  )
+            pf2d7(ji,jpj-jh+1) = pf2d7(ji,    jc+1)
+            pf2d8(ji,    jh  ) = pf2d8(ji,jpj-jc  )
+            pf2d8(ji,jpj-jh+1) = pf2d8(ji,    jc+1)
+            pf2d9(ji,    jh  ) = pf2d9(ji,jpj-jc  )
+            pf2d9(ji,jpj-jh+1) = pf2d9(ji,    jc+1)
+         END DO
+         !$acc end parallel loop
+      END DO
+      !$acc end data
+   END SUBROUTINE lbc_lnk_NS_9f2d_r8
+   !!##################################################################################################
+
+
+
+
+   !!##################################################################################################
    !!            * 1 3D array (3rd dim len 4) (real 8)
    !!##################################################################################################
    SUBROUTINE lbc_lnk_1f3d4_r8( cdname, pv4 )
@@ -485,26 +658,26 @@ CONTAINS
    !!##################################################################################################
    !!            * 2 3D arrays (3rd dim len 3) (real 8)
    !!##################################################################################################
-   SUBROUTINE lbc_lnk_2f3d3_r8( cdname, pSt, psf )
+   SUBROUTINE lbc_lnk_2f3d3_r8( cdname, pSt, pSf )
       !!---------------------------------------------------------------------
       !!----------------------------------------------------------------------
       CHARACTER(len=*)     ,          INTENT(in   ) :: cdname    ! name of the calling subroutine
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pSt, psf
+      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pSt, pSf
       !!----------------------------------------------------------------------
-      IF( l_Iperio ) CALL lbc_lnk_EW_2f3d3_r8( cdname, pSt, psf )
+      IF( l_Iperio ) CALL lbc_lnk_EW_2f3d3_r8( cdname, pSt, pSf )
       IF( l_Jperio ) CALL lbc_lnk_NS_2f3d3_r8( cdname, pSt, pSf )
       !!
    END SUBROUTINE lbc_lnk_2f3d3_r8
    !
-   SUBROUTINE lbc_lnk_EW_2f3d3_r8( cdname, pSt, psf )
+   SUBROUTINE lbc_lnk_EW_2f3d3_r8( cdname, pSt, pSf )
       !!---------------------------------------------------------------------
       !!----------------------------------------------------------------------
       CHARACTER(len=*)     ,          INTENT(in   ) :: cdname    ! name of the calling subroutine
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pSt, psf
+      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pSt, pSf
       !!----------------------------------------------------------------------
       INTEGER  :: jj, jk, jh, jc
       !!----------------------------------------------------------------------
-      !$acc data present(pSt, psf)
+      !$acc data present(pSt, pSf)
       !$acc loop seq
       DO jh = 1, nn_hls
          jc = 2*nn_hls - jh
@@ -513,8 +686,8 @@ CONTAINS
             DO jj = 1, jpj
                pSt(    jh  ,jj,jk) = pSt(jpi-jc  ,jj,jk)
                pSt(jpi-jh+1,jj,jk) = pSt(    jc+1,jj,jk)
-               psf(    jh  ,jj,jk) = psf(jpi-jc  ,jj,jk)
-               psf(jpi-jh+1,jj,jk) = psf(    jc+1,jj,jk)
+               pSf(    jh  ,jj,jk) = pSf(jpi-jc  ,jj,jk)
+               pSf(jpi-jh+1,jj,jk) = pSf(    jc+1,jj,jk)
             END DO
          END DO
          !$acc end parallel loop
@@ -635,10 +808,480 @@ CONTAINS
 
 
 
+   !!##################################################################################################
+   !!            * 9 3D arrays (3rd dim len `jpl`) (real 8)
+   !!##################################################################################################
+   SUBROUTINE lbc_lnk_9f3dc_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,            INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9
+      !!----------------------------------------------------------------------
+      IF( l_Iperio ) CALL lbc_lnk_EW_9f3dc_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9 )
+      IF( l_Jperio ) CALL lbc_lnk_NS_9f3dc_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9 )
+      !!
+   END SUBROUTINE lbc_lnk_9f3dc_r8
+   !
+   SUBROUTINE lbc_lnk_EW_9f3dc_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,            INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9
+      !!----------------------------------------------------------------------
+      INTEGER  :: jj, jk, jh, jc
+      !!----------------------------------------------------------------------
+      !$acc data present(pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9)
+      !$acc loop seq
+      DO jh = 1, nn_hls
+         jc = 2*nn_hls - jh
+         !$acc parallel loop collapse(2)
+         DO jk = 1, jpl
+            DO jj = 1, jpj
+               pf1(    jh  ,jj,jk) = pf1(jpi-jc  ,jj,jk)
+               pf1(jpi-jh+1,jj,jk) = pf1(    jc+1,jj,jk)
+               pf2(    jh  ,jj,jk) = pf2(jpi-jc  ,jj,jk)
+               pf2(jpi-jh+1,jj,jk) = pf2(    jc+1,jj,jk)
+               pf3(    jh  ,jj,jk) = pf3(jpi-jc  ,jj,jk)
+               pf3(jpi-jh+1,jj,jk) = pf3(    jc+1,jj,jk)
+               pf4(    jh  ,jj,jk) = pf4(jpi-jc  ,jj,jk)
+               pf4(jpi-jh+1,jj,jk) = pf4(    jc+1,jj,jk)
+               pf5(    jh  ,jj,jk) = pf5(jpi-jc  ,jj,jk)
+               pf5(jpi-jh+1,jj,jk) = pf5(    jc+1,jj,jk)
+               pf6(    jh  ,jj,jk) = pf6(jpi-jc  ,jj,jk)
+               pf6(jpi-jh+1,jj,jk) = pf6(    jc+1,jj,jk)
+               pf7(    jh  ,jj,jk) = pf7(jpi-jc  ,jj,jk)
+               pf7(jpi-jh+1,jj,jk) = pf7(    jc+1,jj,jk)
+               pf8(    jh  ,jj,jk) = pf8(jpi-jc  ,jj,jk)
+               pf8(jpi-jh+1,jj,jk) = pf8(    jc+1,jj,jk)
+               pf9(    jh  ,jj,jk) = pf9(jpi-jc  ,jj,jk)
+               pf9(jpi-jh+1,jj,jk) = pf9(    jc+1,jj,jk)
+            END DO
+         END DO
+         !$acc end parallel loop
+      END DO
+      !$acc end data
+   END SUBROUTINE lbc_lnk_EW_9f3dc_r8
+   !
+   SUBROUTINE lbc_lnk_NS_9f3dc_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9 )
+      !!---------------------------------------------------------------------
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,            INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jk, jh, jc
+      !!----------------------------------------------------------------------
+      !$acc data present(pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8, pf9)
+      !$acc loop seq
+      DO jh = 1, nn_hls
+         jc = 2*nn_hls - jh
+         !$acc parallel loop collapse(2)
+         DO jk = 1, jpl
+            DO ji = 1, jpi
+               pf1(ji,    jh  ,jk) = pf1(ji,jpj-jc  ,jk)
+               pf1(ji,jpj-jh+1,jk) = pf1(ji,    jc+1,jk)
+               pf2(ji,    jh  ,jk) = pf2(ji,jpj-jc  ,jk)
+               pf2(ji,jpj-jh+1,jk) = pf2(ji,    jc+1,jk)
+               pf3(ji,    jh  ,jk) = pf3(ji,jpj-jc  ,jk)
+               pf3(ji,jpj-jh+1,jk) = pf3(ji,    jc+1,jk)
+               pf4(ji,    jh  ,jk) = pf4(ji,jpj-jc  ,jk)
+               pf4(ji,jpj-jh+1,jk) = pf4(ji,    jc+1,jk)
+               pf5(ji,    jh  ,jk) = pf5(ji,jpj-jc  ,jk)
+               pf5(ji,jpj-jh+1,jk) = pf5(ji,    jc+1,jk)
+               pf6(ji,    jh  ,jk) = pf6(ji,jpj-jc  ,jk)
+               pf6(ji,jpj-jh+1,jk) = pf6(ji,    jc+1,jk)
+               pf7(ji,    jh  ,jk) = pf7(ji,jpj-jc  ,jk)
+               pf7(ji,jpj-jh+1,jk) = pf7(ji,    jc+1,jk)
+               pf8(ji,    jh  ,jk) = pf8(ji,jpj-jc  ,jk)
+               pf8(ji,jpj-jh+1,jk) = pf8(ji,    jc+1,jk)
+               pf9(ji,    jh  ,jk) = pf9(ji,jpj-jc  ,jk)
+               pf9(ji,jpj-jh+1,jk) = pf9(ji,    jc+1,jk)
+            END DO
+         END DO
+         !$acc end parallel loop
+      END DO
+      !$acc end data
+   END SUBROUTINE lbc_lnk_NS_9f3dc_r8
+   !!##################################################################################################
 
 
 
 
+
+   SUBROUTINE fill_halo_0_1f2d_r8( cdname, pf2d )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf2d
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf2d(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf2d(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf2d(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf2d(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_1f2d_r8
+   !
+   SUBROUTINE fill_halo_0_2f2d_r8( cdname, pf1, pf2 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_2f2d_r8
+   !
+   SUBROUTINE fill_halo_0_3f2d_r8( cdname, pf1, pf2, pf3 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2, pf3
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_3f2d_r8
+   !
+   SUBROUTINE fill_halo_0_4f2d_r8( cdname, pf1, pf2, pf3, pf4 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2, pf3, pf4
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_4f2d_r8
+   !
+   SUBROUTINE fill_halo_0_5f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_5f2d_r8
+   !
+   SUBROUTINE fill_halo_0_6f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5, pf6
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_6f2d_r8
+   !
+   SUBROUTINE fill_halo_0_7f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5, pf6, pf7
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_7f2d_r8
+   !
+   SUBROUTINE fill_halo_0_8f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8 )
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*)     ,        INTENT(in   ) :: cdname    ! name of the calling subroutine
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8
+      !!----------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      !!----------------------------------------------------------------------
+      !$acc parallel loop
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !$acc loop seq
+         DO ji=1, Nis0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+            pf8(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO ji=Nis0+1, Nis0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+            pf8(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc parallel loop
+      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !$acc loop seq
+         DO jj=1, Njs0-1
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+            pf8(ji,jj) = 0._wp
+         END DO
+         !$acc loop seq
+         DO jj=Njs0+1, Njs0+nn_hls
+            pf1(ji,jj) = 0._wp
+            pf2(ji,jj) = 0._wp
+            pf3(ji,jj) = 0._wp
+            pf4(ji,jj) = 0._wp
+            pf5(ji,jj) = 0._wp
+            pf6(ji,jj) = 0._wp
+            pf7(ji,jj) = 0._wp
+            pf8(ji,jj) = 0._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+   END SUBROUTINE fill_halo_0_8f2d_r8
 
 
 

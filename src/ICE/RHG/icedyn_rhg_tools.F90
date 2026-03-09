@@ -526,14 +526,14 @@ CONTAINS
       !!       condition the slip/no-slip conditions
       !!       (important for shear strain: `pe12`, `pdudy`, `pdvdx` and `pmshr` !)
       !!----------------------------------------------------------------------------------------------------------
-      CHARACTER(len=1),                   INTENT(in)  :: cgt              ! grid point type: 'T' or 'F'
-      REAL(wp), DIMENSION(:,:),           INTENT(in)  :: pU, pV, pUd, pVd ! u,v of T-point, u,v of F-point                    [m/s]
-      REAL(wp), DIMENSION(:,:),           INTENT(in)  :: p1_e1e2          ! T-grid: 1/(e1t*e2t) | F-grid: 1/(e1f*e2f)         [1/m^2]
-      REAL(wp), DIMENSION(:,:),           INTENT(in)  :: pe2X, pe1Y       ! T-grid: e2u,e1v | F-grid: e2v,e1u                 [m]
-      REAL(wp), DIMENSION(:,:),           INTENT(in)  :: p1_e2X, p1_e1Y   ! T-grid: 1/e2u,1/e1v | F-grid: 1/e2v,1/e1u         [1/m]
-      REAL(wp), DIMENSION(:,:),           INTENT(in)  :: pe1e1, pe2e2     ! T-grid: e1t*e1t,e2t*e2t | F-grid: e1f*e1f,e2f*e2f [m^2]
-      REAL(wp), DIMENSION(:,:),           INTENT(in)  :: pmask            ! 2D land-sea mask for given points...
-      REAL(wp), DIMENSION(:,:),           INTENT(out) :: pdiv, pmshr, pdelta  ! @ `cgt` points                [1/s]
+      CHARACTER(len=1),             INTENT(in)  :: cgt              ! grid point type: 'T' or 'F'
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pU, pV, pUd, pVd ! u,v of T-point, u,v of F-point                    [m/s]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: p1_e1e2          ! T-grid: 1/(e1t*e2t) | F-grid: 1/(e1f*e2f)         [1/m^2]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pe2X, pe1Y       ! T-grid: e2u,e1v | F-grid: e2v,e1u                 [m]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: p1_e2X, p1_e1Y   ! T-grid: 1/e2u,1/e1v | F-grid: 1/e2v,1/e1u         [1/m]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pe1e1, pe2e2     ! T-grid: e1t*e1t,e2t*e2t | F-grid: e1f*e1f,e2f*e2f [m^2]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pmask            ! 2D land-sea mask for given points...
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pdiv, pmshr, pdelta  ! @ `cgt` points                [1/s]
       !!----------------------------------------------------------------------------------------------------------
       REAL(wp) :: zE1, zE2, zS1, zS2, zSHR, zdlt, z1_e1e2, zzf, ze2e2, ze1e1, zmask, zsw, z1_ecc2
       INTEGER  :: kq, ip, im, jp, jm, ji, jj, k1, k2
@@ -565,8 +565,8 @@ CONTAINS
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
-            pdiv(ji,jj) = 0._wp
-            pmshr(ji,jj) = 0._wp
+            pdiv(ji,jj)   = 0._wp
+            pmshr(ji,jj)  = 0._wp
             pdelta(ji,jj) = 0._wp
          END DO
       END DO

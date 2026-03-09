@@ -91,11 +91,6 @@ MODULE sbc_oce
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:)   ::   e3t_abl, e3w_abl          !: ABL vertical scale factors (needed for iom)
 
    !!----------------------------------------------------------------------
-   !!                     Sea Surface Mean fields
-   !!----------------------------------------------------------------------
-   INTEGER , PUBLIC                     ::   nn_fsbc   !: frequency of sbc computation (as well as sea-ice model)
-
-   !!----------------------------------------------------------------------
    !!                     Surface atmospheric fields
    !!----------------------------------------------------------------------
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: fatm_theta, fatm_q, fatm_slp, fatm_wnd, fatm_u, fatm_v

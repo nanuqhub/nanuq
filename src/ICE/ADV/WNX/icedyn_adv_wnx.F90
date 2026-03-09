@@ -178,8 +178,10 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-# if ! defined _OPENACC
-      CALL lbc_lnk( crtnm, pato_i,cgt,1._wp )
+# if defined _OPENACC
+      CALL lbc_lnk_gpu( crtnm,  pato_i )
+# else
+      CALL lbc_lnk(     crtnm, pato_i,cgt,1._wp )
 # endif
 
       !IF( ln_icediachk ) THEN

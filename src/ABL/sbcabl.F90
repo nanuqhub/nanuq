@@ -29,15 +29,12 @@ MODULE sbcabl
    USE iom            ! I/O manager library
    USE in_out_manager ! I/O manager
    USE lib_mpp        ! distribued memory computing library
-   USE lib_fortran    ! to use key_nosignedzero
    USE timing         ! Timing
    USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
    USE prtctl         ! Print control
    USE ice    , ONLY : u_ice, v_ice, tm_su, ato_i      ! ato_i = total open water fractional area
    USE sbc_ice, ONLY : wndm_ice, utau_ice, vtau_ice
-#if ! defined key_xios
-   USE diawri    , ONLY : dia_wri_alloc_abl
-#endif
+
    IMPLICIT NONE
    PRIVATE
 
@@ -46,10 +43,9 @@ MODULE sbcabl
 
    !! * Substitutions
 #  include "read_nml_substitute.h90"
-
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: sbcabl.F90 6416 2016-04-01 12:22:17Z clem $
+   !! NANUQ 1.0, Brodeau (2026)
+   !! NEMO/ABL 5.0 , NEMO Consortium (2024)
    !! Software governed by the CeCILL licence     (NEMOGCM/NEMO_CeCILL.txt)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -74,17 +70,11 @@ CONTAINS
          &                 ln_hpgls_frc, ln_geos_winds, nn_dyn_restore,           &
          &                 rn_ldyn_min , rn_ldyn_max, rn_ltra_min, rn_ltra_max,   &
          &                 nn_amxl, rn_Cm, rn_Ct, rn_Ce, rn_Ceps, rn_Rod, rn_Ric, &
-         &                 rn_vfac, ln_smth_pblh
+         &                 ln_smth_pblh, ln_pga_abl
       !!---------------------------------------------------------------------
 
-      ! Namelist namsbc_abl in reference namelist : ABL parameters
-      READ_NML_REF(numnam,namsbc_abl)
-      !901   IF( ios /= 0 ) CALL ctl_nam ( ios , 'namsbc_abl in reference namelist' )
-      !
-      ! Namelist namsbc_abl in configuration namelist : ABL parameters
-      READ_NML_CFG(numnam,namsbc_abl)
-      !902   IF( ios /= 0 ) CALL ctl_nam ( ios , 'namsbc_abl in configuration namelist' )
-      !
+      READ_NML_REF(numnam,namsbc_abl)               ! Namelist namsbc_abl in reference namelist : ABL parameters
+      READ_NML_(numnam_cfg,cfg,namsbc_abl,.TRUE.)   ! Namelist namsbc_abl in configuration namelist : ABL parameters
       IF(lwm) WRITE( numond, namsbc_abl )
       !
       ! Check ABL mixing length option
@@ -107,12 +97,15 @@ CONTAINS
             IF(ln_geos_winds) THEN
                ln_geos_winds = .FALSE.
                WRITE(numout,*) '      ABL -- geostrophic guide disabled (not compatible with ln_hpgls_frc = .T.)'
-            END IF
+            ENDIF
+            IF( ln_pga_abl ) THEN
+               WRITE(numout,*) '      ABL -- pressure gradient anomaly forcing'
+            ENDIF
          ELSE IF( ln_geos_winds ) THEN
             WRITE(numout,*) '      ABL -- winds forced by geostrophic winds'
          ELSE
             WRITE(numout,*) '      ABL -- Geostrophic winds and large-scale pressure gradient are ignored'
-         END IF
+         ENDIF
          !
          SELECT CASE ( nn_dyn_restore )
          CASE ( 0 )
@@ -151,17 +144,13 @@ CONTAINS
       CALL iom_get( inum, jpdom_unknown, 'ghw_abl', ghw_abl(:) )
       CALL iom_close( inum )
 
-#if ! defined key_xios
-      IF( dia_wri_alloc_abl()  /= 0 ) CALL ctl_stop( 'STOP', 'abl_init : unable to allocate arrays' )
-#endif
-
       IF(lwp) THEN
          WRITE(numout,*)
          WRITE(numout,*) '    sbc_abl_init   : ABL Reference vertical grid'
          WRITE(numout,*) '    ~~~~~~~'
          WRITE(numout, "(9x,'  level ght_abl   ghw_abl   e3t_abl   e3w_abl  ')" )
          WRITE(numout, "(10x, i4, 4f9.2)" ) ( jk, ght_abl(jk), ghw_abl(jk), e3t_abl(jk), e3w_abl(jk), jk = 1, jpka )
-      END IF
+      ENDIF
 
       !!---------------------------------------------------------------------
       !! Check TKE closure parameters
@@ -187,7 +176,7 @@ CONTAINS
          WRITE(numout,*) ' Constant for TKE dissipation               = ',rn_Ceps
          WRITE(numout,*) ' Constant for TKE sfc boundary condition    = ',rn_Esfc
          WRITE(numout,*) ' Constant for mxl sfc boundary condition    = ',rn_Lsfc
-      END IF
+      ENDIF
 
       !!-------------------------------------------------------------------------------------------
       !! Compute parameters to build the vertical profile for the nudging term (used in abl_stp())
@@ -210,7 +199,7 @@ CONTAINS
       jp_pblh_max = ghw_abl(jpka-3) / jp_bmax  !<-- at least 3 grid points at the top    have value rn_ltra_max
 
       ! ABL timestep
-      rDt_abl = nn_fsbc * rn_Dt
+      rDt_abl = rn_Dt
       IF(lwp) WRITE(numout,*) ' ABL timestep = ', rDt_abl,' s'
 
       ! Check parameters for dynamics
@@ -223,14 +212,14 @@ CONTAINS
             WRITE(numout,*) ' Minimum value for ABL dynamics restoring = ',zcff
             WRITE(numout,*) ' Maximum value for ABL dynamics restoring = ',zcff1
             ! Check that restoring coefficients are between 0 and 1
-            IF( zcff1 - nn_fsbc > 0.001_wp .OR. zcff1 < 0._wp )   &
+            IF( zcff1 - 1._wp > 0.001_wp .OR. zcff1 < 0._wp )   &
                &                   CALL ctl_stop( 'abl_init : wrong value for rn_ldyn_max' )
-            IF( zcff  - nn_fsbc > 0.001_wp .OR. zcff  < 0._wp )   &
+            IF( zcff  - 1._wp > 0.001_wp .OR. zcff  < 0._wp )   &
                &                   CALL ctl_stop( 'abl_init : wrong value for rn_ldyn_min' )
             IF( zcff  > zcff1                    )   &
                &                   CALL ctl_stop( 'abl_init : rn_ldyn_max must be smaller than rn_ldyn_min' )
-         END IF
-      END IF
+         ENDIF
+      ENDIF
 
       ! Check parameters for active tracers
       zcff  = ( jp_alp3_tra * jp_bmin**3 + jp_alp2_tra * jp_bmin**2   &
@@ -241,18 +230,18 @@ CONTAINS
          WRITE(numout,*) ' Minimum value for ABL tracers restoring = ',zcff
          WRITE(numout,*) ' Maximum value for ABL tracers restoring = ',zcff1
          ! Check that restoring coefficients are between 0 and 1
-         IF( zcff1 - nn_fsbc > 0.001_wp .OR. zcff1 < 0._wp )   &
+         IF( zcff1 - 1._wp > 0.001_wp .OR. zcff1 < 0._wp )   &
             &                   CALL ctl_stop( 'abl_init : wrong value for rn_ltra_max' )
-         IF( zcff  - nn_fsbc > 0.001_wp .OR. zcff  < 0._wp )   &
+         IF( zcff  - 1._wp > 0.001_wp .OR. zcff  < 0._wp )   &
             &                   CALL ctl_stop( 'abl_init : wrong value for rn_ltra_min' )
          IF( zcff  > zcff1                    )   &
             &                   CALL ctl_stop( 'abl_init : rn_ltra_max must be smaller than rn_ltra_min' )
-      END IF
+      ENDIF
 
       !!-------------------------------------------------------------------------------------------
       !! Initialize Coriolis frequency, equatorial restoring and land/sea mask
       !!-------------------------------------------------------------------------------------------
-      fft_abl(:,:) = 2._wp * omega * SIN( rad * gphit(:,:) )
+      fft_abl(:,:) = 2._wp * omega * SIN( rad * gphit(:,:) ) !#LOLOfixme
 
       ! Equatorial restoring
       IF( nn_dyn_restore == 1 ) THEN
@@ -260,41 +249,45 @@ CONTAINS
          rest_eq(:,:) = SIN( 0.5_wp*rpi*( (fft_abl(:,:) - zcff) / zcff ) )**8
       ELSE
          rest_eq(:,:) = 1._wp
-      END IF
+      ENDIF
       ! T-mask
       msk_abl(:,:) = xmskt(:,:)
 
       !!-------------------------------------------------------------------------------------------
 
       ! initialize 2D bulk fields AND 3D abl data
+      !WRITE(numout,*) ' * LOLO in `sbc_abl_init@sbcabl.F90` ! `CALL sbc_blk_init()` !!!'
       CALL sbc_blk_init
 
       ! Initialize the time index for now time (nt_n) and after time (nt_a)
       nt_n = 1; nt_a = 2
 
+
       ! initialize ABL from data or restart
       IF( ln_rstart_abl ) THEN
          CALL abl_rst_read
       ELSE
-         CALL fld_read( nit000, nn_fsbc, sf ) ! input fields provided at the first time-step
+         CALL fld_read( nit000, sf ) ! input fields provided at the first time-step
 
-         u_abl(:,:,:,nt_n      ) = sf(jp_wndi)%fnow(:,:,:)
-         v_abl(:,:,:,nt_n      ) = sf(jp_wndj)%fnow(:,:,:)
-         tq_abl(:,:,:,nt_n,jp_ta) = sf(jp_tair)%fnow(:,:,:)
-         tq_abl(:,:,:,nt_n,jp_qa) = sf(jp_humi)%fnow(:,:,:)
+         u_abl  (:,:,:, nt_n     ) = sf(jp_wndi)%fnow(:,:,:)
+         v_abl  (:,:,:, nt_n     ) = sf(jp_wndj)%fnow(:,:,:)
+         tq_abl (:,:,:,nt_n,jp_ta) = sf(jp_tair)%fnow(:,:,:)
+         tq_abl (:,:,:,nt_n,jp_qa) = sf(jp_humi)%fnow(:,:,:)
+         tke_abl(:,:,:,nt_n      ) = tke_min
+         avm_abl(:,:,:           ) = avm_bak
+         avt_abl(:,:,:           ) = avt_bak
+         pblh   (:,:             ) = ghw_abl( 3 )  !<-- assume that the pbl contains 3 grid points
+         mxlm_abl(:,:,:          ) = mxl_min
+         mxld_abl(:,:,:          ) = mxl_min
 
-         tke_abl(:,:,:,nt_n     ) = tke_min
-         avm_abl(:,:,:          ) = avm_bak
-         avt_abl(:,:,:          ) = avt_bak
-         pblh   (:,:            ) = ghw_abl( 3 )  !<-- assume that the pbl contains 3 grid points
-         u_abl  (:,:,:,nt_a     ) = 0._wp
-         v_abl  (:,:,:,nt_a     ) = 0._wp
-         tq_abl (:,:,:,nt_a,:   ) = 0._wp
-         tke_abl(:,:,:,nt_a     ) = 0._wp
+         u_abl  (:,:,:, nt_a     ) = 0._wp
+         v_abl  (:,:,:, nt_a     ) = 0._wp
+         tq_abl (:,:,:,nt_a,jp_ta) = 0._wp
+         tq_abl (:,:,:,nt_a,jp_qa) = 0._wp
+         tke_abl(:,:,:,nt_a      ) = 0._wp
 
-         mxlm_abl(:,:,:         ) = mxl_min
-         mxld_abl(:,:,:         ) = mxl_min
       ENDIF
+
 
    END SUBROUTINE sbc_abl_init
 
@@ -311,8 +304,8 @@ CONTAINS
       !!              - Perform 1 time-step of the ABL model
       !!              - Finalize flux computation in blk_oce_2
       !!
-      !! ** Outputs : - utau    : i-component of the stress at U-point  (N/m2)
-      !!              - vtau    : j-component of the stress at V-point  (N/m2)
+      !! ** Outputs : - utau    : i-component of the stress at T-point  (N/m2)
+      !!              - vtau    : j-component of the stress at T-point  (N/m2)
       !!              - taum    : Wind stress module at T-point         (N/m2)
       !!              - wndm    : Wind speed module at T-point          (m/s)
       !!              - qsr     : Solar heat flux over the ocean        (W/m2)
@@ -322,8 +315,8 @@ CONTAINS
       !!---------------------------------------------------------------------
       INTEGER ,         INTENT(in) ::   kt   ! ocean time step
       !!
-      REAL(wp), DIMENSION(jpi,jpj) ::   zssq, zcd_du, zsen, zlat, zevp
-      REAL(wp), DIMENSION(jpi,jpj) ::   zssqi, zcd_dui, zseni, zevpi
+      REAL(wp), DIMENSION(jpi,jpj) ::   zcd_du, zsen, zlat, zevap
+      REAL(wp), DIMENSION(jpi,jpj) ::   zssqi, zcd_dui, zseni, zevapi
       INTEGER                      ::   jbak, jbak_dta, ji, jj
       !!---------------------------------------------------------------------
       !
@@ -331,60 +324,83 @@ CONTAINS
       !! 1 - Read Atmospheric 3D data for large-scale forcing
       !!-------------------------------------------------------------------------------------------
 
-      CALL fld_read( kt, nn_fsbc, sf )             ! input fields provided at the current time-step
+      CALL fld_read( kt, sf )             ! input fields provided at the current time-step
 
-      IF( MOD( kt - 1, nn_fsbc ) == 0 ) THEN
+      !! CPU STUFF:
+      fatm_slp (:,:) = sf(jp_slp )%fnow(:,:,1)
+      fatm_prcp(:,:) = sf(jp_prec)%fnow(:,:,1)
+      fatm_snow(:,:) = sf(jp_snow)%fnow(:,:,1)
+      fatm_dqsw(:,:) = sf(jp_qsr )%fnow(:,:,1)
+      fatm_dqlw(:,:) = sf(jp_qlw )%fnow(:,:,1)
+      !$acc update device( fatm_slp, fatm_prcp, fatm_snow, fatm_dqsw, fatm_dqlw )
 
-         !!-------------------------------------------------------------------------------------------
-         !! 2 - Compute Cd x ||U||, Ch x ||U||, Ce x ||U||, and SSQ using now fields
-         !!-------------------------------------------------------------------------------------------
+      IF( iom_use('snowpre') ) CALL iom_put( 'snowpre', fatm_prcp )                  ! Snow precipitation
+      IF( iom_use('precip' ) ) CALL iom_put( 'precip' , fatm_snow )                  ! Total precipitation
 
-         CALL blk_oce_1( kt,  u_abl(:,:,2,nt_n      ),  v_abl(:,:,2,nt_n      ),   &   !   <<= in
-            &                tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa),   &   !   <<= in
-            &                sf(jp_slp )%fnow(:,:,1) , sst_s, ssu_m, ssv_m     ,   &   !   <<= in
-            &                sf(jp_uoatm)%fnow(:,:,1), sf(jp_voatm)%fnow(:,:,1),   &   !   <<= in
-            &                sf(jp_qsr )%fnow(:,:,1) , sf(jp_qlw )%fnow(:,:,1) ,   &   !   <<= in
-            &                ssst, sssq, zsen, zlat, zevp, qsr, wndm, taum, utau, vtau )   !   =>> out
-            !LOLOfixme:&                ssst, zssq, zcd_du, zsen, zlat, zevp                 )   !   =>> out
 
-         STOP'FIXME blk_ice_1'
-         !CALL blk_ice_1(  u_abl(:,:,2,nt_n      ),  v_abl(:,:,2,nt_n      ),    &   !   <<= in
-         !   &            tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa),    &   !   <<= in
-         !   &            sf(jp_slp)%fnow(:,:,1)  ,  u_ice, v_ice, tm_su    ,    &   !   <<= in
-         !   &            pseni=zseni, pevpi=zevpi, pssqi=zssqi, pcd_dui=zcd_dui )   !   <<= out
+      !#LOLOfixme: Is this the proper location / required  (only for nit000)? ???
+      fatm_theta(:,:) = tq_abl(:,:,2,nt_n,jp_ta)
+      fatm_q(:,:)     = tq_abl(:,:,2,nt_n,jp_qa)
+      fatm_u(:,:)     =  u_abl(:,:,2,nt_n)
+      fatm_v(:,:)     =  v_abl(:,:,2,nt_n)
 
-         !!-------------------------------------------------------------------------------------------
-         !! 3 - Advance ABL variables from now (n) to after (n+1)
-         !!-------------------------------------------------------------------------------------------
 
-         CALL abl_stp( kt, ssst, ssu_m, ssv_m, zssq,                          &   !   <<= in
-            &              sf(jp_wndi)%fnow(:,:,:), sf(jp_wndj)%fnow(:,:,:),   &   !   <<= in
-            &              sf(jp_tair)%fnow(:,:,:), sf(jp_humi)%fnow(:,:,:),   &   !   <<= in
-            &              sf(jp_slp )%fnow(:,:,1),                            &   !   <<= in
-            &              sf(jp_hpgi)%fnow(:,:,:), sf(jp_hpgj)%fnow(:,:,:),   &   !   <<= in
-            &              zcd_du, zsen, zevp,                                 &   !   <=> in/out
-            &              zlat, wndm, utau, vtau, taum                        &   !   =>> out
-            &            , tm_su, u_ice, v_ice, zssqi, zcd_dui                 &   !   <<= in
-            &            , zseni, zevpi, wndm_ice, ato_i                       &   !   <<= in
-            &            , utau_ice, vtau_ice                                  &   !   =>> out
-            &                                                                  )
 
-         !!-------------------------------------------------------------------------------------------
-         !! 4 - Finalize flux computation using ABL variables at (n+1), nt_n corresponds to (n+1) since
-         !!                                                                time swap is done in abl_stp
-         !!-------------------------------------------------------------------------------------------
+      !!-------------------------------------------------------------------------------------------
+      !! 2 - Compute Cd x ||U||, Ch x ||U||, Ce x ||U||, and SSQ using now fields
+      !!-------------------------------------------------------------------------------------------
 
-         CALL blk_oce_2( tq_abl(:,:,2,nt_n,jp_ta), sf(jp_qlw )%fnow(:,:,1),   &
-            &            sf(jp_prec)%fnow(:,:,1) , sf(jp_snow)%fnow(:,:,1),   &
-            &            ssst, zsen, zlat, zevp                              )
+      CALL blk_oce_1( kt,  fatm_u(:,:),  fatm_v(:,:),   &   !   <<= in
+         &                fatm_theta(:,:), fatm_q(:,:),   &   !   <<= in
+         &                fatm_slp(:,:) , sst_s, ssu_m, ssv_m     ,   &   !   <<= in
+         &                fatm_dqsw(:,:) , fatm_dqlw(:,:) ,   &   !   <<= in
+         &                ssst, sssq, rhoa, wndm, zsen, zlat, zevap, pcd_du=zcd_du ) !   =>> in/out & out
 
-         CALL abl_rst_opn( kt )                       ! Open abl restart file (if necessary)
-         IF( lrst_abl ) CALL abl_rst_write( kt )      ! -- abl restart file
+      !! We have already called `blk_ice_1()` into `ice_sbc_tau()@icesbc.f90`      
+      CALL blk_ice_1( fatm_u(:,:), fatm_v(:,:), fatm_theta(:,:), fatm_q(:,:), & !   <<= in
+         &            fatm_slp(:,:), u_ice, v_ice, tm_su,                                                       & !   <<= in
+         &            pseni=zseni, pevapi=zevapi, pssqi=zssqi, pcd_dui=zcd_dui )                                  !   <<= out
 
-         ! Avoid a USE abl in icesbc module
-         fatm_theta = tq_abl(:,:,2,nt_n,jp_ta) ;   fatm_q = tq_abl(:,:,2,nt_n,jp_qa)
+      !!-------------------------------------------------------------------------------------------
+      !! 3 - Advance ABL variables from now (n) to after (n+1)
+      !!-------------------------------------------------------------------------------------------
 
-      END IF
+      CALL abl_stp( kt, ssst, ssu_m, ssv_m, sssq,                          &   !   <<= in
+         &              sf(jp_wndi)%fnow(:,:,:), sf(jp_wndj)%fnow(:,:,:),  &   !   <<= in
+         &              sf(jp_tair)%fnow(:,:,:), sf(jp_humi)%fnow(:,:,:),  &   !   <<= in
+         &              fatm_slp(:,:),                           &   !   <<= in
+         &              sf(jp_hpgi)%fnow(:,:,:), sf(jp_hpgj)%fnow(:,:,:),  &   !   <<= in
+         &              zcd_du, zsen, zevap,                               &   !   <=> in/out
+         &              zlat, wndm, utau, vtau, taum                       &   !   =>> out
+         &            , tm_su, u_ice, v_ice, zssqi, zcd_dui                &   !   <<= in
+         &            , zseni, zevapi, wndm_ice, ato_i                     &   !   <<= in
+         &            , utau_ice, vtau_ice                                 &   !   =>> out
+         &                                                                  )
+
+
+
+      !#LOLOfixme: Is this required? In other words: has the following RHS fields been updated ?
+      fatm_theta(:,:) = tq_abl(:,:,2,nt_n,jp_ta)
+      fatm_q(:,:)     = tq_abl(:,:,2,nt_n,jp_qa)
+      fatm_u(:,:)     =  u_abl(:,:,2,nt_n)
+      fatm_v(:,:)     =  v_abl(:,:,2,nt_n)
+
+
+
+      !!-------------------------------------------------------------------------------------------
+      !! 4 - Finalize flux computation using ABL variables at (n+1), nt_n corresponds to (n+1) since
+      !!                                                                time swap is done in abl_stp
+      !!-------------------------------------------------------------------------------------------
+
+      CALL blk_oce_2( fatm_theta(:,:), fatm_dqlw(:,:), fatm_prcp(:,:) , fatm_snow(:,:), &
+         &            ssst, zsen, zlat, zevap                              )
+
+      CALL abl_rst_opn( kt )                       ! Open abl restart file (if necessary)
+      IF( lrst_abl ) CALL abl_rst_write( kt )      ! -- abl restart file
+
+      ! Avoid a USE abl in icesbc module
+      !fatm_theta = fatm_theta(:,:) ;   fatm_q = tq_abl(:,:,2,nt_n,jp_qa)
+
 
    END SUBROUTINE sbc_abl
 

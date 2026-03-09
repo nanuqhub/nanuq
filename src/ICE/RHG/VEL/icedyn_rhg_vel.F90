@@ -9,7 +9,6 @@ MODULE icedyn_rhg_vel
    !!----------------------------------------------------------------------
    USE phycst         ! Physical constant
    USE dom_oce        ! Ocean domain
-   USE sbc_oce , ONLY : nn_fsbc
    USE par_ice
    USE ice            ! => taux_ai_v, tauy_ai_u are there
    USE lib_mpp,  ONLY: ctl_stop
@@ -57,7 +56,7 @@ CONTAINS
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('update_uv_euler_si')
-      !$acc data present( ff_u,ff_v,pAu,pAv,pmu_dt,pmv_dt,pSt,pSf,pgrdSH,pV_oce,putau_i,pvtau_i,pm01x,pm01y,pm00x,pm00y,pV,umask,vmask )
+      !$acc data present( ff_u,ff_v,pAu,pAv,pmu_dt,pmv_dt,pSt,pSf,pgrdSH,pV_oce,putau_i,pvtau_i,pm01x,pm01y,pm00x,pm00y,pV )
       
       IF( MOD(kts,2) == 0 ) THEN
          !$acc parallel loop collapse(2)

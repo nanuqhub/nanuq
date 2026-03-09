@@ -13,6 +13,8 @@ MODULE abl
    USE dom_oce, ONLY: rn_Dt                      ! oceanic time-step
    USE sbc_oce, ONLY: ght_abl, ghw_abl, e3t_abl, e3w_abl, jpka   ! scale factors and altitudes of ABL grid points in the vertical
 
+   USE in_out_manager, ONLY: lwp
+   
    IMPLICIT NONE
    PRIVATE
 
@@ -42,8 +44,8 @@ MODULE abl
    INTEGER , PUBLIC :: nt_n, nt_a       !: now / after indices (equal 1 or 2)
    !
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: abl.F90 4990 2014-12-15 16:42:49Z timgraham $
+   !! NANUQ 1.0, Brodeau (2026)
+   !! NEMO/ABL 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL licence
    !!----------------------------------------------------------------------
 CONTAINS
@@ -55,20 +57,19 @@ CONTAINS
       INTEGER :: ierr
       !!----------------------------------------------------------------------
       !
-      PRINT *, 'LOLO: `abl_alloc@abl.F90`: allocating ABL arrays!'
-
-      ALLOCATE( u_abl   (1:jpi,1:jpj,1:jpka,jptime     ), &
-         &      v_abl   (1:jpi,1:jpj,1:jpka,jptime     ), &
-         &      tq_abl  (1:jpi,1:jpj,1:jpka,jptime,jptq), &
-         &      tke_abl (1:jpi,1:jpj,1:jpka,jptime     ), &
-         &      avm_abl (1:jpi,1:jpj,1:jpka            ), &
-         &      avt_abl (1:jpi,1:jpj,1:jpka            ), &
-         &      mxld_abl(1:jpi,1:jpj,1:jpka            ), &
-         &      mxlm_abl(1:jpi,1:jpj,1:jpka            ), &
-         &      fft_abl (1:jpi,1:jpj                   ), &
-         &      pblh    (1:jpi,1:jpj                   ), &
-         &      msk_abl (1:jpi,1:jpj                   ), &
-         &      rest_eq (1:jpi,1:jpj                   ), &
+      IF(lwp) PRINT *, 'LOLO: `abl_alloc@abl.F90`: allocating ABL arrays!'
+      ALLOCATE( u_abl   (jpi,jpj,1:jpka,jptime     ), &
+         &      v_abl   (jpi,jpj,1:jpka,jptime     ), &
+         &      tq_abl  (jpi,jpj,1:jpka,jptime,jptq), &
+         &      tke_abl (jpi,jpj,1:jpka,jptime     ), &
+         &      avm_abl (jpi,jpj,1:jpka            ), &
+         &      avt_abl (jpi,jpj,1:jpka            ), &
+         &      mxld_abl(jpi,jpj,1:jpka            ), &
+         &      mxlm_abl(jpi,jpj,1:jpka            ), &
+         &      fft_abl (jpi,jpj                   ), &
+         &      pblh    (jpi,jpj                   ), &   ! needed for optional smoothing
+         &      msk_abl (jpi,jpj                   ), &
+         &      rest_eq (jpi,jpj                   ), &
          &      e3t_abl (1:jpka), e3w_abl(1:jpka)       , &
          &      ght_abl (1:jpka), ghw_abl(1:jpka)       , STAT=ierr )
       !
