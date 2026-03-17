@@ -17,8 +17,6 @@
       IF( ln_timing )  CALL timing_start('ice_var_agg_gpu')
       !
       !$acc data present( kmsk_ice_f,kmsk_ice_t,kmsk_ice_u,kmsk_ice_v,om_i,sm_i,st_i,t_i,tm_i,tm_s,tm_si,tm_su,v_s,vt_i,vt_s,t_s,v_i,szv_i )
-      !$acc data present( af_i,a_i,at_i,ato_i,au_i,av_i,et_i,et_s,hm_i,hm_i_f,hm_s,umask,vmask,xmskf )
-      ! --> at_ip,hm_ip,vt_ip,hm_il,vt_il
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -288,7 +286,6 @@
       END DO
       !$acc end parallel loop
 
-      !$acc end data
       !$acc end data
       IF( ln_timing )  CALL timing_stop('ice_var_agg_gpu')
       !

@@ -189,9 +189,7 @@ CONTAINS
       !!-------------------------------------------------------------------
       ! controls
       IF( ln_timing    )   CALL timing_start('icedyn_rdgrft')
-      !$acc data present( a_i,at_i,ato_i,e_i,e_s,v_i,v_s,s_i,sv_i,szv_i,divu_i,delta_i,hi_max,oa_i,hfx_dyn,sfx_bri,sfx_dyn,wfx_dyn,wfx_snw_dyn )
-      !$acc data present( sst_s, sss_s, airdg1,airdg2,airft1,airft2,apartf,opning,closing_gross,closing_net )
-      !$acc data create( ll_ridge, ll_ice_present, zdivu )
+      !$acc data present( hi_max,oa_i,hfx_dyn,sfx_bri,sfx_dyn,wfx_dyn,wfx_snw_dyn,airdg1,airdg2,airft1,airft2,apartf,opning,closing_gross,closing_net ) create( ll_ridge,ll_ice_present,zdivu )
 
       !IF( ln_icediachk )   CALL ice_cons_hsm(0, 'icedyn_rdgrft', rdiag_v, rdiag_s, rdiag_t, rdiag_fv, rdiag_fs, rdiag_ft) ! conservation
       !IF( ln_icediachk )   CALL ice_cons2D  (0, 'icedyn_rdgrft',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft) ! conservation
@@ -386,8 +384,6 @@ CONTAINS
       !IF( ln_icediachk )   CALL ice_cons_hsm(1, 'icedyn_rdgrft', rdiag_v, rdiag_s, rdiag_t, rdiag_fv, rdiag_fs, rdiag_ft) ! conservation
       !IF( ln_icediachk )   CALL ice_cons2D  (1, 'icedyn_rdgrft',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft) ! conservation
 
-      !$acc end data
-      !$acc end data
       !$acc end data
       !PRINT *, ' *** LOLO exiting `ice_dyn_rdgrft` kt =', kt ;      PRINT *, ''
       IF( ln_timing    )   CALL timing_stop ('icedyn_rdgrft')                                                             ! timing
@@ -703,8 +699,7 @@ CONTAINS
       LOGICAL ::   ll_shift         ! logical for doing calculation or not
       !!-------------------------------------------------------------------
       IF( ln_timing )  CALL timing_start('rdgrft_shift')
-      !$acc data present( papartf, paridge, paraft, phi_hrdg, phraft, phrmin, phrmax, phrexp, pclosing_gross, popning, psst, psss, ll_ice_present )
-      !$acc data  create( zsirdg, zsirft, zesrft, zeirft, zesrdg, zeirdg )
+      !$acc data present( papartf,paridge,paraft,phi_hrdg,phraft,phrmin,phrmax,phrexp,pclosing_gross,popning,psst,psss,ll_ice_present ) create( zsirdg,zsirft,zesrft,zeirft,zesrdg,zeirdg )
 
       !$acc parallel loop collapse(2) private( zsirdg, zsirft, zesrft, zeirft, zesrdg, zeirdg )
       DO jj=Njs0, Nje0
@@ -988,7 +983,6 @@ CONTAINS
       !CALL ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i, a_ip, v_ip, v_il, e_s, e_i, szv_i, ll_ice_present)
       CALL  ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i,                   e_s, e_i, szv_i, ll_ice_present)
 
-      !$acc end data
       !$acc end data
       IF( ln_timing )  CALL timing_stop('rdgrft_shift')
       !

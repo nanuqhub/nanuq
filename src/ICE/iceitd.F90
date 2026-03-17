@@ -82,8 +82,7 @@ CONTAINS
       !
       !!------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('iceitd_rem')
-      !$acc data present( a_i, a_i_b, e_i, e_s, h_i, h_i_b, oa_i, sv_i, szv_i, t_su, v_i, v_s, hi_max, hi_mean )
-      !$acc data create( jdonor, zdhice, zg0, zg1, zhL, zhR, zdaice, zdvice, zhbnew, zaTsfn )
+      !$acc data present( a_i,a_i_b,e_i,e_s,h_i,h_i_b,oa_i,sv_i,szv_i,t_su,v_i,v_s,hi_max,hi_mean ) create( jdonor,zdhice,zg0,zg1,zhL,zhR,zdaice,zdvice,zhbnew,zaTsfn )
 
       IF( kt == nit000 .AND. lwp )   WRITE(numout,*) '-- ice_itd_rem: remapping ice thickness distribution'
 
@@ -98,7 +97,7 @@ CONTAINS
             DO jl = 0, jpl
                zhbnew(jl) = 0._wp  !LOLO !!! Initialize it with zeros!
             END DO
-            
+
             !-----------------------------------------------------------------------------------------------
             !  1) Identify grid cells with ice
             !-----------------------------------------------------------------------------------------------
@@ -450,7 +449,6 @@ CONTAINS
       !IF( ln_icediachk )   CALL ice_cons2D  (1, 'iceitd_rem',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft)
       !
       !$acc end data
-      !$acc end data
       IF( ln_timing    )   CALL timing_stop ('iceitd_rem')
       !
    END SUBROUTINE ice_itd_rem
@@ -482,7 +480,6 @@ CONTAINS
       z1_3 = 1._wp / 3._wp
       z2_3 = 2._wp / 3._wp
       !
-      !%acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
          DO ji=Nis0-1, Nie0+1
             !
@@ -527,7 +524,6 @@ CONTAINS
             ENDIF ! iptidx
          END DO
       END DO
-      !%acc end parallel loop
       !
    END SUBROUTINE itd_glinear
 
@@ -540,7 +536,7 @@ CONTAINS
       !! ** Method  :   g(h) is linear and written as: g(eta) = zg1(eta) + zg0
       !!                with eta = h - HL
       !!------------------------------------------------------------------
-      !%acc routine
+      !$acc routine
       !!------------------------------------------------------------------
       REAL(wp), INTENT(in   ) ::   pHbL, pHbR      ! left and right category boundaries
       REAL(wp), INTENT(in   ) ::   phice, paice  ! ice thickness and concentration

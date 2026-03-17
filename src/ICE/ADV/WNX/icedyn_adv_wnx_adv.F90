@@ -66,6 +66,16 @@ CONTAINS
    SUBROUTINE wenoX_rk3( kt, cgt, pdt, pe1e2, p1_e1e2, pu, pv, pmlbc,  pf,  psf,  lSmesh )
       !!----------------------------------------------------------------------
       !! Time discretization operator for WENOX
+      !!
+      !! Here, the RK3 scheme expects the tracer to be at time level 'k'
+      !! and the sea-ice velocity to be at time level 'k+1/2'
+      !!
+      !!  => this is therefore the case only when using a brittle rheology (BBM)
+      !!     because, by essence, `u_ice` is estimated at time level 'k+1/2' in BBM !!!
+      !!
+      !! This is valid because the velocity is time-centered over the step from k to k+1
+      !! and can threfore remain the same during the 3 stages of RK3 !
+      !!
       !! Strong Stability Preserving RK3 (Jiang & Shu, 1996)
       !!----------------------------------------------------------------------
       INTEGER,                      INTENT(in) :: kt
@@ -115,7 +125,7 @@ CONTAINS
          !$acc end parallel loop
       ENDIF
 
-      ! # 1
+      ! Stage #1
       CALL wnx_spc_op( cgt, p1_e1e2, pu, pv, pmlbc, pf, zoper )
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -125,7 +135,7 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-      ! # 2
+      ! Stage #2
       CALL wnx_spc_op( cgt, p1_e1e2, pu, pv, pmlbc, ztrk1, zoper )
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -135,7 +145,7 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-      ! # 3 !
+      ! Stage #3
       CALL wnx_spc_op( cgt, p1_e1e2, pu, pv, pmlbc, ztrk2, zoper )
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
