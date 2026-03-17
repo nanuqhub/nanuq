@@ -95,7 +95,7 @@ CONTAINS
       !! Surface Boundary Condition for the liquid ocean:
       CALL sbc( kstp )
       ! Arrays that have been update by `sbc()` have been put on the GPU, namely:
-      ! *** emp, qsr, qns, qns_oce, qsr_oce, fatm_prcp, fatm_snow, wndm, utau, vtau, taum, rhoa ***
+      ! *** emp, qsr, qns, qns_oce, qsr_oce, sf(:)%now(:,:,:), wndm, utau, vtau, taum, rhoa ***
       !!    => not `sfx` & `fmmflx` because they are given a value in ICE model...
       !!    => not `theta_zu` & `q_zu` I guess..
       !ENDIF

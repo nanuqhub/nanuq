@@ -139,8 +139,7 @@ CONTAINS
       REAL(wp) ::   zcnd_i            ! mean sea ice thermal conductivity
       REAL(wp) ::   z1_hi_ssl, zt_su, zA, zdum, zsum_i, zsum_s
       !!------------------------------------------------------------------
-      !$acc data present( cnd_ice,dqns_ice,hfx_dif,hfx_err_dif,h_i,h_s,ll_ice_present,qcn_ice,qcn_ice_bot,qcn_ice_top,qns_ice,qsr_ice,qtr_ice_bot,qtr_ice_top,sz_i,t1_ice )
-      !$acc data create( zradtr_s,zradab_s,zradtr_i,zradab_i,ztcond_i,ztcond_i_cp,ztiold,ztsold,zkappa_i,zeta_i,zkappa_s,zeta_s,ztib,ztsb,zindterm,zindtbis,zdiagbis,ztrid )
+      !$acc data present( cnd_ice,dqns_ice,hfx_dif,hfx_err_dif,h_i,h_s,ll_ice_present,qcn_ice,qcn_ice_bot,qcn_ice_top,qns_ice,qsr_ice,qtr_ice_bot,qtr_ice_top,sz_i,t1_ice ) create( zradtr_s,zradab_s,zradtr_i,zradab_i,ztcond_i,ztcond_i_cp,ztiold,ztsold,zkappa_i,zeta_i,zkappa_s,zeta_s,ztib,ztsb,zindterm,zindtbis,zdiagbis,ztrid )
 
       IF( ln_virtual_itd ) THEN
          zepsilon = 0.1_wp
@@ -418,10 +417,6 @@ CONTAINS
                      t_i(ji,jj,jk,jl_cat) = MIN( t_i(ji,jj,jk,jl_cat), ztmelts + rt0 ) ! Force t_i_1d to be lower than melting point => likely conservation issue
                      !   (sometimes zdf scheme produces abnormally high temperatures)
                      zdum = t_i(ji,jj,jk,jl_cat) - rt0
-                     IF( zdum==0._wp) THEN
-                        PRINT *, 'LOLO: `zdum==0` !!! `icethd_zdf_bl99.F90`'
-                        STOP
-                     ENDIF
                      e_i(ji,jj,jk,jl_cat) = rhoi*( rcpi*( ztmelts - ( zdum ) ) + rLfus*( 1._wp - ztmelts /  zdum  ) - rcp*ztmelts )
                   END DO
                   !$acc loop seq
@@ -486,10 +481,6 @@ CONTAINS
                IF( h_s(ji,jj,jl_cat) >= zhs_ssl ) THEN
                   zdum   = h_i(ji,jj,jl_cat) * r1_nlay_i
                   zsum_s = ztcond_i(1) * h_s(ji,jj,jl_cat) * r1_nlay_s
-                  IF( (rcnd_s*zdum + zsum_s)==0._wp) THEN
-                     PRINT *, 'LOLO: `(rcnd_s*zdum + zsum_s)==0` !!! `icethd_zdf_bl99.F90`'
-                     STOP
-                  ENDIF
                   t_si(ji,jj,jl_cat) = ( rcnd_s*zdum*t_s(ji,jj,nlay_s,jl_cat) + zsum_s*t_i(ji,jj,1,jl_cat) ) / ( rcnd_s*zdum + zsum_s )
                ELSE
                   t_si(ji,jj,jl_cat) = zt_su
@@ -503,7 +494,6 @@ CONTAINS
       END DO !DO jj=Njs0, Nje0
       !$acc end parallel loop
 
-      !$acc end data
       !$acc end data
    END SUBROUTINE ice_thd_zdf_BL99
 

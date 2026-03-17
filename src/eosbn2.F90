@@ -86,6 +86,7 @@ MODULE eosbn2
    ! Parameters
    LOGICAL , PUBLIC    ::   l_useCT         ! =T in ln_TEOS10=T (i.e. use eos_pt_from_ct to compute sst_m), =F otherwise
    INTEGER , PUBLIC    ::   neos            ! Identifier for equation of state used
+   !$acc declare create(neos)
 
    INTEGER , PARAMETER ::   np_teos10 = -1  ! parameter for using TEOS10
    INTEGER , PARAMETER ::   np_eos80  =  0  ! parameter for using EOS80
@@ -493,8 +494,7 @@ CONTAINS
          ENDDO
          !
       CASE DEFAULT
-         WRITE(ctmp1,*) '          bad flag value for neos = ', neos
-         CALL ctl_stop( 'rab_2d:', ctmp1 )
+         CALL ctl_stop( 'rab_2d:', 'bad flag value for `neos`' )
          !
       END SELECT
       !
@@ -593,8 +593,7 @@ CONTAINS
          pab(jp_sal) = zn * r1_rho0   ! beta
          !
       CASE DEFAULT
-         WRITE(ctmp1,*) '          bad flag value for neos = ', neos
-         CALL ctl_stop( 'rab_0d:', ctmp1 )
+         CALL ctl_stop( 'rab_0d:', 'bad flag value for `neos`' )
          !
       END SELECT
       !
@@ -716,8 +715,7 @@ CONTAINS
          IF( PRESENT( pdep ) )   ptf(:,:) = ptf(:,:) - 7.53e-4 * pdep(:,:)
          !
       CASE DEFAULT
-         WRITE(ctmp1,*) '          bad flag value for neos = ', neos
-         CALL ctl_stop( 'eos_fzp_2d:', ctmp1 )
+         CALL ctl_stop( 'eos_fzp_2d:', 'bad flag value for `neos`' )
          !
       END SELECT
       !
@@ -760,11 +758,6 @@ CONTAINS
          ptf = ( - 0.0575_wp + 1.710523e-3_wp * SQRT( psal )   &
             &                - 2.154996e-4_wp *       psal   ) * psal
          !
-         !IF( PRESENT( pdep ) )   ptf = ptf - 7.53e-4 * pdep
-         !
-      CASE DEFAULT
-         WRITE(ctmp1,*) '          bad flag value for neos = ', neos
-         CALL ctl_stop( 'eos_fzp_0d:', ctmp1 )
          !
       END SELECT
       !
@@ -906,8 +899,7 @@ CONTAINS
          !$acc end parallel loop
          !
       CASE DEFAULT
-         WRITE(ctmp1,*) '          bad flag value for neos = ', neos
-         CALL ctl_stop( 'eos_fzp_2d_gpu:', ctmp1 )
+         CALL ctl_stop( 'eos_fzp_2d_gpu:', 'bad flag value for `neos`' )
          !
       END SELECT
       !$acc end data
@@ -963,6 +955,7 @@ CONTAINS
          ioptio = ioptio+1
          neos = np_seos
       ENDIF
+      !$acc update device( neos )
       IF( ioptio /= 1 )   CALL ctl_stop("Exactly one equation of state option must be selected")
       !
       SELECT CASE( neos )         ! check option
@@ -1371,8 +1364,7 @@ CONTAINS
          l_useCT = .TRUE.          ! Use conservative temperature
          !
       CASE DEFAULT                     !==  ERROR in neos  ==!
-         WRITE(ctmp1,*) '          bad flag value for neos = ', neos, '. You should never see this error'
-         CALL ctl_stop( ctmp1 )
+         CALL ctl_stop( 'bad flag value for `neos`' )
          !
       END SELECT
       !

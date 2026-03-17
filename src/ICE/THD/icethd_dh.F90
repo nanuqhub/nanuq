@@ -595,6 +595,8 @@ CONTAINS
             !
          END DO !DO ji=Nis0, Nie0
       END DO !DO jj=Njs0, Nje0
+      !$acc end parallel loop
+      !
       !                       ! ================== !
       !                       ! End main loop here !
       !                       ! ================== !
