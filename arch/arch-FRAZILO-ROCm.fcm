@@ -1,0 +1,52 @@
+##############################################################
+# FRAZILO (Mac Pro / Debian 13) / AMD's ROCm 7.2 / OpenMPI 5 #
+##############################################################
+
+%NCDF_HOME           /opt/hdf5_netcdf4_rocm_ompi5
+%HDF5_HOME           /opt/hdf5_netcdf4_rocm_ompi5
+%XIOS_HOME           /opt/xios2-trunk_rocm_ompi5
+%OASIS_HOME 
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+%XIOS_INC            -I%XIOS_HOME/inc 
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+%FC                  mpifort
+
+%BASE_FFLAGS         -fdefault-real-8 -finit-global-zero
+
+%PROD_FFLAGS         -O3
+
+#%DEV_FFLAGS          -O1 -check all -warn all -debug extended -C -g -traceback -ftrapuv -fpe0
+%DEV_FFLAGS          -O1 -g -traceback -CB -fpe0  -ftrapuv
+
+
+# Production on CPU:
+# ~~~~~~~~~~~~~~~~~~
+%FPPFLAGS            -P  -traditional
+%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
+
+# Debug on CPU:
+# ~~~~~~~~~~~~~
+##%FPPFLAGS            -P  -traditional -D_TRDBG
+#%FPPFLAGS            -P  -traditional -D_ABLDBG
+#%FPPFLAGS            -P  -traditional
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS
+
+%CPP	             cpp
+
+%LD                  mpifort
+
+%LDFLAGS             -lstdc++
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  mpicc
+%CFLAGS              -O3
