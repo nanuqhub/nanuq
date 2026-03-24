@@ -10,27 +10,23 @@
                   zVo   = V_oce(ji,jj,4) ! V oce @ u-points
                   zM_dt = zmU_dt(ji,jj)  ! M/dt
                   !
-                  ztau_ai = 0.5_wp*( utau_ice(ji,jj) + utau_ice(ji+1,jj) )* (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
+                  ztau_ai = 0.5_wp*( utau_ice(ji,jj) + utau_ice(ji+1,jj) ) * (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
                   ztau_ai = zA * ztau_ai
                   !
                   !                 !--- tau_io/(u_oce - u_ice)
                   zt1 = zUi - zUo
                   zt2 = zVi - zVo
-                  zTauO = zA * zrhoco * SQRT( zt1*zt1 + zt2*zt2 )
-                  !
-                  !                 !--- Ocean-to-Ice stress
-                  ztaux_oi = zTauO * ( zUo - zUi )
+                  zTauO = zA * zrhoco * SQRT( zt1*zt1 + zt2*zt2 )    ! this is actually: `Tau_x/(u_oce - u_ice)`
                   !
                   !                 !--- Coriolis at U-points
-                  zcorio =  ff_u(ji,jj) * zVi
+                  zcorio =   zM_dt * zdtevp * ff_u(ji,jj) * zVi  ! [kg/m^2/s * s / s * m/s] => [kg m^-1 s^- 2]
                   !
                   !                 !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
-                  zRHS = zfU(ji,jj) + ztau_ai + ridlzd*(zcorio + zspgU(ji,jj)) + ztaux_oi
+                  zRHS = zfU(ji,jj) + ztau_ai + ridlzd*(zcorio + zspgU(ji,jj)) + zTauO*zUo
                   !
                   !--- ice velocity using aEVP (Kimmritz et al 2016 & 2017)
                   zbetau = MAX( zbeta(ji,jj), zbeta(ji+1,jj) )
-                  u_ice(ji,jj) = ( ( ( zM_dt * ( zbetau * zUi + u_ice_b(ji,jj) )         & ! previous velocity
-                     &                      + zRHS + zTauO * zUi )                       & ! F + tau_ia + Coriolis + spg + tau_io(only ocean part)
+                  u_ice(ji,jj) = ( ( ( zM_dt * (zbetau * zUi + u_ice_b(ji,jj)) + zRHS  ) &
                      &               / MAX( epsi20, zM_dt * ( zbetau + 1._wp ) + zTauO ) & ! m/dt + tau_io(only ice part) + landfast
                      &             ) * zmask + zUo * 0.01_wp * (1._wp - zmask)           & ! v_ice = v_oce/100 if mass < rmass_min & conc < rconc_min
                      &           ) * REAL(kmsk00x(ji,jj),wp)
@@ -39,7 +35,7 @@
             END DO
             !$acc end parallel loop
 
-# if defined _OPENACC
+# if defined _OPENACC || _OPENMP
             CALL lbc_lnk_gpu( 'icedyn_rhg_evp', u_ice )
 # else
             CALL lbc_lnk(     'icedyn_rhg_evp', u_ice,'U',-1._wp )
@@ -57,7 +53,7 @@
             END DO
             !$acc end parallel loop
 
-# if defined _OPENACC
+# if defined _OPENACC || _OPENMP
             CALL lbc_lnk_gpu( 'icedyn_rhg_evp', uVice )
 # else
             CALL lbc_lnk(     'icedyn_rhg_evp', uVice,'V',-1._wp )

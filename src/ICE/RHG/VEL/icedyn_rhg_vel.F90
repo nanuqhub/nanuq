@@ -44,7 +44,7 @@ CONTAINS
       REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pAu, pAv  ! Ice concentration
       REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pmu_dt, pmv_dt ! Mass / dt @U and @V
       REAL(wp),   DIMENSION(jpi,jpj,3), INTENT(in)    :: pSt, pSf  ! the 3 components the VERTICALLY-INTEGRATED stress tensor [N/m^2*m] !
-      REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(in)    :: pgrdSH    ! gradient of SSH
+      REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(in)    :: pgrdSH    ! gradient of SSH * m
       REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(in)    :: pV_oce    ! the 4 ocean velocity components
       REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: putau_i, pvtau_i ! air-ice windstress components at T-points [N/m^2]
       INTEGER(1), DIMENSION(jpi,jpj),   INTENT(in)    :: pm01x, pm01y, pm00x, pm00y
