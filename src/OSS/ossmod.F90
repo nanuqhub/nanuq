@@ -186,11 +186,12 @@ CONTAINS
 
       IF( .NOT. ln_rstart ) THEN
          IF(lwp) WRITE(numout,*)"  'oss_init()' => `ssst`, `sssq`, `sst_s` & `sss_s` initialized with `sst_m`, `sst_m` & `sss_m`!"
+         sst_s(:,:) = sst_m(:,:) ! slab bulk SST
+         sss_s(:,:) = sss_m(:,:) ! slab bulk SSS
+         !
          ssst(:,:)  = sst_m(:,:) ! water skin temperature
          !sssq(:,:)  = rdct_qsat_salt * q_sat( ssst(:,:)+rt0, sst_m(:,:)*0._wp+101000. )   ! (kg/kg)
          sssq(:,:) = 0._wp
-         sst_s(:,:) = sst_m(:,:) ! slab bulk SST
-         sss_s(:,:) = sss_m(:,:) ! slab bulk SSS
          !$acc update device ( ssst, sssq, sst_s, sss_s )
       ELSE
          CALL ctl_stop( 'oss_init : FIXME!!! => add restart capability for `ssst`, `sst_s` & `sss_s` ! (-->ossmod.F90)' )
@@ -247,12 +248,17 @@ CONTAINS
          zus(:,:) = 0._wp
       ENDIF
 
-# if defined _OPENACC
+#if defined _OPENACC || _OPENMP
       !$acc update device ( ssu_m, ssv_m, ssh_m, sst_m, sss_m, frq_m, e3t_m )
       IF( ln_ssv_Fgrid ) THEN
          !$acc update device ( ssu_v_m, ssv_u_m )
       ENDIF
-# endif
+      IF( ln_slab_sst ) THEN
+         IF( iom_use('mld_m') ) CALL iom_put( 'mld_m', mld_m )
+         PRINT *, 'LOLO: oss@ossmod.F90 => updating `mld_m` on the GPU!'
+         !$acc update device ( mld_m )
+      ENDIF
+#endif
 
       ! If prescribed velocities provided at T- rather than U,V- points, interpolate from T to U & T to V
       IF( ln_ssv_T ) THEN
