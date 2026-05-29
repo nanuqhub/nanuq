@@ -203,13 +203,14 @@ fi
 if [[ ! -z "$XIOS_OASIS" ]]; then 
     use_oasis=1 
 fi 
-for liboa in psmile.MPI1 mct mpeu scrip mpp_io
-do
-    have_liboa=$( sed -e "s/#.*$//" ${COMPIL_DIR}/$1 | grep -c "\-l${liboa}" )
-    if [[ ( $use_oasis -eq 0 ) && ( $have_liboa -ge 1 ) ]]
-    then 
-	sed -e "s/-l${liboa}//g" ${COMPIL_DIR}/$1 > ${COMPIL_DIR}/tmp$$
-	mv -f ${COMPIL_DIR}/tmp$$ ${COMPIL_DIR}/$1
-    fi
-done
+
+#for liboa in psmile.MPI1 mct mpeu scrip mpp_io
+#do
+#    have_liboa=$( sed -e "s/#.*$//" ${COMPIL_DIR}/$1 | grep -c "\-l${liboa}" )
+#    if [[ ( $use_oasis -eq 0 ) && ( $have_liboa -ge 1 ) ]]
+#    then
+#	sed -e "s/-l${liboa}//g" ${COMPIL_DIR}/$1 > ${COMPIL_DIR}/tmp$$
+#	mv -f ${COMPIL_DIR}/tmp$$ ${COMPIL_DIR}/$1
+#    fi
+#done
 
