@@ -47,6 +47,7 @@
       <field id="icemass"      long_name="Sea-ice mass per gridcell area"             standard_name="sea_ice_amount"                            unit="kg/m2"/>
       <field id="snwmass"      long_name="Snow mass per area"                         standard_name="liquid_water_content_of_surface_snow"      unit="kg/m2"/>
       <field id="iceconc"      long_name="Sea-ice area fraction"                      standard_name="sea_ice_area_fraction"                     unit=""     />
+      <field field_ref="iceconc"          name="fr_i" />
       <field id="iceconc-f"    long_name="Sea-ice area fraction @F"                   standard_name="sea_ice_area_fraction_f"                   unit=""     />
       <field id="iceconc-u"    long_name="Sea-ice area fraction @U"                   standard_name="sea_ice_area_fraction_u"                   unit=""     />
       <field id="iceconc-v"    long_name="Sea-ice area fraction @V"                   standard_name="sea_ice_area_fraction_v"                   unit=""     />
@@ -62,6 +63,9 @@
       <field id="snwthic-f"    long_name="Snow thickness @F"                          standard_name="snow_thickness_f"                          unit="m"    />
       <field id="icebrv"       long_name="brine volume"                                                                                         unit="%"    />
       <field id="iceage"       long_name="ice age"                                              unit="days"                     detect_missing_value="true" />
+
+
+      <field id="rdgc"      long_name="ridged-ice volume fraction"                   standard_name="ridged_ice_frac"          unit=""    />
 
       <!-- BBM: -->
       <field id="icedmgt"      long_name="ice damage at T-points"                     standard_name="sea_ice_damage_t"        unit=""    /> <!-- #bbm -->
@@ -200,7 +204,17 @@
       <!-- lolo #bbm / #E-grid: -->
       <field id="uice_v"       long_name="X-component of sea ice velocity @V"                      standard_name="sea_ice_x_velocity_v"                      unit="m/s"  />
       <field id="vice_u"       long_name="Y-component of sea ice velocity @U"                      standard_name="sea_ice_y_velocity_u"                      unit="m/s"  />
-
+      <!-- -->
+      <!-- Horizontal stresses -->
+      <field id="taux_ai_u"  long_name="X-component of atmospheric stress on sea ice @U"    standard_name="surface_air-ice_x_stress_u"         unit="N/m2" />
+      <field id="tauy_ai_v"  long_name="Y-component of atmospheric stress on sea ice @V"    standard_name="surface_air-ice_y_stress_v"         unit="N/m2" />
+      <field id="taux_ai_t"  long_name="X-component of atmospheric stress on sea ice @T"    standard_name="surface_air-ice_x_stress_t"         unit="N/m2" />
+      <field id="tauy_ai_t"  long_name="Y-component of atmospheric stress on sea ice @T"    standard_name="surface_air-ice_y_stress_t"         unit="N/m2" />
+      <field id="taum_ai"    long_name="Module of atmospheric stress on sea ice @T"         standard_name="surface_air-ice_stress_module_t"    unit="N/m2" />
+      <field id="taux_oi_u"  long_name="X-component of water-ice stress on sea ice @U"      standard_name="surface_water-ice_x_stress_u"       unit="N/m2" />
+      <field id="tauy_oi_v"  long_name="Y-component of water-ice stress on sea ice @V"      standard_name="surface_water-ice_y_stress_v"       unit="N/m2" />
+      <!-- -->
+      <!-- Strain rate tensor components -->
       <field id="e11t"       long_name="eps11 grid T"         standard_name="eps11_grid_T"               unit="1/s"  />
       <field id="e22t"       long_name="eps22 grid T"         standard_name="eps22_grid_T"               unit="1/s"  />
       <field id="e12t"       long_name="eps12 grid T"         standard_name="eps12_grid_T"               unit="1/s"  />
@@ -212,16 +226,6 @@
       <field id="icevel"       long_name="Sea-ice speed @T"                                        standard_name="sea_ice_speed_t"                          unit="m/s"  />
       <field id="icevelf"      long_name="Sea-ice speed @F"                                        standard_name="sea_ice_speed_f"                          unit="m/s"  />
       <!-- -->
-      <!--
-          <field id="taux_ai_u"    long_name="X-component of atmospheric stress on sea ice @U"         standard_name="surface_downward_x_stress_u"              unit="N/m2" />
-          <field id="tauy_ai_v"    long_name="Y-component of atmospheric stress on sea ice @V"         standard_name="surface_downward_y_stress_v"              unit="N/m2" />
-      -->
-      <field id="taux_ai"      long_name="X-component of atmospheric stress on sea ice @T"         standard_name="surface_downward_x_stress_t"              unit="N/m2" />
-      <field id="tauy_ai"      long_name="Y-component of atmospheric stress on sea ice @T"         standard_name="surface_downward_y_stress_t"              unit="N/m2" />
-      <field id="taum_ai"      long_name="Module of atmospheric stress on sea ice @T"              standard_name="surface_downward_stress_module_t"         unit="N/m2" />
-      <!-- -->
-      <field id="taux_oi_u"    long_name="X-component of ocean stress on sea ice @U"               standard_name="sea_ice_base_upward_x_stress_u"           unit="N/m2" />
-      <field id="tauy_oi_v"    long_name="Y-component of ocean stress on sea ice @V"               standard_name="sea_ice_base_upward_y_stress_v"           unit="N/m2" />
       <field id="taum_oi"      long_name="Module of ocean stress on sea ice @T"                    standard_name="surface_downward_stress_module_t"         unit="N/m2" />
       <!-- -->
       <field id="utau_bi"      long_name="X-component of ocean bottom stress on sea ice -landfast" standard_name="ocean_bottom_upward_x_stress"              unit="N/m2" />
@@ -309,36 +313,37 @@
       <field id="qns_oce"     long_name="non-solar heat flux available for open ocean (E-P not there)"   standard_name="qlat+qsen+qlw"                    unit="W/m2"  />
       <field id="qemp_oce"    long_name="Downward Heat Flux from E-P"                  standard_name="heat_flux_from_e-p"                                 unit="W/m2"  />
       <field id="taum_oce"    long_name="wind stress module over open ocean"           standard_name="magnitude_of_surface_downward_stress"               unit="N/m2"  />
-      <!-- --> 
+      <!-- -->
       <field id="qlw_oce"     long_name="Longwave Downward Heat Flux over open ocean"  standard_name="surface_net_downward_longwave_flux"                 unit="W/m2"  />
       <field id="qsb_oce"     long_name="Sensible Downward Heat Flux over open ocean"  standard_name="surface_downward_sensible_heat_flux"                unit="W/m2"  />
       <field id="qla_oce"     long_name="Latent Downward Heat Flux over open ocean"    standard_name="surface_downward_latent_heat_flux"                  unit="W/m2"  />
       <field id="evap_oce"    long_name="Evaporation over open ocean"                  standard_name="evaporation_open_oce"                               unit="kg/m2/s" />
-      <field id="utau_oce"    long_name="Wind Stress / i-axis over open ocean (T-point)"  standard_name="surf_down_x_stress_open_oce_Tpoints"        unit="N/m2"   />
-      <field id="vtau_oce"    long_name="Wind Stress / j-axis over open ocean (T-point)"  standard_name="surf_down_y_stress_open_oce_Tpoints"        unit="N/m2"    />
+      <field id="utau_oce"    long_name="Wind Stress / i-axis over open ocean (T-point)"  standard_name="surf_down_x_stress_open_oce_Tpoints"             unit="N/m2"   />
+      <field id="vtau_oce"    long_name="Wind Stress / j-axis over open ocean (T-point)"  standard_name="surf_down_y_stress_open_oce_Tpoints"             unit="N/m2"    />
 
 
       <!-- variables computed by the bulk parameterization algorithms (ln_blk) -->
       <!-- -->
-      <field id="snowpre"      long_name="Snow precipitation"                   standard_name="snowfall_flux"                                                        unit="kg/m2/s"   />
-      <field id="precip"       long_name="Total precipitation"                  standard_name="precipitation_flux"                                                   unit="kg/m2/s"   />
+      <field id="snowpre"      long_name="Snow precipitation"                           standard_name="snowfall_flux"                          unit="kg/m2/s"   />
+      <field id="precip"       long_name="Total precipitation"                          standard_name="precipitation_flux"                     unit="kg/m2/s"   />
       <!-- -->
-      <field id="Cd_oce"      long_name="Drag coefficient over open ocean"              standard_name="drag_coefficient_water"                unit=""  />
-      <field id="Ce_oce"      long_name="Evaporaion coefficient over open ocean"        standard_name="evap_coefficient_water"                unit=""  />
-      <field id="Ch_oce"      long_name="Sensible heat coefficient over open ocean"     standard_name="sensible_heat_coefficient_water"       unit=""  />
-      <field id="theta_zt"    long_name="Potential air temperature at z=zt"             standard_name="potential_air_temperature_at_zt"       unit="degC" />
-      <field id="q_zt"        long_name="Specific air humidity at z=zt"                 standard_name="specific_air_humidity_at_zt"           unit="kg/kg" />
-      <field id="theta_zu"    long_name="Potential air temperature at z=zu"             standard_name="potential_air_temperature_at_zu"       unit="degC" />
-      <field id="q_zu"        long_name="Specific air humidity at z=zu"                 standard_name="specific_air_humidity_at_zu"           unit="kg/kg" />
-      <field id="ssq"         long_name="Saturation specific humidity of air at z=0"    standard_name="surface_air_saturation_spec_humidity"  unit="kg/kg" />
-      <field id="wspd_blk"    long_name="Bulk wind speed at z=zu"                       standard_name="bulk_wind_speed_at_zu"                 unit="m/s"   />
+      <field id="Cd_oce"       long_name="Drag coefficient over open ocean"              standard_name="drag_coefficient_water"                unit=""  />
+      <field id="Ce_oce"       long_name="Evaporaion coefficient over open ocean"        standard_name="evap_coefficient_water"                unit=""  />
+      <field id="Ch_oce"       long_name="Sensible heat coefficient over open ocean"     standard_name="sensible_heat_coefficient_water"       unit=""  />
+      <field id="theta_zt"     long_name="Potential air temperature at z=zt"             standard_name="potential_air_temperature_at_zt"       unit="degC" />
+      <field id="q_zt"         long_name="Specific air humidity at z=zt"                 standard_name="specific_air_humidity_at_zt"           unit="kg/kg" />
+      <field id="theta_zu"     long_name="Potential air temperature at z=zu"             standard_name="potential_air_temperature_at_zu"       unit="degC" />
+      <field id="q_zu"         long_name="Specific air humidity at z=zu"                 standard_name="specific_air_humidity_at_zu"           unit="kg/kg" />
+      <field id="dtheta_zu_zt" long_name="Potential air temperature: diff zu-zt"         standard_name="d_potential_air_temperature_zu-zt"     unit="degC" />
+      <field id="dq_zu_zt"     long_name="Specific air humidity: diff zu-zt"             standard_name="d_specific_air_humidity_zu-zt"         unit="kg/kg" />
+      <field id="ssq"          long_name="Saturation specific humidity of air at z=0"    standard_name="surface_air_saturation_spec_humidity"  unit="kg/kg" />
+      <field id="wspd_blk"     long_name="Bulk wind speed at z=zu"                       standard_name="bulk_wind_speed_at_zu"                 unit="m/s"   />
+      <field id="wnd_x"        long_name="Wind speed component / x @T"                   standard_name="x_wind_speed_t"                        unit="m/s"   />
+      <field id="wnd_y"        long_name="Wind speed component / y @T  "                 standard_name="y_wind_speed_t"                        unit="m/s"   />
       <!-- ln_blk -->
-      <field id="Cd_ice"      long_name="Drag coefficient over ice"                     standard_name="drag_coefficient_ice"                 unit=""  />
-      <field id="Ce_ice"      long_name="Evaporaion coefficient over ice"               standard_name="evap_coefficient_ice"                 unit=""  />
-      <field id="Ch_ice"      long_name="Sensible heat coefficient over ice"            standard_name="sensible_heat_coefficient_ice"        unit=""  />
-
-
-
+      <field id="Cd_ice"       long_name="Drag coefficient over ice"                     standard_name="drag_coefficient_ice"                  unit=""  />
+      <field id="Ce_ice"       long_name="Evaporaion coefficient over ice"               standard_name="evap_coefficient_ice"                  unit=""  />
+      <field id="Ch_ice"       long_name="Sensible heat coefficient over ice"            standard_name="sensible_heat_coefficient_ice"         unit=""  />
 
 
 
@@ -403,9 +408,9 @@
       <field id="iceshelf_cea" long_name="Iceshelf"                                  standard_name="water_flux_into_sea_water_from_iceshelf"   unit="kg/m2/s"  />
       <!-- -->
       <!-- Fields passed from NANUQ to OASIS3 to serve as SBC for the 3D liquid ocean component -->
-      <field id="utau_oa3"     long_name="i-wise stress"                 standard_name="i_wise_surface_downward_stress"                   unit="N/m2"   />
-      <field id="vtau_oa3"     long_name="j-wise stress"                 standard_name="j_wise_surface_downward_stress"                   unit="N/m2"   />
-      <field id="taum_oa3"     long_name="Stress module"                 standard_name="magnitude_of_surface_downward_stress"             unit="N/m2"   />
+      <field id="taum_oa3"     long_name="Stress module @T"                 standard_name="magnitude_of_surface_downward_stress"          unit="N/m2"   />
+      <field id="utau_oa3"     long_name="i-wise stress to liquid ocean @T" standard_name="i_wise_surface_downward_stress"                unit="N/m2"   />
+      <field id="vtau_oa3"     long_name="j-wise stress to liquid ocean @T" standard_name="j_wise_surface_downward_stress"                unit="N/m2"   />
       <field id="emp_oa3"      long_name="Net Upward Water Flux (E-P)"   standard_name="water_flux_out_of_sea_ice_and_sea_water"          unit="kg/m2/s"/>
       <field id="fr_i_oa3"     long_name="Ice fraction"                  standard_name="sea_ice_area_fraction"                            unit="1"      />
       <field id="qns_oa3"      long_name="Non solar Downward Heat Flux"  standard_name="net_downward_non_solar_flux_at_sea_water_surface" unit="W/m2"   />
@@ -422,16 +427,16 @@
       <field id="snowpre"      long_name="Snow precipitation"                   standard_name="snowfall_flux"                                                        unit="kg/m2/s"   />
       <field id="runoffs"      long_name="River Runoffs"                        standard_name="water_flux_into_sea_water_from_rivers"                                unit="kg/m2/s"   />
       <field id="precip"       long_name="Total precipitation"                  standard_name="precipitation_flux"                                                   unit="kg/m2/s"   />
-      <field id="qt"           long_name="Net Downward Heat Flux"                standard_name="surface_downward_heat_flux_in_sea_water"                              unit="W/m2"                           />
-      <field id="qns"          long_name="non solar Downward Heat Flux"                                                                                               unit="W/m2"                           />
-      <field id="qsr"          long_name="Shortwave Radiation"                   standard_name="net_downward_shortwave_flux_at_sea_water_surface"                     unit="W/m2"                           />
-      <field id="qrp"          long_name="Surface Heat Flux: Damping"            standard_name="heat_flux_into_sea_water_due_to_newtonian_relaxation"                 unit="W/m2"                           />
-      <field id="erp"          long_name="Surface Water Flux: Damping"           standard_name="water_flux_out_of_sea_water_due_to_newtonian_relaxation"              unit="kg/m2/s"                        />
-      <field id="taum"         long_name="wind stress module"                    standard_name="magnitude_of_surface_downward_stress"                                 unit="N/m2"                           />
-      <field id="wspd"         long_name="wind speed module @T"                  standard_name="wind_speed_t"                                                         unit="m/s"                            />
-      <field id="wnd_x"        long_name="zonal wind speed component @T"         standard_name="zonal_wind_speed_t"                                                   unit="m/s"                            />
-      <field id="wnd_y"        long_name="merid wind speed component @T"         standard_name="merid_wind_speed_t"                                                   unit="m/s"                            />
-      <field id="fr_i"         long_name="Ice fraction"                          standard_name="sea_ice_area_fraction"                              unit="1"            />
+      <field id="qt"           long_name="Net Downward Heat Flux"               standard_name="surface_downward_heat_flux_in_sea_water"                              unit="W/m2"      />
+      <field id="qns"          long_name="non solar Downward Heat Flux"                                                                                              unit="W/m2"      />
+      <field id="qsr"          long_name="Shortwave Radiation"                  standard_name="net_downward_shortwave_flux_at_sea_water_surface"                     unit="W/m2"      />
+      <field id="qrp"          long_name="Surface Heat Flux: Damping"           standard_name="heat_flux_into_sea_water_due_to_newtonian_relaxation"                 unit="W/m2"      />
+      <field id="erp"          long_name="Surface Water Flux: Damping"          standard_name="water_flux_out_of_sea_water_due_to_newtonian_relaxation"              unit="kg/m2/s"   />
+      <field id="taum"         long_name="wind stress module @T"                standard_name="magnitude_of_surface_downward_stress"                                 unit="N/m2"      />
+      <field id="utau"         long_name="i-wise stress to liquid ocean @T"     standard_name="i_wise_surface_downward_stress"                   unit="N/m2"   />
+      <field id="vtau"         long_name="j-wise stress to liquid ocean @T"     standard_name="j_wise_surface_downward_stress"                   unit="N/m2"   />
+      <field id="wspd"         long_name="wind speed module @T"                 standard_name="wind_speed_t"                                                         unit="m/s"       />
+      <field id="fr_i"         long_name="Ice fraction"                         standard_name="sea_ice_area_fraction"                                                unit="-"         />
 
 
       <!-- trends -->
@@ -640,48 +645,48 @@
     </field_group> <!-- SBC_2D -->
 
 
-  <!-- ABL -->
-  <field_group id="ABL" >
+    <!-- ABL -->
+    <field_group id="ABL" > <!-- time step automaticaly defined based on nn_fsbc -->
 
-    <!-- variables available with ABL on atmospheric T grid-->
-    <field_group id="grid_ABL3D" grid_ref="grid_TA_3D" >
-      <field id="u_abl"      long_name="ABL i-horizontal velocity"     standard_name="abl_x_velocity" unit="m/s"      />
-      <field id="v_abl"      long_name="ABL j-horizontal velocity"     standard_name="abl_y_velocity" unit="m/s"      />
-      <field id="t_abl"      long_name="ABL potential temperature"     standard_name="abl_theta"      unit="K"        />
-      <field id="q_abl"      long_name="ABL specific humidity"         standard_name="abl_qspe"       unit="kg/kg"    />
-      <!-- debug (to be removed) -->
-      <field id="u_dta"      long_name="DTA i-horizontal velocity"     standard_name="dta_x_velocity" unit="m/s"      />
-      <field id="v_dta"      long_name="DTA j-horizontal velocity"     standard_name="dta_y_velocity" unit="m/s"      />
-      <field id="t_dta"      long_name="DTA potential temperature"     standard_name="dta_theta"      unit="K"        />
-      <field id="q_dta"      long_name="DTA specific humidity"         standard_name="dta_qspe"       unit="kg/kg"    />
-      <field id="u_geo"      long_name="GEO i-horizontal velocity"     standard_name="geo_x_velocity" unit="m/s"      />
-      <field id="v_geo"      long_name="GEO j-horizontal velocity"     standard_name="geo_y_velocity" unit="m/s"      />
-      <field id="tke_abl"    long_name="ABL turbulent kinetic energy"  standard_name="abl_tke"        unit="m2/s2"    />
-      <field id="avm_abl"    long_name="ABL turbulent viscosity"       standard_name="abl_avm"        unit="m2/s"     />
-      <field id="avt_abl"    long_name="ABL turbulent diffusivity"     standard_name="abl_avt"        unit="m2/s"     />
-      <field id="mxlm_abl"   long_name="ABL master mixing length"      standard_name="abl_mxlm"       unit="m"        />
-      <field id="mxld_abl"   long_name="ABL dissipative mixing length" standard_name="abl_mxld"       unit="m"        />
-    </field_group>
+      <!-- variables available with ABL on atmospheric T grid-->
+      <field_group id="grid_ABL3D" grid_ref="grid_TA_3D" >
+        <field id="u_abl"      long_name="ABL i-horizontal velocity"     standard_name="abl_x_velocity" unit="m/s"      />
+        <field id="v_abl"      long_name="ABL j-horizontal velocity"     standard_name="abl_y_velocity" unit="m/s"      />
+        <field id="t_abl"      long_name="ABL potential temperature"     standard_name="abl_theta"      unit="K"        />
+        <field id="q_abl"      long_name="ABL specific humidity"         standard_name="abl_qspe"       unit="kg/kg"    />
+        <!-- debug (to be removed) -->
+        <field id="u_dta"      long_name="DTA i-horizontal velocity"     standard_name="dta_x_velocity" unit="m/s"      />
+        <field id="v_dta"      long_name="DTA j-horizontal velocity"     standard_name="dta_y_velocity" unit="m/s"      />
+        <field id="t_dta"      long_name="DTA potential temperature"     standard_name="dta_theta"      unit="K"        />
+        <field id="q_dta"      long_name="DTA specific humidity"         standard_name="dta_qspe"       unit="kg/kg"    />
+        <field id="u_geo"      long_name="GEO i-horizontal velocity"     standard_name="geo_x_velocity" unit="m/s"      />
+        <field id="v_geo"      long_name="GEO j-horizontal velocity"     standard_name="geo_y_velocity" unit="m/s"      />
+        <field id="tke_abl"    long_name="ABL turbulent kinetic energy"  standard_name="abl_tke"        unit="m2/s2"    />
+        <field id="avm_abl"    long_name="ABL turbulent viscosity"       standard_name="abl_avm"        unit="m2/s"     />
+        <field id="avt_abl"    long_name="ABL turbulent diffusivity"     standard_name="abl_avt"        unit="m2/s"     />
+        <field id="mxlm_abl"   long_name="ABL master mixing length"      standard_name="abl_mxlm"       unit="m"        />
+        <field id="mxld_abl"   long_name="ABL dissipative mixing length" standard_name="abl_mxld"       unit="m"        />
+      </field_group>
 
-    <field_group id="grid_ABL2D" grid_ref="grid_TA_2D" >
-      <field id="pblh"       long_name="ABL height"                    standard_name="abl_height"     unit="m"        />
-      <field id="uz1_abl"    long_name="ABL i-horizontal velocity"     standard_name="abl_x_velocity" unit="m/s"      />
-      <field id="vz1_abl"    long_name="ABL j-horizontal velocity"     standard_name="abl_y_velocity" unit="m/s"      />
-      <field id="uvz1_abl"   long_name="ABL wind speed module"         standard_name="abl_wind_speed" unit="m/s"       > sqrt( uz1_abl^2 + vz1_abl^2 ) </field>
-      <field id="tz1_abl"    long_name="ABL potential temperature"     standard_name="abl_theta"      unit="K"        />
-      <field id="qz1_abl"    long_name="ABL specific humidity"         standard_name="abl_qspe"       unit="kg/kg"    />
-      <field id="uz1_dta"    long_name="DTA i-horizontal velocity"     standard_name="dta_x_velocity" unit="m/s"      />
-      <field id="vz1_dta"    long_name="DTA j-horizontal velocity"     standard_name="dta_y_velocity" unit="m/s"      />
-      <field id="uvz1_dta"   long_name="DTA wind speed module"         standard_name="dta_wind_speed" unit="m/s"       > sqrt( uz1_dta^2 + vz1_dta^2 ) </field>
-      <field id="tz1_dta"    long_name="DTA potential temperature"     standard_name="dta_theta"      unit="K"        />
-      <field id="qz1_dta"    long_name="DTA specific humidity"         standard_name="dta_qspe"       unit="kg/kg"    />
-      <!-- debug (to be removed) -->
-      <field id="uz1_geo"    long_name="GEO i-horizontal velocity"     standard_name="geo_x_velocity" unit="m/s"      />
-      <field id="vz1_geo"    long_name="GEO j-horizontal velocity"     standard_name="geo_y_velocity" unit="m/s"      />
-      <field id="uvz1_geo"   long_name="GEO wind speed module"         standard_name="geo_wind_speed" unit="m/s"       > sqrt( uz1_geo^2 + vz1_geo^2 ) </field>
-    </field_group>
+      <field_group id="grid_ABL2D" grid_ref="grid_TA_2D" >
+        <field id="pblh"       long_name="ABL height"                    standard_name="abl_height"     unit="m"        />
+        <field id="uz1_abl"    long_name="ABL i-horizontal velocity"     standard_name="abl_x_velocity" unit="m/s"      />
+        <field id="vz1_abl"    long_name="ABL j-horizontal velocity"     standard_name="abl_y_velocity" unit="m/s"      />
+        <field id="uvz1_abl"   long_name="ABL wind speed module"         standard_name="abl_wind_speed" unit="m/s"       > sqrt( uz1_abl^2 + vz1_abl^2 ) </field>
+        <field id="tz1_abl"    long_name="ABL potential temperature"     standard_name="abl_theta"      unit="K"        />
+        <field id="qz1_abl"    long_name="ABL specific humidity"         standard_name="abl_qspe"       unit="kg/kg"    />
+        <field id="uz1_dta"    long_name="DTA i-horizontal velocity"     standard_name="dta_x_velocity" unit="m/s"      />
+        <field id="vz1_dta"    long_name="DTA j-horizontal velocity"     standard_name="dta_y_velocity" unit="m/s"      />
+        <field id="uvz1_dta"   long_name="DTA wind speed module"         standard_name="dta_wind_speed" unit="m/s"       > sqrt( uz1_dta^2 + vz1_dta^2 ) </field>
+        <field id="tz1_dta"    long_name="DTA potential temperature"     standard_name="dta_theta"      unit="K"        />
+        <field id="qz1_dta"    long_name="DTA specific humidity"         standard_name="dta_qspe"       unit="kg/kg"    />
+        <!-- debug (to be removed) -->
+        <field id="uz1_geo"    long_name="GEO i-horizontal velocity"     standard_name="geo_x_velocity" unit="m/s"      />
+        <field id="vz1_geo"    long_name="GEO j-horizontal velocity"     standard_name="geo_y_velocity" unit="m/s"      />
+        <field id="uvz1_geo"   long_name="GEO wind speed module"         standard_name="geo_wind_speed" unit="m/s"       > sqrt( uz1_geo^2 + vz1_geo^2 ) </field>
+      </field_group>
 
-  </field_group> <!-- ABL -->
+    </field_group> <!-- ABL -->
 
     <!-- categories -->
     <field_group id="SBC_3D" grid_ref="grid_T_ncatice" >
@@ -798,10 +803,10 @@
       <field field_ref="uice"             name="sivelu"  />
       <field field_ref="vice"             name="sivelv"  />
       <field field_ref="icevel"           name="sivelo"  />
-      <field field_ref="taux_ai_u"          name="taux_ai_u" />
-      <field field_ref="tauy_ai_v"          name="tauy_ai_v" />
-      <field field_ref="taux_oi_u"          name="taux_oi_u" />
-      <field field_ref="tauy_oi_v"          name="tauy_oi_v" />
+      <field field_ref="taux_ai_u"        name="taux_ai_u" />
+      <field field_ref="tauy_ai_v"        name="tauy_ai_v" />
+      <field field_ref="taux_oi_u"        name="taux_oi_u" />
+      <field field_ref="tauy_oi_v"        name="tauy_oi_v" />
 
       <!-- rheology -->
       <field field_ref="icediv"           name="sidive"  />
@@ -1028,10 +1033,8 @@
       <field field_ref="uice_cmip"        name="siu"              />
       <field field_ref="vice_cmip"        name="siv"              />
       <field field_ref="icevel_cmip"      name="sispeed"          />
-      <field field_ref="taux_ai_u_cmip"     name="sistrxdtop"       />
-      <field field_ref="tauy_ai_v_cmip"     name="sistrydtop"       />
-      <field field_ref="taux_oi_u"          name="sistrxubot"       />
-      <field field_ref="tauy_oi_v"          name="sistryubot"       />
+      <field field_ref="taux_ai_u_cmip"   name="sistrxdtop"       />
+      <field field_ref="tauy_ai_v_cmip"   name="sistrydtop"       />
       <field field_ref="icestr"           name="sicompstren"      />
       <field field_ref="dssh_dx"          name="siforcetiltx"     />
       <field field_ref="dssh_dy"          name="siforcetilty"     />
