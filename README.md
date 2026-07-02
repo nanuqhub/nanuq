@@ -1,7 +1,7 @@
 
-# NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
-
 [![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
+
+# NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
 
 NANUQ is a fork of SI3+SBC, namely the _sea-ice_ + _ocean surface boundary conditions_ components of NEMO version 5.
 
