@@ -1,6 +1,4 @@
 
-[![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
-
 # NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
 
 [![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
