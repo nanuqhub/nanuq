@@ -3,12 +3,14 @@
 
 # NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
 
-NANUQ is a fork of SI3+SBC, namely the _sea-ice_ + _ocean surface boundary conditions_ components of NEMO version 5.
+NANUQ is a fork of SI3+SBC, i.e. the *sea-ice* and *ocean surface boundary conditions* components of NEMO version 5.
 
-Put simply, NANUQ is a standalone executable that computes the surface fluxes expected by the 3D liquid ocean as surface boundary conditions (momentum, heat & mass), in the presence of sea-ice or not.
-As part of this, it resolves sea-ice dynamics and thermodynamics and can be used for the two following purposes:
-- Standalone sea-ice experiments: NANUQ is provided with both a prescribed surface liquid ocean state and a surface atmospheric state (as netCDF files).
-- Coupled ocean/sea-ice experiments: NANUQ is provided with a prescribed surface atmospheric state (as netCDF files) and receives the surface (liquid) ocean state from an ocean model (via OASIS); in return, NANUQ sends (via OASIS) the surface fluxes of momentum, (solar and non-solar) heat and freshwater (E-P) to be used as surface boundary conditions by the ocean model (over BOTH ice-free and ice-covered regions).
+Put simply, NANUQ is a standalone executable that computes the surface fluxes required by a 3D ocean model as surface boundary conditions: momentum, heat, and freshwater. It can operate in the presence or absence of sea ice.
+
+As part of this process, NANUQ resolves both sea-ice dynamics and thermodynamics. It can be used in two ways:
+
+* **Standalone sea-ice experiments:** NANUQ is provided with prescribed surface states for both the liquid ocean and the atmosphere, supplied as netCDF files.
+* **Coupled ocean/sea-ice experiments:** NANUQ is provided with a prescribed surface atmospheric state (as a netCDF file) and receives the surface liquid-ocean state from an ocean model via OASIS. In return, NANUQ sends the surface fluxes of momentum, solar and non-solar heat, and freshwater (E−P) back to the ocean model via OASIS. These fluxes are provided as surface boundary conditions over **both ice-free and ice-covered regions**.
 
 <p align="center">
   <img width="750" src="./tests/doc/figs/mods.svg">
@@ -19,11 +21,37 @@ With respect to the current version of SI3, NANUQ allows to use:
 - the WENO advection scheme (for ice) of order 5 & 7, fully generalized for orthogonal curvilinear grids !
 - 5th order symmetric WENO interpolation for remapping between the C-grid point (such as from center to corner grid points for example).
 
-Currently, NANUK can efficiently offload on a single GPU using OpenACC
-directives. These directives are present in the code and are used in
-combination with the `_OPENACC` preprocessing key.
-As such, apart from the initialization, restart reading/writing & I/O, all computation is performed on the GPU.
-It has been extensively tested with the `nvfortan` compiler of Nvidia (ex PGI).
+
+<br>
+
+## Why NANUQ?
+Technically, NANUQ is the equivalent of the SAS (StandAlone Surface) configuration of NEMO. Like SAS, it can be run either in standalone mode, using a prescribed surface state of the liquid ocean, or coupled to OCE—the 3D, liquid-ocean-only component of NEMO—via OASIS.
+
+We believe in modularity, and the SI3 sea-ice component is too valuable to be accessible only through the vast and potentially intimidating NEMO ecosystem. NANUQ aims to make SI3 **accessible, usable, and easily tweakable** as a standalone sea-ice component, without requiring users to navigate the full NEMO code base.
+
+To achieve this, NANUQ removes unnecessary source code, dependencies, memory allocations, and run-time operations inherited from SAS.
+
+When using SI3 (or, more precisely, SAS) as a standalone *sea-ice-only* component, users may encounter the following limitations:
+
+* **Source-code dependencies:** SI3 depends on numerous NEMO modules that are specific to the liquid ocean. As a result, using SI3 in standalone mode through SAS requires compiling the entire NEMO source code.
+* **Unnecessary memory usage and computations:** SAS allocates many 3D and 2D arrays that are specific to the liquid ocean and performs ocean-specific operations that are unnecessary for a standalone sea-ice model. This significantly increases memory usage compared with NANUQ.
+
+A standalone sea-ice GCM such as NANUQ, with the liquid-ocean code removed, is also particularly well suited to porting and optimizing the sea-ice model for GPUs.
+
+NANUQ's ability to run efficiently on a single GPU enables the use of hybrid HPC nodes for coupled ocean–sea-ice experiments, with NANUQ running on a GPU and the OCE component of NEMO running on CPU cores using MPI, coupled through OASIS.
+
+<br>
+
+## About GPU offloading
+
+NANUQ can efficiently offload computations to a single GPU using either OpenACC or OpenMP directives. The code is primarily tested with NVIDIA's `nvfortran` compiler and AMD's `amdflang` compiler (ROCm 7.2).
+
+OpenACC directives are hardcoded directly in the source code and serve as the reference GPU programming model. For OpenMP, a dedicated script automatically translates the OpenACC directives into their OpenMP counterparts (see the section on **"Automatic translation to OpenMP"**). They are used in combination with the `_OPENACC` or `_OPENMP` pre-processing keys, respectively.
+
+The decision to use OpenACC as the reference directive model is mainly motivated by its GPU-specific nature, whereas OpenMP is a broader, rapidly evolving standard that targets both CPUs and accelerators. Keeping OpenACC as the source directives therefore provides a stable and GPU-focused basis from which OpenMP directives can be generated automatically.
+
+Since sea ice is two-dimensional with respect to the ocean, most of NANUQ's arrays are 2D. This results in a relatively modest memory footprint, allowing all arrays to remain resident in GPU memory throughout the computation. Consequently, communication between the CPU and GPU is kept to a minimum and is limited to initialization, I/O (atmospheric and ocean forcing, output, etc.), and restart reading/writing.
+Apart from these operations, **all computations are performed on the GPU**.
 
 <p align="center">
   <img width="750" src="./tests/doc/figs/cpl_gpu-MPI.svg">
@@ -31,21 +59,6 @@ It has been extensively tested with the `nvfortan` compiler of Nvidia (ex PGI).
 
 
 
-<br>
-
-## Motivation behind NANUQ
-Technically, NANUQ is the equivalent of the SAS (StandAlone Surface) setup of NEMO, which can be run both in a standalone fashion (feeding on a prescribed surface state of the liquid ocean) or coupled to OCE (the 3D "liquid-ocean-only" component of NEMO) via OASIS.
-
-First, we believe in modularity, and the great sea-ice component that SI3 is deserves to be "accessible", "usable", and "tweakable" without the hassle of diving in the vast and intimidating ecosystem of NEMO.
-As such, NANUQ is stripped from all possible unnecessary source code, dependencies, and run-time operations that are present in SAS.
-
-When attempting to use SI3 (or rather SAS) as a standalone _sea-ice only_ component, users may face the following issues and limitations.
-
-* 1/ SI3 is completely entangled within NEMO:
-- SI3 code is dependent on many NEMO modules that are liquid-ocean-specific, which requires the compilation of the whole NEMO code source when using it in a standalone mode via SAS
-- when it comes to performance, many unnecessary liquid-ocean-specific 3D and 2D arrays are allocated, and some unnecessary ocean-specific operations are performed during runtime, which greatly increases the memory usage compared to that of NANUQ
-
-A standalone sea-ice GCM such as NANUQ, rid of all liquid ocean code, comes also really handy when porting and optimizing the sea-ice code to/for GPU! We aim at completely porting NANUQ to GPU using OpenACC and/or OpenMP directives. The idea is to target a mode of use on hybrid HPC nodes, on which NANUQ runs on a GPU and is coupled to an OCE of NEMO (via OASIS) running on CPU cores (MPI).
 
 
 <br>
@@ -68,6 +81,7 @@ Remaining from NEMO:
 
 New / renamed:
 - `OSS`: Ocean Surface State stuff, provides the fields (prescribed or coupled) that serve as bottom boundary conditions for the sea-ice model and/or are used to compute air-sea fluxes over open (liquid) ocean
+- `RMP`: horizontal remapping between the _Arakawa_ C-grid points (including WENO5-centered scheme) 
 - `sbcssm.F90` has become `ossssm.F90` (read a prescribed surface state of the ocean: SST, SSS, SSH, SSU, SSV, etc)
 - `osscpl.F90` (new) a version of `sbccpl.F90` dedicated only to the OSS coupling realm...
 
