@@ -1,6 +1,10 @@
 
 [![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
 
+
+New: 4 extra global arrays `SI1t`, `SI2t`, `SI1f` & `SI2f` that store the first & second invariants of the vertically integrated stress tensors!
+
+
 # NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
 
 NANUQ is a fork of SI3+SBC, i.e. the *sea-ice* and *ocean surface boundary conditions* components of NEMO version 5.
@@ -9,7 +13,7 @@ Put simply, NANUQ is a standalone executable that computes the surface fluxes re
 
 As part of this process, NANUQ resolves both sea-ice dynamics and thermodynamics. It can be used in two ways:
 
-* **Standalone sea-ice experiments:** NANUQ is provided with prescribed surface states for both the liquid ocean and the atmosphere, supplied as netCDF files.
+* **Standalone sea-ice experiments:** NANUQ is provided with prescribed surface states for both the liquid ocean and the atmosphere, supplied as netCDF files. A simple _slab ocean_ scheme acting on the heat and salt content of the ocean mixed-layer can be used (prescribed ocean MLD data must be provided along with ocean surface state).
 * **Coupled ocean/sea-ice experiments:** NANUQ is provided with a prescribed surface atmospheric state (as a netCDF file) and receives the surface liquid-ocean state from an ocean model via OASIS. In return, NANUQ sends the surface fluxes of momentum, solar and non-solar heat, and freshwater (E−P) back to the ocean model via OASIS. These fluxes are provided as surface boundary conditions over **both ice-free and ice-covered regions**.
 
 <p align="center">
@@ -17,9 +21,11 @@ As part of this process, NANUQ resolves both sea-ice dynamics and thermodynamics
 </p>
 
 With respect to the current version of SI3, NANUQ allows to use:
-- the BBM brittle rheology, including the damage tracer, of [Òlason _et al._, 2022](https://doi.org/10.1029/2021MS002685), implemented in SI3 by [Brodeau _et al._, 2024](https://doi.org/10.5194/gmd-17-6051-2024).
+- brittle rheologies such as BBM & MEB, including the damage tracer  ([Dansereau _et al._, 2016](https://doi.org/10.5194/tc-10-1339-2016), [Òlason _et al._, 2022](https://doi.org/10.1029/2021MS002685)), implemented in SI3 by [Brodeau _et al._, 2024](https://doi.org/10.5194/gmd-17-6051-2024).
 - the WENO advection scheme (for ice) of order 5 & 7, fully generalized for orthogonal curvilinear grids !
 - 5th order symmetric WENO interpolation for remapping between the C-grid point (such as from center to corner grid points for example).
+- an implicit RK3 numerical scheme for time integration of the brittle rheologies
+- simple _slab ocean_ scheme (for heat and salt) for standalone sea-ice simulations
 
 
 <br>
@@ -45,6 +51,12 @@ NANUQ's ability to run efficiently on a single GPU enables the use of hybrid HPC
 ## About GPU offloading
 
 NANUQ can efficiently offload computations to a single GPU using either OpenACC or OpenMP directives. The code is primarily tested with NVIDIA's `nvfortran` compiler and AMD's `amdflang` compiler (ROCm 7.2).
+
+<p align="center">
+  <img width="540" src="./tests/doc/figs/Speedup_Arctic_12th_extra.svg">
+</p>
+
+_Speedup of NANUQ standalone on the high-resolution Arctic domain at 12<sup>th</sup> of a degree obtained with: increasing number of AMD Genoa EPYC 9654 / 2.4 GHz cores in parallel (dots), one NVIDIA RTX 4090 (OpenACC) + one CPU core (green line), and one AMD Instinct MI250x (OpenACC) + one CPU core (blue line)._
 
 OpenACC directives are hardcoded directly in the source code and serve as the reference GPU programming model. For OpenMP, a dedicated script automatically translates the OpenACC directives into their OpenMP counterparts (see the section on **"Automatic translation to OpenMP"**). They are used in combination with the `_OPENACC` or `_OPENMP` pre-processing keys, respectively.
 
@@ -135,6 +147,52 @@ Executable created: `cfgs/generic_cpl_oce/BLD/bin/nanuq.exe`
 
 
 
+
+### Compilation on the GPU
+
+Your Fortran compiler needs to support your GPU hardware. We have successfully tested NANUQ on both NVIDIA and AMD GPUs using recent versions of `nvfortran` from the NVIDIA HPC SDK and `amdflang` from AMD's LLVM-based ROCm suite.
+
+For the compiler options, you can refer to the following tested reference architecture files:
+
+* NVIDIA OpenACC: `arch/arch-TEMPLATE-NVIDIA-OACC.fcm` (NVIDIA RTX 4090, NVIDIA HPC SDK)
+* NVIDIA OpenMP: `arch/arch-TEMPLATE-NVIDIA-OMP.fcm` (NVIDIA RTX 4090, NVIDIA HPC SDK)
+* AMD ROCm OpenMP: `arch/arch-TEMPLATE-ROCm-OMP.fcm` (AMD Instinct MI250x, AMD ROCm 7.2.0, OpenMPI 5)
+
+**Note:** netCDF, XIOS, OASIS, MPI, etc. must also be compiled with the appropriate compiler suite.
+
+#### Compile for OpenACC
+
+As mentioned above (*About GPU offloading*), OpenACC directives are the default offloading directives used in the NANUQ source code. Therefore, compiling NANUQ only requires using the appropriate GPU OpenACC compilation flags for your hardware.
+
+#### Compile for OpenMP
+
+First, all NANUQ source files under `./src` featuring OpenACC directives are translated for OpenMP using a set of Bash scripts. The translated files are saved under `./cfgs/generic/MY_SRC/` or `./cfgs/generic_cpl_oce/MY_SRC/`.
+
+The script to use is `./PREPARE_OMP_SRC.sh`. The `VERSION_OMP` variable in this script specifies the OpenMP version to target. Use `VERSION_OMP=5.1` for recent ROCm compilers and `VERSION_OMP=4.x` for NVIDIA compilers.
+
+For example, to prepare the standalone version of NANUQ treating 16 files at a time (uses 16 CPU cores):
+
+```bash
+./clean_all.sh all
+./PREPARE_OMP_SRC.sh generic 16
+```
+
+This produces a `./<source>.F90.log` report for each translated `<source>` file. You can easily check for errors with:
+
+```bash
+cat *.log | grep -i error
+```
+
+All translated source files can be found under `./cfgs/generic/MY_SRC`.
+
+You can now compile NANUQ using the appropriate GPU OpenMP compilation flags for your hardware.
+
+
+
+
+
+<br>
+
 <br>
 
 ## Getting started with NANUQ
@@ -188,7 +246,7 @@ at 2 km of resolution. SOM (Prather) scheme [left] and WENO 7
 
 _Same after 5 months of simulation._
 
-See the dedicated [README](./tests/ROTATION/README.md) under `./tests/ROTATION/`.
+See the dedicated [README](./tests/TEST-CASES/ROTATION/README.md) under `./tests/TEST-CASES/ROTATION/`.
 
 
 
@@ -211,7 +269,7 @@ representation of linear kinematic features (LKFs)
 
 _Evolution of the sea ice concentration during 3 days at 2 km of resolution using 2 different sea-ice rheologies: aEVP (default in SI3) [left] and the BBM brittle rheology [right]._
 
-See the dedicated [README](./tests/CYCLONE/README.md) under `./tests/CYCLONE/`.
+See the dedicated [README](./tests/TEST-CASES/CYCLONE/README.md) under `./tests/TEST-CASES/CYCLONE/`.
 
 
 <br>
@@ -227,7 +285,7 @@ Test-case of Dansereau _et al._, 2017. An idealized setup of the Nare straight u
 _Evolution of the sea ice thickness (initially 1 m) during 10 days at 2 km of resolution under constant northerly wind forcing of 20 m/s._
 
 
-See the dedicated [README](./tests/CHANNELD17/README.md) under `./tests/CHANNELD17/`.
+See the dedicated [README](./tests/TEST-CASES/CHANNELD17/README.md) under `./tests/TEST-CASES/CHANNELD17/`.
 
 
 <br>
@@ -255,7 +313,7 @@ https://github.com/user-attachments/assets/5507bdc9-aee2-4ba9-bc75-115abc1fac31
 
 _Evolution of the sea ice damage during 60 days with the BBM rheology (January & February 1997) in HUDSON12 with hourly ERA5 surface atmospheric forcing._
 
-See the dedicated [README](./tests/HUDSON12/standalone/README.md) under `./tests/HUDSON12/standalone`.
+See the dedicated [README](./tests/TEST-CASES/HUDSON12/standalone/README.md) under `./tests/TEST-CASES/HUDSON12/standalone`.
 
 
 <br>
@@ -269,7 +327,7 @@ https://github.com/user-attachments/assets/02d6799b-6e82-47bc-95cd-03e54171d8f8
 
 _Evolution of the sea ice thickness (range: 0 - 4m), 1997-01-01 to 1997-04-25 with the BBM rheology in the EGL12 coupled setup (NANUQ - OASIS -NEMO/OCE) with hourly ERA5 surface atmospheric forcing. Initialized 1997-01-01 with GLORYS2v4 reanalysis. White rectangular area are disregarded processors regions (MPI horizontal decomposition)._
 
-See the dedicated [README](./tests/EGL12/standalone/README.md) under `./tests/EGL12/standalone`.
+See the dedicated [README](./tests/TEST-CASES/EGL12/standalone/README.md) under `./tests/TEST-CASES/EGL12/standalone`.
 
 
 <br>
@@ -279,15 +337,28 @@ See the dedicated [README](./tests/EGL12/standalone/README.md) under `./tests/EG
 ## NANUQ coupled to OCE of NEMO
 
 ### The HUDSON12 (ocean/sea-ice coupled) realistic test case
-See the dedicated [README](./tests/HUDSON12/cpl_oce/README.md) under `./tests/HUDSON12/cpl_oce`.
+See the dedicated [README](./tests/TEST-CASES/HUDSON12/cpl_oce/README.md) under `./tests/TEST-CASES/HUDSON12/cpl_oce`.
 
 ### The EGL12 (ocean/sea-ice coupled) realistic test case with prescribed (open) lateral boundary conditions
-See the dedicated [README](./tests/EGL12/cpl_oce/README.md) under `./tests/EGL12/cpl_oce`.
+See the dedicated [README](./tests/TEST-CASES/EGL12/cpl_oce/README.md) under `./tests/TEST-CASES/EGL12/cpl_oce`.
 
 
 
 
 <br>
+
+
+## Stuff not yet implemented in SI3 (NEMO v5)
+
+ - bulk transfer coefficients for sea-ice / atmosphere turbulent fluxes estimates (`C_D`, `C_H` & `C_E`), depend on atmospheric surface boundary layer stability (using stability function of Grachev _et al._ 2007 in stable SBL within a _Monin-Obukov_-based iterative algorithm)
+
+
+
+
+
+
+<br>
+
 
 <br>
 
