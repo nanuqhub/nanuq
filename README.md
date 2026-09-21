@@ -15,11 +15,11 @@ As part of this process, NANUQ resolves both sea-ice dynamics and thermodynamics
   <img width="750" src="./tests/doc/figs/mods.svg">
 </p>
 
-With respect to the current version of SI3, NANUQ allows to use:
+With respect to the current version of SI3 (NEMO v5), NANUQ allows to use:
 - brittle rheologies such as BBM & MEB, including the damage tracer  ([Dansereau _et al._, 2016](https://doi.org/10.5194/tc-10-1339-2016), [Òlason _et al._, 2022](https://doi.org/10.1029/2021MS002685)), implemented in SI3 by [Brodeau _et al._, 2024](https://doi.org/10.5194/gmd-17-6051-2024).
 - the WENO advection scheme (for ice) of order 5 & 7, fully generalized for orthogonal curvilinear grids !
-- 5th order symmetric WENO interpolation for remapping between the C-grid point (such as from center to corner grid points for example).
-- an implicit RK3 numerical scheme for time integration of the brittle rheologies
+- 5th order symmetric WENO interpolation for remapping between the points of the C-grid (such as from center to corner grid points for example).
+- an implicit RK3 numerical scheme for time integration of the brittle rheologies (in place of previous implicit _Euler_ 1<sup>st</sup> roder)
 - simple _slab ocean_ scheme (for heat and salt) for standalone sea-ice simulations
 - bulk transfer coefficients over sea-ice, to compute turbulent air-ice fluxes, depend on near surface atmospheric stability (Monin-Obukhov ST) based on a Jordan _et al._, 1999 / Andreas _et al._, 2005 type of stability functions (algo "STAB" in namelist)
 
