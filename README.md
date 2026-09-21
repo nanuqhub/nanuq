@@ -1,9 +1,4 @@
-
 [![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
-
-
-New: 4 extra global arrays `SI1t`, `SI2t`, `SI1f` & `SI2f` that store the first & second invariants of the vertically integrated stress tensors!
-
 
 # NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
 
