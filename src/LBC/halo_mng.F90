@@ -70,7 +70,7 @@ CONTAINS
 
    SUBROUTINE halo_mng_resize_2D(pta, cdna, psgn, fillval)
 
-      REAL(wp), POINTER, DIMENSION(:,:) :: pta
+      REAL(wp), POINTER, DIMENSION(:,:), INTENT(inout) :: pta
       CHARACTER(len=1), INTENT(in)  :: cdna
       REAL(wp), INTENT(in)  :: psgn
       REAL(wp), OPTIONAL, INTENT(in ) :: fillval
@@ -82,25 +82,25 @@ CONTAINS
       pta_size_j = SIZE(pta,2)
 
       ! check if the current size of pta is equal to the current expected dimension
-      IF (pta_size_i .ne. jpi) THEN
+      IF(pta_size_i /= jpi) THEN
          ALLOCATE (zpta(jpi, jpj))
          offset = abs((jpi - pta_size_i) / 2)
 
-         IF (pta_size_i .lt. jpi) THEN
+         IF(pta_size_i < jpi) THEN
             zpta (offset+1 : offset+pta_size_i, offset+1 : offset+pta_size_j) = pta
          ELSE
             zpta = pta(offset+1 : offset+jpi, offset+1 : offset+jpj)
-         END IF
+         ENDIF
          CALL lbc_lnk( 'halo_mng_resize_2D', zpta, cdna, psgn, pfillval=fillval)
          DEALLOCATE(pta)
          pta => zpta
-      END IF
+      ENDIF
 
    END SUBROUTINE halo_mng_resize_2D
 
    SUBROUTINE halo_mng_resize_3D(pta, cdna, psgn, fillval)
 
-      REAL(wp), POINTER, DIMENSION(:,:,:) :: pta
+      REAL(wp), POINTER, DIMENSION(:,:,:), INTENT(inout) :: pta
       CHARACTER(len=1), INTENT(in)  :: cdna
       REAL(wp), INTENT(in)  :: psgn
       REAL(wp), OPTIONAL, INTENT(in ) :: fillval
@@ -112,25 +112,25 @@ CONTAINS
       pta_size_j = SIZE(pta,2)
 
       ! check if the current size of pta is equal to the current expected dimension
-      IF (pta_size_i .ne. jpi) THEN
+      IF(pta_size_i /= jpi) THEN
          ALLOCATE (zpta(jpi, jpj, jpk))
          offset = abs((jpi - pta_size_i) / 2)
 
-         IF (pta_size_i .lt. jpi) THEN
+         IF(pta_size_i < jpi) THEN
             zpta (offset+1 : offset+pta_size_i, offset+1 : offset+pta_size_j, :) = pta
          ELSE
             zpta = pta(offset+1 : offset+jpi, offset+1 : offset+jpj, :)
-         END IF
+         ENDIF
          CALL lbc_lnk( 'halo_mng_resize_3D', zpta, cdna, psgn, pfillval=fillval)
          DEALLOCATE(pta)
          pta => zpta
-      END IF
+      ENDIF
 
    END SUBROUTINE halo_mng_resize_3D
 
    SUBROUTINE halo_mng_resize_4D(pta, cdna, psgn, fillval, fjpt)
 
-      REAL(wp), POINTER, DIMENSION(:,:,:,:) :: pta
+      REAL(wp), POINTER, DIMENSION(:,:,:,:), intent(inout) :: pta
       CHARACTER(len=1), INTENT(in)  :: cdna
       REAL(wp), INTENT(in)  :: psgn
       REAL(wp), OPTIONAL, INTENT(in) :: fillval
@@ -143,25 +143,25 @@ CONTAINS
       pta_size_j = SIZE(pta,2)
 
       ! check if the current size of pta is equal to the current expected dimension
-      IF (pta_size_i .ne. jpi) THEN
+      IF(pta_size_i /= jpi) THEN
          ALLOCATE (zpta(jpi, jpj, jpk, jpt))
          offset = abs((jpi - pta_size_i) / 2)
 
-         IF (pta_size_i .lt. jpi) THEN
+         IF(pta_size_i < jpi) THEN
             zpta (offset+1 : offset+pta_size_i, offset+1 : offset+pta_size_j, :, :) = pta
          ELSE
             zpta = pta(offset+1 : offset+jpi, offset+1 : offset+jpj, :, :)
-         END IF
+         ENDIF
          CALL lbc_lnk( 'halo_mng_resize_4D', zpta(:,:,:,fjpt), cdna, psgn, pfillval=fillval)
          DEALLOCATE(pta)
          pta => zpta
-      END IF
+      ENDIF
 
    END SUBROUTINE halo_mng_resize_4D
 
    SUBROUTINE halo_mng_resize_5D(pta, cdna, psgn, fillval, kjpt, fjpt)
 
-      REAL(wp), POINTER, DIMENSION(:,:,:,:,:) :: pta
+      REAL(wp), POINTER, DIMENSION(:,:,:,:,:), INTENT(inout) :: pta
       CHARACTER(len=1), INTENT(in)  :: cdna
       REAL(wp), INTENT(in)  :: psgn
       REAL(wp), OPTIONAL, INTENT(in) :: fillval
@@ -175,19 +175,19 @@ CONTAINS
       pta_size_j = SIZE(pta,2)
 
       ! check if the current size of pta is equal to the current expected dimension
-      IF (pta_size_i .ne. jpi) THEN
+      IF(pta_size_i /= jpi) THEN
          ALLOCATE (zpta(jpi, jpj, jpk, kjpt, jpt))
          offset = abs((jpi - pta_size_i) / 2)
 
-         IF (pta_size_i .lt. jpi) THEN
+         IF(pta_size_i < jpi) THEN
             zpta (offset+1 : offset+pta_size_i, offset+1 : offset+pta_size_j, :, :, :) = pta
          ELSE
             zpta = pta(offset+1 : offset+jpi, offset+1 : offset+jpj, :, :, :)
-         END IF
+         ENDIF
          CALL lbc_lnk( 'halo_mng_resize_5D', zpta(:,:,:,:,fjpt), cdna, psgn, pfillval=fillval)
          DEALLOCATE(pta)
          pta => zpta
-      END IF
+      ENDIF
 
    END SUBROUTINE halo_mng_resize_5D
 

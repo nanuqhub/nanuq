@@ -28,8 +28,8 @@ MODULE domwri
    PUBLIC   dom_wri              ! routine called by inidom.F90
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: domwri.F90 15033 2021-06-21 10:24:45Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -73,17 +73,13 @@ CONTAINS
       CALL iom_putatt( inum,   'Jperio', COUNT( (/l_Jperio/) ) )
       CALL iom_putatt( inum,    'NFold', COUNT( (/l_NFold /) ) )
       CALL iom_putatt( inum,   'NFtype',          c_NFtype     )
-      !                                                         ! type of vertical coordinate
-      IF(ln_zco)   CALL iom_putatt( inum, 'VertCoord', 'zco' )
-      IF(ln_zps)   CALL iom_putatt( inum, 'VertCoord', 'zps' )
-      IF(ln_sco)   CALL iom_putatt( inum, 'VertCoord', 'sco' )
       !                                                         ! ocean cavities under iceshelves
       CALL iom_putatt( inum,   'IsfCav', COUNT( (/ln_isfcav/) ) )
       !                                                         ! masks
       CALL iom_rstput( 0, 0, inum, 'tmask', tmask, ktype = jp_i1 )     !    ! land-sea mask
       CALL iom_rstput( 0, 0, inum, 'umask', umask, ktype = jp_i1 )
       CALL iom_rstput( 0, 0, inum, 'vmask', vmask, ktype = jp_i1 )
-      CALL iom_rstput( 0, 0, inum, 'fmask', fmask, ktype = jp_i1 )
+      CALL iom_rstput( 0, 0, inum, 'fmask', fmask, ktype = jp_r4 )
 
       CALL iom_rstput( 0, 0, inum, 'glamt', glamt, ktype = jp_r8 )     !    ! latitude
       CALL iom_rstput( 0, 0, inum, 'glamu', glamu, ktype = jp_r8 )

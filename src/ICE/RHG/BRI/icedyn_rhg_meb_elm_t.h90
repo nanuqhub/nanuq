@@ -1,0 +1,13 @@
+
+            !! T-centric cell
+            !! ~~~~~~~~~~~~~~
+            zxpC = pxpCt(ji,jj)  ! `expC` [Eq.8]
+
+            z1md = p1mdt(ji,jj)
+
+            zE = rn_E0 * z1md * zxpC                    ! elasticity [Pa]  `E = E0 * (1 - d) * exp[-C*(1-A)]`
+
+            zeta = rn_eta0 * z1md**5 * zxpC             ! viscosity [Pa.s]
+            zL = MAX( zeta / MAX( zE, epsi20 ) , pdt )  ! lambda [s]
+
+            zmul = MIN( zL/(zL + pdt) , 1._wp ) ! Multiplicator term [Eq.32]

@@ -15,7 +15,7 @@ MODULE icethd_dh
    USE par_ice
    USE ice            ! sea-ice: variables
 
-   USE sbc_oce , ONLY : fatm_snow
+   USE sbcblk  , ONLY : jp_snow, sf
    USE sbc_ice , ONLY : qns_ice, qtr_ice_top, qsr_ice, qml_ice, qprec_ice, evap_ice
    USE oss_nnq , ONLY : sst_s, sss_s, frq_m
 
@@ -33,13 +33,13 @@ MODULE icethd_dh
    PUBLIC   ice_thd_dh        ! called by ice_thd
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_thd_dh(jl_cat, ll_ice_present)
+   SUBROUTINE ice_thd_dh(jl_cat, lk_ice_present)
       !!------------------------------------------------------------------
       !!                ***  ROUTINE ice_thd_dh  ***
       !!
@@ -66,7 +66,7 @@ CONTAINS
       !!              Vancoppenolle et al.,2009, Ocean Modelling
       !!------------------------------------------------------------------
       INTEGER,                     INTENT(in)    :: jl_cat        ! ice-category we are working with
-      LOGICAL, DIMENSION(jpi,jpj), INTENT(inout) :: ll_ice_present
+      LOGICAL, DIMENSION(jpi,jpj), INTENT(inout) :: lk_ice_present
       !!------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk, jl ! dummy loop indices
       !
@@ -109,20 +109,16 @@ CONTAINS
       REAL(wp), DIMENSION(0:nlay_s)   ::   zes_cum1, zhs_cum1   ! new cumulative enthlapies and layers interfaces
       !!------------------------------------------------------------------
       IF( ln_timing    )   CALL timing_start('ice_thd_dh')
-
-      !$acc data present( a_i,at_i,dh_i_bog,dh_i_bom,dh_i_itm,dh_i_sub,dh_i_sum_2d,dh_s_itm,dh_snowice,dh_s_sum_2d,e_i,e_s,evap_ice,fatm_snow,fhld,frq_m )
-      !$acc data present( hfx_bog,hfx_bom,hfx_res,hfx_snw,hfx_spr,hfx_sub,hfx_sum,hfx_thd,h_i,h_i,h_s,ll_ice_present,qcn_ice_top )
-      !$acc data present( qml_ice,qprec_ice,qsb_ice_bot,qsr_ice,qtr_ice_bot,qtr_ice_top,sfx_bog,sfx_bom,sfx_bri,sfx_res,sfx_sni,sfx_sub,sfx_sum,s_i )
-      !$acc data present( sss_s,sst_s,sz_i,t_bo,t_i,t_s,t_su,wfx_bog,wfx_bom,wfx_err_sub,wfx_ice_sub,wfx_res,wfx_sni,wfx_snw_sni,wfx_snw_sub,wfx_snw_sum,wfx_spr,wfx_sum )
-      !KEEP: fhld, qsb_ice_bot
-
-      !$acc data create( icount,zs_i,zh_i,zh_s,ze_s,zh_i_o,ze_i_o,zs_i_o, zxi_cum0,zhi_cum0,zxi_cum1,zhi_cum1,zes_cum0,zhs_cum0,zes_cum1,zhs_cum1 )
+      !$acc data create( icount,zs_i,zh_i,zh_s,ze_s,zh_i_o,ze_i_o,zs_i_o,zxi_cum0,zhi_cum0,zxi_cum1,zhi_cum1,zes_cum0,zhs_cum0,zes_cum1,zhs_cum1 ) present( lk_ice_present )
+      !#ACCDBG:
+      !%acc data present( a_i,at_i,dh_i_bog,dh_i_bom,dh_i_itm,dh_i_sub,dh_i_sum_2d,dh_s_itm,dh_snowice,dh_s_sum_2d,e_i,e_s,evap_ice,sf(jp_snow)%fnow(:,:,1),fhld,frq_m )
+      !%acc data present( hfx_bog,hfx_bom,hfx_res,hfx_snw,hfx_spr,hfx_sub,hfx_sum,hfx_thd,h_i,h_i,h_s,lk_ice_present,qcn_ice_top )
+      !%acc data present( qml_ice,qprec_ice,qsb_ice_bot,qsr_ice,qtr_ice_bot,qtr_ice_top,sfx_bog,sfx_bom,sfx_bri,sfx_res,sfx_sni,sfx_sub,sfx_sum,s_i )
+      !%acc data present( sss_s,sst_s,sz_i,t_bo,t_i,t_s,t_su,wfx_bog,wfx_bom,wfx_err_sub,wfx_ice_sub,wfx_res,wfx_sni,wfx_snw_sni,wfx_snw_sub,wfx_snw_sum,wfx_spr,wfx_sum )
+      !#ACCDBG.
 
       ! Discriminate between time varying salinity and constant
-      SELECT CASE( nn_icesal )                  ! varying salinity or not
-      CASE( 1 , 3 )   ;   zswitch_sal = 0._wp   ! prescribed salinity profile
-      CASE( 2 , 4 )   ;   zswitch_sal = 1._wp   ! varying salinity profile
-      END SELECT
+      zswitch_sal = 1._wp   ! varying salinity profile
       !
       ! for snw-ice formation
       z1_rho = 1._wp / ( rhos+rho0-rhoi )
@@ -136,7 +132,7 @@ CONTAINS
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             !
-            IF( ll_ice_present(ji,jj) ) THEN
+            IF( lk_ice_present(ji,jj) ) THEN
                !                       ! ============================================== !
                !                       ! Available heat for surface and bottom ablation !
                !                       ! ============================================== !
@@ -153,17 +149,10 @@ CONTAINS
                zq_bot = MAX( 0._wp, zf_tt * rDt_ice )
                !
                ! initialize salinity
-               IF( nn_icesal == 4 ) THEN
-                  !$acc loop seq
-                  DO jk = 1, nlay_i
-                     zs_i(jk) = sz_i(ji,jj,jk,jl_cat)  ! use layer salinity
-                  END DO
-               ELSE
-                  !$acc loop seq
-                  DO jk = 1, nlay_i
-                     zs_i(jk) = s_i(ji,jj,jl_cat)      !     bulk salinity otherwise (for conservation purpose)  !BUG reported to la Rousette! (used to be s_i(ji,jj,:))
-                  END DO
-               ENDIF
+               !$acc loop seq
+               DO jk = 1, nlay_i
+                  zs_i(jk) = sz_i(ji,jj,jk,jl_cat)  ! use layer salinity
+               END DO
                !
                ! initialize ice layer thicknesses and enthalpies
                !$acc loop seq
@@ -215,9 +204,9 @@ CONTAINS
 
                ! Snow precipitation
                !-------------------
-               IF( fatm_snow(ji,jj) > 0._wp ) THEN
+               IF( sf(jp_snow)%fnow(ji,jj,1) > 0._wp ) THEN
                   zsnw =   1._wp - MAX(1._wp - at_i(ji,jj),0._wp )**rn_snwblow   ! snow distribution over ice after wind blowing   !LOLO inlining!
-                  zh_s(0) = zsnw * fatm_snow(ji,jj) * rDt_ice * r1_rhos / at_i(ji,jj)   ! thickness of precip
+                  zh_s(0) = zsnw * sf(jp_snow)%fnow(ji,jj,1) * rDt_ice * r1_rhos / at_i(ji,jj)   ! thickness of precip
                   ze_s(0) = MAX( 0._wp, - qprec_ice(ji,jj) )                              ! enthalpy of the precip (>0, J.m-3)
                   !
                   hfx_spr(ji,jj) = hfx_spr(ji,jj) + ze_s(0) * zh_s(0) * a_i(ji,jj,jl_cat) * r1_Dt_ice   ! heat flux from snow precip (>0, W.m-2)
@@ -232,8 +221,9 @@ CONTAINS
                ! if qla_ice is >=0 (upwards), heat goes to the atmosphere, therefore snow sublimates
                ! else                       , there is snow deposition
                !    comment: not counted in mass/heat exchange in iceupdate.F90 since this is an exchange with atm. (not ocean)
-               zdeltah    = MAX( - evap_ice(ji,jj,jl_cat) * r1_rhos * rDt_ice, - h_s(ji,jj,jl_cat) )   ! amount of snw that sublimates (<0) or deposition (>0)
-               zevap_rema =        evap_ice(ji,jj,jl_cat)           * rDt_ice + zdeltah * rhos  ! remaining evap in kg.m-2 (used for ice sublimation later on)
+               !  MIND! => `evap_ice<0` when ice losing freshwater to the atmo...
+               zdeltah    = MAX(   evap_ice(ji,jj,jl_cat) * r1_rhos * rDt_ice, - h_s(ji,jj,jl_cat) )   ! amount of snw that sublimates (<0) or deposition (>0)
+               zevap_rema =      - evap_ice(ji,jj,jl_cat)           * rDt_ice + zdeltah * rhos  ! remaining evap in kg.m-2 (used for ice sublimation later on)
                IF( zdeltah > 0._wp .AND. ze_s(0) == 0._wp ) THEN   ! if snow deposition and no snow precip, then estimate ze_s(0) with t_su
                   ze_s(0) = rhos * ( rLfus - rcpi * ( t_su(ji,jj,jl_cat) - rt0 ) )
                ENDIF
@@ -514,12 +504,6 @@ CONTAINS
                hfx_thd(ji,jj) = hfx_thd(ji,jj) + zEw * zfmdt * a_i(ji,jj,jl_cat) * r1_Dt_ice ! Heat flux
                sfx_sni(ji,jj) = sfx_sni(ji,jj) + sss_s(ji,jj) * zfmdt * a_i(ji,jj,jl_cat) * r1_Dt_ice ! Salt flux
 
-               ! Case constant salinity in time: virtual salt flux to keep salinity constant
-               IF( nn_icesal == 1 .OR. nn_icesal == 3 )  THEN
-                  sfx_bri(ji,jj) = sfx_bri(ji,jj) - sss_s(ji,jj) * zfmdt * a_i(ji,jj,jl_cat) * r1_Dt_ice  &  ! put back sss_s     into the ocean
-                     & - zs_i(1) * dh_snowice(ji,jj) * rhoi * a_i(ji,jj,jl_cat) * r1_Dt_ice     ! and get  rn_icesal from the ocean
-               ENDIF
-
                ! Mass flux: All snow is thrown in the ocean, and seawater is taken to replace the volume
                wfx_sni(ji,jj) = wfx_sni(ji,jj) - dh_snowice(ji,jj) * rhoi * a_i(ji,jj,jl_cat) * r1_Dt_ice
                wfx_snw_sni(ji,jj) = wfx_snw_sni(ji,jj) + dh_snowice(ji,jj) * rhos * a_i(ji,jj,jl_cat) * r1_Dt_ice
@@ -572,31 +556,20 @@ CONTAINS
 
                ! Remapping of ice salt on a regular grid
                !----------------------------------------
-               IF( nn_icesal == 4 ) THEN
-                  !CALL ice_var_vremap( zh_i_o, zs_i_o, sz_i(ji,jj,:,jl_cat) ) ! manual inlining of `ice_var_vremap`:
-                  !  ==> inlining, better for GPU...
-# include         "ice_var_vremap_s.h90"
-                  !$acc loop seq
-                  DO jk1 = 1, nlay_i
-                     sz_i(ji,jj,jk1,jl_cat) = MAX( 0._wp, zxi_cum1(jk1) - zxi_cum1(jk1-1) ) * zdum ! max for roundoff error
-                  END DO
-               ENDIF
-               !
-               IF( nn_icesal == 2 )   THEN ! Update ice salinity from snow-ice and bottom growth
-                  zs_sni = sss_s(ji,jj) * ( rhoi - rhos ) * r1_rhoi                                       ! salinity of snow ice
-                  zds    =       ( zs_sni   - s_i(ji,jj,jl_cat) ) * dh_snowice(ji,jj) / MAX( epsi10, h_i(ji,jj,jl_cat) ) ! snow-ice
-                  zds    = zds + ( zs_i_new - s_i(ji,jj,jl_cat) ) * dh_i_bog(ji,jj) / MAX( epsi10, h_i(ji,jj,jl_cat) ) ! bottom growth
-                  !
-                  s_i(ji,jj,jl_cat) = s_i(ji,jj,jl_cat) + zds
-               ENDIF
+               !CALL ice_var_vremap( zh_i_o, zs_i_o, sz_i(ji,jj,:,jl_cat) ) ! manual inlining of `ice_var_vremap`:
+               !  ==> inlining, better for GPU...
+# include      "ice_var_vremap_s.h90"
+               !$acc loop seq
+               DO jk1 = 1, nlay_i
+                  sz_i(ji,jj,jk1,jl_cat) = MAX( 0._wp, zxi_cum1(jk1) - zxi_cum1(jk1-1) ) * zdum ! max for roundoff error
+               END DO
 
-
-            ENDIF ! ll_ice_present
+            ENDIF ! lk_ice_present
             !
          END DO !DO ji=Nis0, Nie0
       END DO !DO jj=Njs0, Nje0
       !$acc end parallel loop
-      !
+
       !                       ! ================== !
       !                       ! End main loop here !
       !                       ! ================== !
@@ -606,21 +579,24 @@ CONTAINS
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
-            IF( ll_ice_present(ji,jj) .AND. h_i(ji,jj,jl_cat) <= 0._wp) THEN
+            IF( lk_ice_present(ji,jj) .AND. h_i(ji,jj,jl_cat) <= 0._wp) THEN
                a_i(ji,jj,jl_cat)  = 0._wp
                h_i(ji,jj,jl_cat)  = 0._wp
                h_s(ji,jj,jl_cat)  = 0._wp
                t_su(ji,jj,jl_cat) = 0._wp
-               ll_ice_present(ji,jj) = .FALSE.
+               lk_ice_present(ji,jj) = .FALSE.
             ENDIF
          END DO
       END DO
       !$acc end parallel loop
 
-      !$acc end data
-      !$acc end data
-      !$acc end data
-      !$acc end data
+      !#ACCDBG:
+      !#acc end data
+      !#acc end data
+      !#acc end data
+      !#acc end data
+      !#ACCDBG.
+
       !$acc end data
       IF( ln_timing    )   CALL timing_stop('ice_thd_dh')
 

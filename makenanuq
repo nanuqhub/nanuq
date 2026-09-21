@@ -102,7 +102,6 @@ export CONFIG_DIR=${MAIN_DIR}/cfgs
 export TOOLS_DIR=${MAIN_DIR}/tools
 export COMPIL_DIR=${MAIN_DIR}/mk
 export NEMO_DIR=${MAIN_DIR}/${x_s}
-export AGRIFUSE='10'
 list_key='0'; chk_key='1'
 list_add_key=''; list_del_key='';
 #conf_file=ref_cfgs.txt
@@ -356,10 +355,6 @@ fi
 #- We coose the default light file
 export USEBLD=bldxag.cfg
 
-#- We look after agrif
-grep key_agrif ${COMPIL_DIR}/cpp.fcm && export AGRIFUSE=1 && export USEBLD=${USEBLD/xag/}
-. ${COMPIL_DIR}/Fprep_agrif.sh ${NEW_CONF} ${NEMO_TDIR} arch_nemo.fcm || exit 3
-
 #-
 #_ END OF CONFIGURATION PHASE
 #_
@@ -369,16 +364,6 @@ grep key_agrif ${COMPIL_DIR}/cpp.fcm && export AGRIFUSE=1 && export USEBLD=${USE
 
 if [ "${NBR_PRC}" -gt 0 ]; then
 	cd ${NEMO_TDIR}/${NEW_CONF} || cd -
-
-	## if AGRIF we do a first preprocessing
-	if [[ ${#x_c} -eq 0 && "$AGRIFUSE" -eq 1 ]]; then
-		fcm build --ignore-lock -j 1 ${COMPIL_DIR}/bld_preproagr.cfg ||{ cd - ; exit 1 ;}
-		echo ''
-		echo "---------------------------------"
-		echo "CONV preprocessing successfull !!"
-		echo "---------------------------------"
-		echo ''
-	fi
 
 	fcm build ${x_c} --ignore-lock -v ${x_v} -j ${NBR_PRC} ${COMPIL_DIR}/$USEBLD ||{ cd - ; exit 1 ;}
 
@@ -391,7 +376,7 @@ if [ "${NBR_PRC}" -gt 0 ]; then
 
 		echo 'Cleaning in '${NEW_CONF}' the building folders'
 
-      for dir in AGRIFLIB BLD EXP00 LONG NEMOFILES REPRO_* SHORT WORK; do
+      for dir in  BLD EXP00 LONG NEMOFILES REPRO_* SHORT WORK; do
          rm -rf ${NEMO_TDIR}/${NEW_CONF}/$dir
       done
 

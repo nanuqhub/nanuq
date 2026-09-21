@@ -1,15 +1,20 @@
 #!/bin/bash
 
-list_clean="`\find ./cfgs -name BLD` "
+list_clean="`\find ./cfgs -name BLD`"
 
-list_clean+="`\find ./cfgs -name WORK` "
+list_clean+=" `\find ./cfgs -name WORK`"
 
-list_clean+="`\find ./cfgs -name EXP00`"
+list_clean+=" `\find ./cfgs -name EXP00`"
 
-list_clean+="`\find ./cfgs -name MY_SRC`"
+if [ "$1" = "all" ]; then
+    echo " => adding 'MY_SRC' to removal list..."
+    list_clean+=" `\find ./cfgs -name MY_SRC`"
+fi
 
 echo "  ===> delete ${list_clean} !"
 sleep 2
+
+rm -f *.log
 
 rm -rf ${list_clean}
 

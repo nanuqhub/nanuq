@@ -14,7 +14,7 @@ MODULE abl
    USE sbc_oce, ONLY: ght_abl, ghw_abl, e3t_abl, e3w_abl, jpka   ! scale factors and altitudes of ABL grid points in the vertical
 
    USE in_out_manager, ONLY: lwp
-   
+
    IMPLICIT NONE
    PRIVATE
 
@@ -25,6 +25,10 @@ MODULE abl
    REAL(wp), PUBLIC, ALLOCATABLE, DIMENSION(:,:,:,:)   ::   u_abl        !: i-horizontal velocity   [m/s]
    REAL(wp), PUBLIC, ALLOCATABLE, DIMENSION(:,:,:,:)   ::   v_abl        !: j-horizontal velocity   [m/s]
    REAL(wp), PUBLIC, ALLOCATABLE, DIMENSION(:,:,:,:,:) ::   tq_abl       !: 4D T-q fields           [Kelvin,kg/kg]
+   !
+   !#LB: we add these 2 arrays so they can be loaded into GPU's memory:
+   !REAL(wp), PUBLIC, ALLOCATABLE, DIMENSION(:,:,:)     ::   ug_abl        !: i-horizontal geostrophic velocity   [m/s]
+   !REAL(wp), PUBLIC, ALLOCATABLE, DIMENSION(:,:,:)     ::   vg_abl        !: j-horizontal geostrophic velocity   [m/s]
 
    !! ABL TKE closure scheme                            !
    !! --------------------------
@@ -44,7 +48,7 @@ MODULE abl
    INTEGER , PUBLIC :: nt_n, nt_a       !: now / after indices (equal 1 or 2)
    !
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0, Brodeau (2026)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ABL 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL licence
    !!----------------------------------------------------------------------
@@ -54,10 +58,10 @@ CONTAINS
       !!----------------------------------------------------------------------
       !!                   ***  FUNCTION abl_alloc  ***
       !!----------------------------------------------------------------------
-      INTEGER :: ierr
+      INTEGER, DIMENSION(2) :: ierr = 0
       !!----------------------------------------------------------------------
       !
-      IF(lwp) PRINT *, 'LOLO: `abl_alloc@abl.F90`: allocating ABL arrays!'
+      IF(lwp) PRINT *, ' *** `abl_alloc@abl.F90`: allocating ABL arrays! ***'
       ALLOCATE( u_abl   (jpi,jpj,1:jpka,jptime     ), &
          &      v_abl   (jpi,jpj,1:jpka,jptime     ), &
          &      tq_abl  (jpi,jpj,1:jpka,jptime,jptq), &
@@ -71,10 +75,26 @@ CONTAINS
          &      msk_abl (jpi,jpj                   ), &
          &      rest_eq (jpi,jpj                   ), &
          &      e3t_abl (1:jpka), e3w_abl(1:jpka)       , &
-         &      ght_abl (1:jpka), ghw_abl(1:jpka)       , STAT=ierr )
-      !
-      abl_alloc = ierr
-      IF( abl_alloc /= 0 )   CALL ctl_warn('abl_alloc: failed to allocate arrays')
+         &      ght_abl (1:jpka), ghw_abl(1:jpka)       , STAT=ierr(1) )
+      
+      !#LB: we add these 2 arrays so they can be loaded into GPU's memory
+      !IF(lwp) PRINT *, 'LOLO: `abl_alloc@abl.F90` allocating geostrophic wind arrays, jpka =', jpka
+      !ALLOCATE( ug_abl(jpi,jpj,1:jpka), vg_abl(jpi,jpj,1:jpka),  STAT=ierr(2) )
+
+      abl_alloc = MAXVAL( ierr )
+      CALL mpp_sum ( 'abl_alloc', abl_alloc )
+      IF( abl_alloc > 0 )   CALL ctl_warn('abl_alloc: allocation of ABL arrays failed')
+
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: abl_alloc() => adding ABL-related arrays to memory!'
+      PRINT *, '            => u_abl, v_abl, tq_abl, tke_abl, avm_abl, avt_abl, mxld_abl, mxlm_abl'
+      !$acc enter data copyin( u_abl, v_abl, tq_abl, tke_abl, avm_abl, avt_abl, mxld_abl, mxlm_abl )
+      PRINT *, '            => fft_abl, pblh, msk_abl, rest_eq, e3t_abl, e3w_abl, ght_abl, ghw_abl'
+      !$acc enter data copyin( fft_abl, pblh, msk_abl, rest_eq, e3t_abl, e3w_abl, ght_abl, ghw_abl )
+      !PRINT *, '            => ug_abl, vg_abl'
+      !!acc enter data copyin( ug_abl, vg_abl )      
+#endif
+      IF(lwp) PRINT *, ''
       !
    END FUNCTION abl_alloc
 

@@ -63,18 +63,18 @@ MODULE ossskin
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:), PUBLIC :: Tau_ac !: time integral / accumulated momentum
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: ossskin.F90 15372 2021-10-14 15:47:24Z davestorkey $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
    !
-   !# if defined _OPENACC
+   !#if defined _OPENACC || defined _OPENMP
    !      PRINT *, ' * info GPU: ossskin_alloc() => adding OSS arrays to memory!'
    !      PRINT *, '             => ssu_m, ssv_m, ssh_m, sst_m, sss_m, frq_m, e3t_m, sst_s, sss_s'
    !      !$acc enter data copyin( ssu_m, ssv_m, ssh_m, sst_m, sss_m, frq_m, e3t_m,  sst_s, sss_s )
-   !# endif
+   !#endif
 
 
    INTEGER FUNCTION oss_skin_alloc( l_use_cs, l_use_wl, l_coare )
@@ -97,11 +97,7 @@ CONTAINS
       IF( PRESENT( l_use_wl) ) llwl    = l_use_wl
       IF( PRESENT( l_coare ) ) llcoare = l_coare
 
-
       ierr(:) = 0
-
-      !      ALLOCATE( ssst(jpi,jpj)  , sssq(jpi,jpj)  ,  STAT=ierr(1)  )
-
 
       IF( llwl ) THEN
          ALLOCATE ( dT_wl(jpi,jpj), Hz_wl(jpi,jpj), STAT=ierr(2) )
@@ -119,11 +115,11 @@ CONTAINS
       ENDIF
 
 
-      !# if defined _OPENACC
+      !#if defined _OPENACC || defined _OPENMP
       !      PRINT *, ' * info GPU: oss_skin_alloc() => adding skin SST arrays to memory!'
       !      PRINT *, '             => ssst, sssq'
       !      !$acc enter data copyin( ssst, sssq )
-      !# endif
+      !#endif
 
 
       oss_skin_alloc = MAXVAL( ierr(:) )

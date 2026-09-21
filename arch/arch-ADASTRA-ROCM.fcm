@@ -1,0 +1,67 @@
+##########################################
+# ADASTRA / AMD's ROCm 7.2.0 / OpenMPI 5 #
+##########################################
+
+%ROCM_PATH           /opt/rocm-7.2.0
+%MPI_PATH            /lus/home/CT1/hmg2840/brodeau/opt/openMPI5_rocm7p2
+
+%NCDF_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_rocm7p2_par
+%HDF5_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_rocm7p2_par
+%XIOS_HOME           /lus/home/CT1/hmg2840/brodeau/src/xios-trunk_rocm7p2
+%OASIS_HOME
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdf -lnetcdff -L/opt/rocm-7.2.0/lib/llvm/lib/clang/22/lib/x86_64-unknown-linux-gnu -lflang_rt.runtime
+
+%XIOS_INC            -I%XIOS_HOME/inc
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+
+%FC                  mpifort
+
+%BASE_FFLAGS         -fdefault-real-8 -finit-global-zero
+
+%PROD_FFLAGS         -O3 -ffast-math
+
+%DEV_FFLAGS          -g -O0 -fno-omit-frame-pointer
+
+
+# OpenMP:
+# ~~~~~~~
+%GPU_BASE_FLAGS      -fopenmp --offload-arch=gfx90a -fopenmp-version=51
+%GPU_PROD_FLAGS
+%GPU_DEV_FLAGS       
+%GPU_FPP_FLAGS       -D_OPENMP
+%GPU_LD_FLAGS        %GPU_BASE_FLAGS -L/opt/rocm-7.2.0/lib/llvm/lib/clang/22/lib/x86_64-unknown-linux-gnu -lflang_rt.runtime
+
+
+# Production with GPU:
+# ~~~~~~~~~~~~~~~~~~~~
+%FPPFLAGS            -P  -traditional %GPU_FPP_FLAGS
+%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS %GPU_BASE_FLAGS %GPU_PROD_FLAGS
+%LDFLAGS             %GPU_LD_FLAGS -lstdc++
+#
+# Debug with GPU:
+# ~~~~~~~~~~~~~~
+#%FPPFLAGS            -P  -traditional %GPU_FPP_FLAGS
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS %GPU_BASE_FLAGS %GPU_DEV_FLAGS
+#%LDFLAGS             %GPU_LD_FLAGS
+
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+
+%LD                  mpifort
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  mpicc
+%CFLAGS              -O3

@@ -34,13 +34,13 @@ MODULE icethd_zdf
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_thd_zdf( kl, ll_ice_present )
+   SUBROUTINE ice_thd_zdf( kl, lk_ice_present )
       !!-------------------------------------------------------------------
       !!                ***  ROUTINE ice_thd_zdf  ***
       !!
@@ -48,7 +48,7 @@ CONTAINS
       !!              of vertical diffusion
       !!-------------------------------------------------------------------
       INTEGER,                     INTENT(in) :: kl
-      LOGICAL, DIMENSION(jpi,jpj), INTENT(in) :: ll_ice_present
+      LOGICAL, DIMENSION(jpi,jpj), INTENT(in) :: lk_ice_present
       !!-------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_thd_zdf')
       !
@@ -58,12 +58,12 @@ CONTAINS
       CASE( np_BL99 )               ! BL99 solver !
          !                          !-------------!
          IF( .NOT.ln_cndflx ) THEN                           ! No conduction flux ==> default option
-            CALL ice_thd_zdf_BL99( kl, np_cnd_OFF, ll_ice_present )
+            CALL ice_thd_zdf_BL99( kl, np_cnd_OFF, lk_ice_present )
          ELSEIF( ln_cndflx .AND. .NOT.ln_cndemulate ) THEN   ! Conduction flux as surface boundary condition ==> Met Office default option
-            CALL ice_thd_zdf_BL99( kl, np_cnd_ON, ll_ice_present  )
+            CALL ice_thd_zdf_BL99( kl, np_cnd_ON, lk_ice_present  )
          ELSEIF( ln_cndflx .AND.      ln_cndemulate ) THEN   ! Conduction flux is emulated
-            CALL ice_thd_zdf_BL99( kl, np_cnd_EMU, ll_ice_present )
-            CALL ice_thd_zdf_BL99( kl, np_cnd_ON, ll_ice_present  )
+            CALL ice_thd_zdf_BL99( kl, np_cnd_EMU, lk_ice_present )
+            CALL ice_thd_zdf_BL99( kl, np_cnd_ON, lk_ice_present  )
          ENDIF
          !
       END SELECT

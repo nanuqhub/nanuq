@@ -1,0 +1,1805 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="648.59161pt"
+   height="642.98621pt"
+   viewBox="0 0 648.59164 642.9862"
+   version="1.1"
+   id="svg182"
+   sodipodi:docname="Speedup_Arctic_12th_extra.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <sodipodi:namedview
+     id="namedview182"
+     pagecolor="#c2c2c2"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="pt"
+     inkscape:zoom="0.74557205"
+     inkscape:cx="349.39615"
+     inkscape:cy="260.20289"
+     inkscape:window-width="2338"
+     inkscape:window-height="1270"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg182" />
+  <metadata
+     id="metadata1">
+    <rdf:RDF>
+      <cc:Work>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:date>2026-01-21T15:37:53.036810</dc:date>
+        <dc:format>image/svg+xml</dc:format>
+        <dc:creator>
+          <cc:Agent>
+            <dc:title>Matplotlib v3.10.7, https://matplotlib.org/</dc:title>
+          </cc:Agent>
+        </dc:creator>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <defs
+     id="defs1">
+    <style
+       type="text/css"
+       id="style1">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+  </defs>
+  <g
+     id="figure_1"
+     transform="translate(-0.434,9.4199761)">
+    <g
+       id="axes_1">
+      <g
+         id="patch_2">
+        <path
+           d="M 74.934,589.68 H 635.31 V 32.4 H 74.934 Z"
+           style="fill:#ffffff"
+           id="path2" />
+      </g>
+      <g
+         id="matplotlib.axis_1">
+        <g
+           id="xtick_1">
+          <g
+             id="line2d_1">
+            <path
+               d="M 75.662588,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path3" />
+          </g>
+          <g
+             id="line2d_2">
+            <defs
+               id="defs3">
+              <path
+                 id="m3d47dc475d"
+                 d="M 0,0 V 3.5"
+                 style="stroke:#000000;stroke-width:0.8" />
+            </defs>
+            <g
+               id="g3">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="75.66259"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use3" />
+            </g>
+          </g>
+          <g
+             id="text_1"
+             style="fill:#808080">
+            <!-- 1 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,70.162588,610.43)"
+               id="g4"
+               style="fill:#808080">
+              <defs
+                 id="defs4">
+                <path
+                   id="MonofurForPowerline-31"
+                   d="M 2667,200 Q 2667,0 2467,0 H 1000 q -200,0 -200,200 0,200 200,200 h 533 V 2720 L 875,2059 q -62,-62 -136,-62 -80,0 -144,61 -64,62 -64,145 0,77 58,138 l 976,974 q 88,88 166,88 202,0 202,-240 V 400 h 534 q 200,0 200,-200 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use4"
+                 style="fill:#808080" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_2">
+          <g
+             id="line2d_3">
+            <path
+               d="M 125.9115,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path4" />
+          </g>
+          <g
+             id="line2d_4">
+            <g
+               id="g5">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="125.9115"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use5" />
+            </g>
+          </g>
+          <g
+             id="text_2"
+             style="fill:#808080">
+            <!-- 2 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,120.4115,610.43)"
+               id="g6"
+               style="fill:#808080">
+              <defs
+                 id="defs5">
+                <path
+                   id="MonofurForPowerline-32"
+                   d="m 2800,2200 q 0,-416 -277,-768 Q 2317,1171 1888,872 1541,637 1195,400 h 1405 q 200,0 200,-200 Q 2800,0 2600,0 H 600 q -229,0 -229,176 0,85 109,184 85,75 243,163 130,69 261,138 1416,840 1416,1539 0,331 -235,565 -234,235 -565,235 -331,0 -566,-235 -234,-234 -234,-565 0,-200 -200,-200 -200,0 -200,200 0,496 352,848 352,352 848,352 496,0 848,-352 352,-352 352,-848 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 id="use6"
+                 style="fill:#808080" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_3">
+          <g
+             id="line2d_5">
+            <path
+               d="M 176.16041,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path6" />
+          </g>
+          <g
+             id="line2d_6">
+            <g
+               id="g7">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="176.1604"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use7" />
+            </g>
+          </g>
+          <g
+             id="text_3"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 4 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,170.66041,610.43)"
+               id="g8"
+               style="fill:#808080;fill-opacity:1.0">
+              <defs
+                 id="defs7">
+                <path
+                   id="MonofurForPowerline-34"
+                   d="m 3000,800 q 0,-200 -200,-200 H 2200 V -400 q 0,-200 -200,-200 -200,0 -200,200 V 600 H 400 q -216,0 -216,168 0,69 51,144 l 1600,2400 q 80,120 186,120 179,0 179,-232 V 1000 h 600 q 200,0 200,-200 z M 1800,1000 V 2539 L 771,1000 Z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 id="use8"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_4">
+          <g
+             id="line2d_7">
+            <path
+               d="M 226.40932,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path8" />
+          </g>
+          <g
+             id="line2d_8">
+            <g
+               id="g9">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="226.40932"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use9" />
+            </g>
+          </g>
+          <g
+             id="text_4"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 8 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,220.90932,610.43)"
+               id="g10"
+               style="fill:#808080;fill-opacity:1.0">
+              <defs
+                 id="defs9">
+                <path
+                   id="MonofurForPowerline-38"
+                   d="M 2800,1200 Q 2800,704 2448,352 2096,0 1600,0 1104,0 752,352 400,704 400,1200 q 0,669 571,1021 -371,299 -371,779 0,413 293,706 294,294 707,294 413,0 706,-294 294,-293 294,-706 0,-477 -371,-779 571,-352 571,-1021 z m -600,1800 q 0,248 -176,424 -176,176 -424,176 -248,0 -424,-176 -176,-176 -176,-424 0,-248 176,-424 176,-176 424,-176 248,0 424,176 176,176 176,424 z m 200,-1800 q 0,331 -235,565 -234,235 -565,235 -331,0 -566,-235 -234,-234 -234,-565 0,-331 234,-566 235,-234 566,-234 331,0 565,234 235,235 235,566 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-38"
+                 id="use10"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_5">
+          <g
+             id="line2d_9">
+            <path
+               d="M 276.65823,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path10" />
+          </g>
+          <g
+             id="line2d_10">
+            <g
+               id="g11">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="276.65823"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use11" />
+            </g>
+          </g>
+          <g
+             id="text_5"
+             style="fill:#ffffff">
+            <!-- 16 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,265.65823,610.43)"
+               id="g13"
+               style="fill:#808080;fill-opacity:1.0">
+              <defs
+                 id="defs11">
+                <path
+                   id="MonofurForPowerline-36"
+                   d="m 3000,3800 q 0,-200 -200,-200 -539,0 -1015,-248 -476,-248 -785,-691 280,139 600,139 579,0 989,-411 411,-410 411,-989 0,-579 -411,-990 Q 2179,0 1600,0 1021,0 610,410 200,821 200,1400 q 0,1075 762,1837 763,763 1838,763 200,0 200,-200 z M 2600,1400 q 0,413 -294,706 -293,294 -706,294 -413,0 -707,-294 -293,-293 -293,-706 0,-413 293,-707 294,-293 707,-293 413,0 706,293 294,294 294,707 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use12"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-36"
+                 transform="translate(49.999985)"
+                 id="use13"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_6">
+          <g
+             id="line2d_11">
+            <path
+               d="M 326.90714,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path13" />
+          </g>
+          <g
+             id="line2d_12">
+            <g
+               id="g14">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="326.90714"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use14" />
+            </g>
+          </g>
+          <g
+             id="text_6"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 32 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,315.90714,610.43)"
+               id="g16"
+               style="fill:#808080;fill-opacity:1.0">
+              <defs
+                 id="defs14">
+                <path
+                   id="MonofurForPowerline-33"
+                   d="m 2853,3229 q 0,-93 -90,-176 L 1611,1997 q 512,-32 864,-408 354,-378 354,-890 0,-539 -384,-919 -384,-380 -917,-380 -341,0 -651,176 -322,179 -477,472 -29,59 -29,104 0,80 65,140 65,60 145,60 91,0 166,-101 338,-451 781,-451 371,0 637,264 264,261 264,635 0,370 -265,635 -265,266 -636,266 -253,0 -501,-164 -248,-164 -286,-164 -80,0 -140,58 -60,59 -60,142 0,88 75,157 L 2112,3000 H 571 q -200,0 -200,200 0,200 200,200 h 2058 q 224,0 224,-171 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-33"
+                 id="use15"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(49.999985)"
+                 id="use16"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_7">
+          <g
+             id="line2d_13">
+            <path
+               d="M 377.15605,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path16" />
+          </g>
+          <g
+             id="line2d_14">
+            <g
+               id="g17">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="377.15604"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use17" />
+            </g>
+          </g>
+          <g
+             id="text_7"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 64 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,366.15605,610.43)"
+               id="g19"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-36"
+                 id="use18"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 transform="translate(49.999985)"
+                 id="use19"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_8">
+          <g
+             id="line2d_15">
+            <path
+               d="M 427.40496,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path19" />
+          </g>
+          <g
+             id="line2d_16">
+            <g
+               id="g20">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="427.40497"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use20" />
+            </g>
+          </g>
+          <g
+             id="text_8"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 128 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,410.90496,610.43)"
+               id="g23"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use21"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(49.999985)"
+                 id="use22"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-38"
+                 transform="translate(99.999969)"
+                 id="use23"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_9">
+          <g
+             id="line2d_17">
+            <path
+               d="M 477.65387,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path23" />
+          </g>
+          <g
+             id="line2d_18">
+            <g
+               id="g24">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="477.65387"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use24" />
+            </g>
+          </g>
+          <g
+             id="text_9"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 256 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,461.15387,610.43)"
+               id="g27"
+               style="fill:#808080;fill-opacity:1.0">
+              <defs
+                 id="defs24">
+                <path
+                   id="MonofurForPowerline-35"
+                   d="m 2920,800 q 0,-579 -410,-989 -409,-411 -990,-411 -365,0 -701,189 -344,198 -512,512 -30,59 -30,104 0,80 64,139 64,59 144,59 94,-3 168,-104 38,-59 118,-166 296,-333 749,-333 413,0 706,293 294,294 294,707 0,413 -294,706 -293,294 -706,294 -507,3 -867,-499 -93,-128 -192,-130 -181,0 -181,210 0,24 0,51 l 283,1800 q 10,61 71,114 62,54 126,54 h 1960 q 200,0 200,-200 0,-200 -200,-200 H 931 L 771,1984 q 341,216 749,216 579,0 989,-411 411,-410 411,-989 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 id="use25"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-35"
+                 transform="translate(49.999985)"
+                 id="use26"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-36"
+                 transform="translate(99.999969)"
+                 id="use27"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_10">
+          <g
+             id="line2d_19">
+            <path
+               d="M 527.90278,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path27" />
+          </g>
+          <g
+             id="line2d_20">
+            <g
+               id="g28">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="527.90277"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use28" />
+            </g>
+          </g>
+          <g
+             id="text_10"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 512 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,511.40278,610.43)"
+               id="g31"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-35"
+                 id="use29"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 transform="translate(49.999985)"
+                 id="use30"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(99.999969)"
+                 id="use31"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_11">
+          <g
+             id="line2d_21">
+            <path
+               d="M 578.15169,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path31" />
+          </g>
+          <g
+             id="line2d_22">
+            <g
+               id="g32">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="578.15167"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use32" />
+            </g>
+          </g>
+          <g
+             id="text_11"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 1024 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,556.15169,610.43)"
+               id="g36"
+               style="fill:#808080;fill-opacity:1.0">
+              <defs
+                 id="defs32">
+                <path
+                   id="MonofurForPowerline-30"
+                   d="M 3000,1701 Q 3000,1051 2632,552 2227,0 1600,0 971,0 568,552 200,1056 200,1701 q 0,648 368,1147 405,552 1032,552 629,0 1032,-552 368,-499 368,-1147 z m -400,0 q 0,478 -256,862 -288,437 -744,437 -456,0 -744,-437 -256,-382 -256,-862 0,-480 256,-864 288,-437 744,-437 456,0 744,437 256,384 256,864 z m -797,0 q 0,-80 -62,-143 -61,-62 -141,-62 -80,0 -142,60 -61,60 -61,145 0,198 203,195 203,3 203,-195 z"
+                   transform="scale(0.015625)" />
+              </defs>
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use33"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-30"
+                 transform="translate(49.999985)"
+                 id="use34"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(99.999969)"
+                 id="use35"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 transform="translate(149.99995)"
+                 id="use36"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="xtick_12">
+          <g
+             id="line2d_23">
+            <path
+               d="M 628.4006,589.68 V 32.4"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path36" />
+          </g>
+          <g
+             id="line2d_24">
+            <g
+               id="g37">
+              <use
+                 xlink:href="#m3d47dc475d"
+                 x="628.40057"
+                 y="589.67999"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use37" />
+            </g>
+          </g>
+          <g
+             id="text_12"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 2048 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,606.4006,610.43)"
+               id="g41"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 id="use38"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-30"
+                 transform="translate(49.999985)"
+                 id="use39"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 transform="translate(99.999969)"
+                 id="use40"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-38"
+                 transform="translate(149.99995)"
+                 id="use41"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="text_13"
+           style="fill:#808080;fill-opacity:1">
+          <!-- Number of cores -->
+          <g
+             transform="matrix(0.24,0,0,-0.24,265.122,633.555)"
+             id="g56"
+             style="fill:#808080;fill-opacity:1">
+            <defs
+               id="defs41">
+              <path
+                 id="MonofurForPowerline-4e"
+                 d="M 2739,197 Q 2739,-3 2528,-3 2413,-3 2344,133 L 867,2979 V 200 Q 867,0 667,0 467,0 467,200 l -6,3603 q 0,200 211,200 115,0 184,-136 L 2333,1021 v 2779 q 0,200 200,200 200,0 200,-200 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-75"
+                 d="M 2867,1267 Q 2867,741 2496,370 2125,0 1600,0 1075,0 704,370 333,741 333,1267 v 1333 q 0,200 200,200 200,0 200,-200 V 1267 q 0,-358 255,-613 255,-254 612,-254 357,0 612,254 255,255 255,613 v 1333 q 0,200 200,200 200,0 200,-200 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-6d"
+                 d="M 3000,200 Q 3000,0 2800,0 2600,0 2600,200 v 1800 q 0,165 -118,282 -117,118 -282,118 -165,0 -283,-118 -117,-117 -117,-282 V 200 Q 1800,0 1600,0 1400,0 1400,200 v 1800 q 0,165 -118,282 -117,118 -282,118 -165,0 -283,-118 Q 600,2165 600,2000 V 200 Q 600,0 400,0 200,0 200,200 v 2400 q 0,200 200,200 139,0 184,-120 189,120 416,120 360,0 600,-272 240,272 600,272 331,0 565,-235 235,-234 235,-565 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-62"
+                 d="M 3000,1400 Q 3000,832 2619,421 2229,0 1667,0 1104,0 715,421 333,832 333,1400 v 2400 q 0,200 200,200 200,0 200,-200 V 2400 q 387,400 934,400 562,0 952,-421 381,-411 381,-979 z m -400,0 q 0,403 -261,696 -272,304 -672,304 -398,0 -670,-304 -261,-293 -264,-696 0,-403 264,-696 272,-304 670,-304 397,0 672,304 261,293 261,696 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-65"
+                 d="m 3003,803 q 0,-51 -32,-110 Q 2787,373 2419,184 2069,0 1685,0 1085,0 651,397 200,808 200,1400 q 0,595 451,1003 434,397 1034,397 219,0 456,-77 267,-88 531,-280 328,-240 328,-456 0,-107 -104,-163 L 875,739 q 328,-339 810,-339 515,0 835,357 37,48 112,147 75,99 163,99 80,0 144,-60 64,-60 64,-140 z m -502,1258 q -325,339 -816,339 -432,0 -752,-280 -333,-293 -333,-720 0,-171 59,-325 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-72"
+                 d="m 3003,2152 q 0,-80 -63,-140 -63,-60 -145,-60 -75,0 -147,77 -368,371 -782,371 -413,0 -706,-294 Q 867,1813 867,1400 V 200 Q 867,0 667,0 467,0 467,200 v 2400 q 0,200 200,200 152,0 192,-149 10,-48 8,-272 410,421 1000,421 304,0 605,-139 320,-144 480,-381 51,-72 51,-128 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-20"
+                 transform="scale(0.015625)"
+                 d="" />
+              <path
+                 id="MonofurForPowerline-6f"
+                 d="M 3000,1400 Q 3000,821 2589,410 2179,0 1600,0 1021,0 610,410 200,821 200,1400 q 0,579 410,989 411,411 990,411 579,0 989,-411 411,-410 411,-989 z m -400,0 q 0,413 -294,706 -293,294 -706,294 -413,0 -707,-294 -293,-293 -293,-706 0,-413 293,-707 294,-293 707,-293 413,0 706,293 294,294 294,707 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-66"
+                 d="m 3003,3397 q 0,-80 -63,-140 -63,-60 -145,-60 -67,3 -174,104 -149,144 -232,195 -168,104 -389,104 -331,0 -566,-235 -234,-234 -234,-565 h 1000 q 200,0 200,-200 0,-200 -200,-200 H 1200 V 200 Q 1200,0 1000,0 800,0 800,200 V 2400 H 400 q -200,0 -200,200 0,200 200,200 h 400 q 0,496 352,848 352,352 848,352 272,0 539,-128 280,-133 421,-352 43,-67 43,-123 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-63"
+                 d="m 3003,2253 q 0,-80 -62,-143 -61,-62 -141,-62 -56,0 -131,48 -429,304 -864,304 -458,0 -816,-267 -389,-290 -389,-733 0,-443 389,-733 352,-267 816,-267 432,0 864,299 72,50 128,53 80,0 143,-62 63,-61 63,-143 0,-78 -75,-150 Q 2741,213 2405,101 2099,0 1805,0 1176,0 707,381 200,787 200,1400 q 0,613 507,1019 472,381 1098,381 294,0 600,-101 339,-112 526,-299 72,-72 72,-147 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-73"
+                 d="M 2816,901 Q 2816,472 2387,219 2021,0 1565,0 1224,0 912,131 552,283 411,552 q -30,56 -30,104 0,80 64,138 64,59 144,59 91,0 168,-104 262,-349 808,-349 539,0 768,296 80,109 83,205 0,163 -187,302 -149,106 -341,154 -160,43 -363,43 -344,0 -616,171 -314,200 -314,530 0,328 325,528 277,171 627,171 218,0 434,-77 248,-88 363,-243 53,-69 53,-128 0,-80 -63,-142 -62,-61 -145,-61 -34,0 -220,125 -185,126 -422,126 -363,0 -510,-197 -42,-54 -42,-102 0,-189 333,-272 112,-29 267,-29 448,0 805,-221 416,-259 416,-678 z"
+                 transform="scale(0.015625)" />
+            </defs>
+            <use
+               xlink:href="#MonofurForPowerline-4e"
+               id="use42"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-75"
+               transform="translate(49.999985)"
+               id="use43"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-6d"
+               transform="translate(99.999969)"
+               id="use44"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-62"
+               transform="translate(149.99995)"
+               id="use45"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(199.99994)"
+               id="use46"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-72"
+               transform="translate(249.99992)"
+               id="use47"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-20"
+               transform="translate(299.99991)"
+               id="use48"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-6f"
+               transform="translate(349.99989)"
+               id="use49"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-66"
+               transform="translate(399.99988)"
+               id="use50"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-20"
+               transform="translate(449.99986)"
+               id="use51"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-63"
+               transform="translate(499.99985)"
+               id="use52"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-6f"
+               transform="translate(549.99983)"
+               id="use53"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-72"
+               transform="translate(599.99982)"
+               id="use54"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(649.9998)"
+               id="use55"
+               style="fill:#808080;fill-opacity:1" />
+            <use
+               xlink:href="#MonofurForPowerline-73"
+               transform="translate(699.99979)"
+               id="use56"
+               style="fill:#808080;fill-opacity:1" />
+          </g>
+        </g>
+      </g>
+      <g
+         id="matplotlib.axis_2">
+        <g
+           id="ytick_1">
+          <g
+             id="line2d_25">
+            <path
+               d="M 74.934,588.95548 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path56" />
+          </g>
+          <g
+             id="line2d_26">
+            <defs
+               id="defs56">
+              <path
+                 id="m1a60fb4678"
+                 d="M 0,0 H -3.5"
+                 style="stroke:#000000;stroke-width:0.8" />
+            </defs>
+            <g
+               id="g57">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="588.95551"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use57" />
+            </g>
+          </g>
+          <g
+             id="text_14"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 1 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,56.934,595.83048)"
+               id="g58"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use58"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_2">
+          <g
+             id="line2d_27">
+            <path
+               d="M 74.934,538.98706 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path58" />
+          </g>
+          <g
+             id="line2d_28">
+            <g
+               id="g59">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="538.98706"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use59" />
+            </g>
+          </g>
+          <g
+             id="text_15"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 2 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,56.934,545.86206)"
+               id="g60"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 id="use60"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_3">
+          <g
+             id="line2d_29">
+            <path
+               d="M 74.934,489.01863 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path60" />
+          </g>
+          <g
+             id="line2d_30">
+            <g
+               id="g61">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="489.01865"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use61" />
+            </g>
+          </g>
+          <g
+             id="text_16"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 4 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,56.934,495.89363)"
+               id="g62"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 id="use62"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_4">
+          <g
+             id="line2d_31">
+            <path
+               d="M 74.934,439.05021 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path62" />
+          </g>
+          <g
+             id="line2d_32">
+            <g
+               id="g63">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="439.0502"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use63" />
+            </g>
+          </g>
+          <g
+             id="text_17"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 8 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,56.934,445.92521)"
+               id="g64"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-38"
+                 id="use64"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_5">
+          <g
+             id="line2d_33">
+            <path
+               d="M 74.934,389.08179 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path64" />
+          </g>
+          <g
+             id="line2d_34">
+            <g
+               id="g65">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="389.08179"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use65" />
+            </g>
+          </g>
+          <g
+             id="text_18"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 16 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,45.934,395.95679)"
+               id="g67"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use66"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-36"
+                 transform="translate(49.999985)"
+                 id="use67"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_6">
+          <g
+             id="line2d_35">
+            <path
+               d="M 74.934,339.11336 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path67" />
+          </g>
+          <g
+             id="line2d_36">
+            <g
+               id="g68">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="339.11337"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use68" />
+            </g>
+          </g>
+          <g
+             id="text_19"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 32 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,45.934,345.98836)"
+               id="g70"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-33"
+                 id="use69"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(49.999985)"
+                 id="use70"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_7">
+          <g
+             id="line2d_37">
+            <path
+               d="M 74.934,289.14494 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path70" />
+          </g>
+          <g
+             id="line2d_38">
+            <g
+               id="g71">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="289.14493"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use71" />
+            </g>
+          </g>
+          <g
+             id="text_20"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 64 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,45.934,296.01994)"
+               id="g73"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-36"
+                 id="use72"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 transform="translate(49.999985)"
+                 id="use73"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_8">
+          <g
+             id="line2d_39">
+            <path
+               d="M 74.934,239.17652 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path73" />
+          </g>
+          <g
+             id="line2d_40">
+            <g
+               id="g74">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="239.17651"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use74" />
+            </g>
+          </g>
+          <g
+             id="text_21"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 128 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,34.934,246.05152)"
+               id="g77"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use75"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(49.999985)"
+                 id="use76"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-38"
+                 transform="translate(99.999969)"
+                 id="use77"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_9">
+          <g
+             id="line2d_41">
+            <path
+               d="M 74.934,189.2081 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path77" />
+          </g>
+          <g
+             id="line2d_42">
+            <g
+               id="g78">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="189.2081"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use78" />
+            </g>
+          </g>
+          <g
+             id="text_22"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 256 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,34.934,196.0831)"
+               id="g81"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 id="use79"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-35"
+                 transform="translate(49.999985)"
+                 id="use80"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-36"
+                 transform="translate(99.999969)"
+                 id="use81"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_10">
+          <g
+             id="line2d_43">
+            <path
+               d="M 74.934,139.23967 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path81" />
+          </g>
+          <g
+             id="line2d_44">
+            <g
+               id="g82">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="139.23967"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use82" />
+            </g>
+          </g>
+          <g
+             id="text_23"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 512 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,34.934,146.11467)"
+               id="g85"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-35"
+                 id="use83"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 transform="translate(49.999985)"
+                 id="use84"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(99.999969)"
+                 id="use85"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_11">
+          <g
+             id="line2d_45">
+            <path
+               d="M 74.934,89.27125 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path85" />
+          </g>
+          <g
+             id="line2d_46">
+            <g
+               id="g86">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="89.271248"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use86" />
+            </g>
+          </g>
+          <g
+             id="text_24"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 1024 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,23.934,96.14625)"
+               id="g90"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-31"
+                 id="use87"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-30"
+                 transform="translate(49.999985)"
+                 id="use88"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 transform="translate(99.999969)"
+                 id="use89"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 transform="translate(149.99995)"
+                 id="use90"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="ytick_12">
+          <g
+             id="line2d_47">
+            <path
+               d="M 74.934,39.302827 H 635.31"
+               clip-path="url(#p3989765e2c)"
+               style="fill:none;stroke:#666666;stroke-width:0.3;stroke-linecap:square"
+               id="path90" />
+          </g>
+          <g
+             id="line2d_48">
+            <g
+               id="g91">
+              <use
+                 xlink:href="#m1a60fb4678"
+                 x="74.933998"
+                 y="39.302826"
+                 style="stroke:#000000;stroke-width:0.8"
+                 id="use91" />
+            </g>
+          </g>
+          <g
+             id="text_25"
+             style="fill:#808080;fill-opacity:1.0">
+            <!-- 2048 -->
+            <g
+               transform="matrix(0.22,0,0,-0.22,23.934,46.177827)"
+               id="g95"
+               style="fill:#808080;fill-opacity:1.0">
+              <use
+                 xlink:href="#MonofurForPowerline-32"
+                 id="use92"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-30"
+                 transform="translate(49.999985)"
+                 id="use93"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-34"
+                 transform="translate(99.999969)"
+                 id="use94"
+                 style="fill:#808080;fill-opacity:1.0" />
+              <use
+                 xlink:href="#MonofurForPowerline-38"
+                 transform="translate(149.99995)"
+                 id="use95"
+                 style="fill:#808080;fill-opacity:1.0" />
+            </g>
+          </g>
+        </g>
+        <g
+           id="text_26"
+           style="fill:#808080;fill-opacity:1.0">
+          <!-- Speedup -->
+          <g
+             transform="matrix(0,-0.24,-0.24,0,15.434,353.04)"
+             id="g102"
+             style="fill:#808080;fill-opacity:1.0">
+            <defs
+               id="defs95">
+              <path
+                 id="MonofurForPowerline-53"
+                 d="M 3000,1200 Q 3000,659 2515,312 2077,0 1515,0 1149,0 805,144 429,304 240,581 q -43,62 -43,123 0,80 63,140 63,60 145,60 78,0 155,-83 37,-48 117,-128 326,-293 838,-293 389,0 714,200 371,232 371,600 0,368 -371,600 -322,200 -714,200 -467,0 -830,261 -400,288 -400,739 0,451 400,739 363,261 830,261 298,0 581,-120 309,-131 467,-357 48,-62 48,-123 0,-80 -66,-140 -65,-60 -145,-60 -75,0 -157,80 -312,320 -728,320 -296,0 -544,-149 -288,-171 -286,-451 0,-277 286,-451 248,-149 544,-149 562,0 1000,-312 485,-347 485,-888 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-70"
+                 d="M 3000,1400 Q 3000,848 2648,432 2280,0 1733,0 1229,0 867,379 v -1379 q 0,-200 -200,-200 -200,0 -200,200 v 3600 q 0,200 200,200 146,0 184,-128 16,-56 16,-251 362,379 866,379 547,0 915,-432 352,-416 352,-968 z m -400,0 q 0,389 -235,680 -253,320 -632,320 -378,0 -634,-320 -235,-293 -232,-680 -3,-389 232,-680 253,-320 634,-320 379,0 632,320 235,291 235,680 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-64"
+                 d="M 2733,200 Q 2733,0 2533,0 2387,0 2349,128 2333,184 2333,379 1971,0 1467,0 920,0 552,432 200,845 200,1400 q 0,552 352,968 368,432 915,432 504,0 866,-379 v 1379 q 0,200 200,200 200,0 200,-200 z m -400,1200 q 3,389 -232,680 -253,320 -634,320 -379,0 -632,-320 -235,-293 -235,-680 0,-389 235,-680 253,-320 632,-320 378,0 634,320 235,291 232,680 z"
+                 transform="scale(0.015625)" />
+            </defs>
+            <use
+               xlink:href="#MonofurForPowerline-53"
+               id="use96"
+               style="fill:#808080;fill-opacity:1.0" />
+            <use
+               xlink:href="#MonofurForPowerline-70"
+               transform="translate(49.999985)"
+               id="use97"
+               style="fill:#808080;fill-opacity:1.0" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(99.999969)"
+               id="use98"
+               style="fill:#808080;fill-opacity:1.0" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(149.99995)"
+               id="use99"
+               style="fill:#808080;fill-opacity:1.0" />
+            <use
+               xlink:href="#MonofurForPowerline-64"
+               transform="translate(199.99994)"
+               id="use100"
+               style="fill:#808080;fill-opacity:1.0" />
+            <use
+               xlink:href="#MonofurForPowerline-75"
+               transform="translate(249.99992)"
+               id="use101"
+               style="fill:#808080;fill-opacity:1.0" />
+            <use
+               xlink:href="#MonofurForPowerline-70"
+               transform="translate(299.99991)"
+               id="use102"
+               style="fill:#808080;fill-opacity:1.0" />
+          </g>
+        </g>
+      </g>
+      <g
+         id="line2d_49">
+        <path
+           d="m 75.662588,588.95548 100.497822,-99.93685 50.24891,-49.96842 50.24891,-49.96842 50.24891,-49.96843 v 0 l 49.10725,-48.83313 29.00914,-28.84722 16.48437,-16.39235 5.89706,-5.86414 14.34115,-14.2611 13.91092,-13.83327 21.99684,-21.87405 27.86748,-27.71194 20.37157,-20.25785 9.40674,-9.35424 10.56972,-10.51071 23.32664,-23.196437 9.94008,-9.884591 17.97001,-17.869697 11.42372,-11.359957"
+           clip-path="url(#p3989765e2c)"
+           style="fill:none;stroke:#ed7c4c;stroke-width:2;stroke-linecap:square"
+           id="path102" />
+      </g>
+      <g
+         id="line2d_50">
+        <defs
+           id="defs102">
+          <path
+             id="m4a70bf0ba5"
+             d="M 0,6 C 1.591219,6 3.117479,5.367802 4.242641,4.242641 5.367802,3.117479 6,1.591219 6,0 6,-1.591219 5.367802,-3.117479 4.242641,-4.242641 3.117479,-5.367802 1.591219,-6 0,-6 -1.591219,-6 -3.117479,-5.367802 -4.242641,-4.242641 -5.367802,-3.117479 -6,-1.591219 -6,0 -6,1.591219 -5.367802,3.117479 -4.242641,4.242641 -3.117479,5.367802 -1.591219,6 0,6 Z"
+             style="stroke:#8c008c;stroke-width:3" />
+        </defs>
+        <g
+           clip-path="url(#p3989765e2c)"
+           id="g123">
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="75.66259"
+             y="588.95551"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use103" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="176.1604"
+             y="489.01865"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use104" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="226.40932"
+             y="445.17795"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use105" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="276.65823"
+             y="412.77042"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use106" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="326.90714"
+             y="358.90082"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use107" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="326.90714"
+             y="359.30057"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use108" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="376.01437"
+             y="307.37912"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use109" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="405.02353"
+             y="266.866"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use110" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="427.40497"
+             y="238.46976"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use112" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="441.74609"
+             y="219.48506"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use113" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="455.65701"
+             y="203.51427"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use114" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="477.65387"
+             y="180.62924"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use115" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="505.52136"
+             y="157.47385"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use116" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="525.89294"
+             y="134.51677"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use117" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="535.29968"
+             y="131.44868"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use118" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="545.86938"
+             y="121.37336"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use119" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="569.19604"
+             y="109.2322"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use120" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="579.13611"
+             y="98.686119"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use121" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="597.10608"
+             y="91.419189"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use122" />
+          <use
+             xlink:href="#m4a70bf0ba5"
+             x="608.52985"
+             y="85.443886"
+             style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+             id="use123" />
+        </g>
+      </g>
+      <g
+         id="patch_3">
+        <path
+           d="M 74.934,589.68 V 32.4"
+           style="fill:none;stroke:#000000;stroke-width:0.8;stroke-linecap:square;stroke-linejoin:miter"
+           id="path123" />
+      </g>
+      <g
+         id="patch_4">
+        <path
+           d="M 635.31,589.68 V 32.4"
+           style="fill:none;stroke:#000000;stroke-width:0.8;stroke-linecap:square;stroke-linejoin:miter"
+           id="path124" />
+      </g>
+      <g
+         id="patch_5">
+        <path
+           d="M 74.934,589.68 H 635.31"
+           style="fill:none;stroke:#000000;stroke-width:0.8;stroke-linecap:square;stroke-linejoin:miter"
+           id="path125" />
+      </g>
+      <g
+         id="patch_6">
+        <path
+           d="M 74.934,32.4 H 635.31"
+           style="fill:none;stroke:#000000;stroke-width:0.8;stroke-linecap:square;stroke-linejoin:miter"
+           id="path126" />
+      </g>
+      <g
+         id="legend_1">
+        <g
+           id="patch_7">
+          <path
+             d="m 123.4844,187.0736 h 160.8 q 4.8,0 4.8,-4.8 v -64.2 q 0,-4.8 -4.8,-4.8 h -160.8 q -4.8,0 -4.8,4.8 v 64.2 q 0,4.8 4.8,4.8 z"
+             style="opacity:0.5;fill:#4d4d4d;stroke:#4d4d4d;stroke-linejoin:miter"
+             id="path168" />
+        </g>
+        <g
+           id="patch_8">
+          <path
+             d="m 121.4844,185.0736 h 160.8 q 4.8,0 4.8,-4.8 v -64.2 q 0,-4.8 -4.8,-4.8 h -160.8 q -4.8,0 -4.8,4.8 v 64.2 q 0,4.8 4.8,4.8 z"
+             style="fill:#ffffff;stroke:#cccccc;stroke-linejoin:miter"
+             id="path169" />
+        </g>
+        <g
+           id="line2d_51">
+          <path
+             d="m 126.2844,129.2736 h 24 24"
+             style="fill:none;stroke:#ed7c4c;stroke-width:2;stroke-linecap:square"
+             id="path170" />
+        </g>
+        <g
+           id="text_28">
+          <!-- Ideal -->
+          <g
+             transform="matrix(0.24,0,0,-0.24,193.4844,137.6736)"
+             id="g174">
+            <defs
+               id="defs170">
+              <path
+                 id="MonofurForPowerline-49"
+                 d="M 2600,200 Q 2600,0 2400,0 H 800 q -200,0 -200,200 0,200 200,200 h 600 V 3600 H 800 q -200,0 -200,200 0,200 200,200 h 1600 q 200,0 200,-200 0,-200 -200,-200 H 1800 V 400 h 600 q 200,0 200,-200 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-61"
+                 d="M 2867,200 Q 2867,0 2667,0 2461,0 2467,280 2072,0 1533,0 1040,0 651,248 200,536 200,1000 q 0,461 451,752 389,248 882,248 539,0 934,-280 v 80 q 0,120 -83,237 -248,363 -851,363 -346,0 -685,-197 -69,-40 -120,-40 -80,0 -140,62 -60,63 -60,146 0,194 419,328 325,101 586,101 491,0 883,-248 451,-288 451,-752 z m -400,800 q 0,189 -182,349 -152,134 -360,195 -181,56 -392,56 -618,0 -861,-379 -72,-112 -72,-221 0,-109 72,-221 243,-379 861,-379 211,0 392,56 211,61 360,195 182,160 182,349 z"
+                 transform="scale(0.015625)" />
+              <path
+                 id="MonofurForPowerline-6c"
+                 d="m 3003,603 q 0,-56 -43,-123 Q 2819,264 2539,128 2272,0 2000,0 1504,0 1152,352 800,704 800,1200 v 2600 q 0,200 200,200 200,0 200,-200 V 1200 q 0,-331 234,-566 235,-234 566,-234 291,0 519,201 228,202 276,202 80,0 144,-60 64,-60 64,-140 z"
+                 transform="scale(0.015625)" />
+            </defs>
+            <use
+               xlink:href="#MonofurForPowerline-49"
+               id="use170" />
+            <use
+               xlink:href="#MonofurForPowerline-64"
+               transform="translate(49.999985)"
+               id="use171" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(99.999969)"
+               id="use172" />
+            <use
+               xlink:href="#MonofurForPowerline-61"
+               transform="translate(149.99995)"
+               id="use173" />
+            <use
+               xlink:href="#MonofurForPowerline-6c"
+               transform="translate(199.99994)"
+               id="use174" />
+          </g>
+        </g>
+        <g
+           id="line2d_52">
+          <g
+             id="g175">
+            <use
+               xlink:href="#m4a70bf0ba5"
+               x="150.28439"
+               y="162.57359"
+               style="fill:#8c008c;stroke:#8c008c;stroke-width:3"
+               id="use175" />
+          </g>
+        </g>
+        <g
+           id="text_29">
+          <!-- Speedup -->
+          <g
+             transform="matrix(0.24,0,0,-0.24,193.4844,170.9736)"
+             id="g182">
+            <use
+               xlink:href="#MonofurForPowerline-53"
+               id="use176" />
+            <use
+               xlink:href="#MonofurForPowerline-70"
+               transform="translate(49.999985)"
+               id="use177" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(99.999969)"
+               id="use178" />
+            <use
+               xlink:href="#MonofurForPowerline-65"
+               transform="translate(149.99995)"
+               id="use179" />
+            <use
+               xlink:href="#MonofurForPowerline-64"
+               transform="translate(199.99994)"
+               id="use180" />
+            <use
+               xlink:href="#MonofurForPowerline-75"
+               transform="translate(249.99992)"
+               id="use181" />
+            <use
+               xlink:href="#MonofurForPowerline-70"
+               transform="translate(299.99991)"
+               id="use182" />
+          </g>
+        </g>
+      </g>
+    </g>
+    <text
+       xml:space="preserve"
+       style="font-size:22px;line-height:1.25;font-family:sans-serif;text-align:center;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#317fff;stroke-width:0.75;stroke-linecap:butt;stroke-linejoin:round"
+       x="232.84816"
+       y="277.3392"
+       id="text178-6-5-7"><tspan
+         sodipodi:role="line"
+         id="tspan178-7-6-0"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:22px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';fill:#317fff;stroke-width:0.75"
+         x="232.84816"
+         y="277.3392">AMD Instinct MI250X</tspan></text>
+    <path
+       style="display:inline;fill:#317fff;fill-opacity:1;fill-rule:evenodd;stroke:#317fff;stroke-width:4.595;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:18.38, 4.595;stroke-dashoffset:0;stroke-opacity:1"
+       d="m 639.08728,257.53238 v 0.1181 H 71.634"
+       id="path178-3"
+       inkscape:connector-type="orthogonal"
+       inkscape:connector-curvature="0" />
+    <text
+       xml:space="preserve"
+       style="font-size:22px;line-height:1.25;font-family:sans-serif;text-align:center;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#338000;stroke-width:0.75;stroke-linecap:butt;stroke-linejoin:round"
+       x="226.92702"
+       y="244.50098"
+       id="text178-6-5"><tspan
+         sodipodi:role="line"
+         id="tspan178-7-6"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:22px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';fill:#338000;stroke-width:0.75"
+         x="226.92702"
+         y="244.50098">NVIDIA RTX 4090</tspan></text>
+    <text
+       xml:space="preserve"
+       style="font-size:20px;line-height:1.25;font-family:sans-serif;text-align:center;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#338000;stroke-width:0.75;stroke-linecap:butt;stroke-linejoin:round"
+       x="53.275665"
+       y="260.2699"
+       id="text178"><tspan
+         sodipodi:role="line"
+         id="tspan178"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';fill:#338000;stroke-width:0.75"
+         x="53.275665"
+         y="260.2699">118</tspan></text>
+    <path
+       style="display:inline;fill:#338000;fill-rule:evenodd;stroke:#338000;stroke-width:4.595;stroke-linecap:butt;stroke-linejoin:miter;stroke-dasharray:18.38, 4.595;stroke-dashoffset:0;stroke-opacity:1"
+       d="m 639.08728,252.47225 v 0.1181 H 71.634"
+       id="path178"
+       inkscape:connector-type="orthogonal"
+       inkscape:connector-curvature="0" />
+    <text
+       xml:space="preserve"
+       style="font-size:20px;line-height:1.25;font-family:sans-serif;text-align:center;letter-spacing:0px;word-spacing:0px;text-anchor:middle;fill:#338000;stroke-width:0.75;stroke-linecap:butt;stroke-linejoin:round"
+       x="53.275665"
+       y="273.58002"
+       id="text178-9"><tspan
+         sodipodi:role="line"
+         id="tspan178-1"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:20px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';fill:#317fff;stroke-width:0.75"
+         x="53.275665"
+         y="273.58002">115</tspan></text>
+  </g>
+  <defs
+     id="defs182">
+    <clipPath
+       id="p3989765e2c">
+      <rect
+         x="74.933998"
+         y="32.400002"
+         width="560.37598"
+         height="557.28003"
+         id="rect182" />
+    </clipPath>
+  </defs>
+  <text
+     xml:space="preserve"
+     style="font-size:28px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#000000;stroke:#d18c8c;stroke-width:3.68504;stroke-linecap:round;stroke-linejoin:round"
+     x="-241.85936"
+     y="-15.728497"
+     id="text1"><tspan
+       sodipodi:role="line"
+       id="tspan1"
+       style="stroke-width:3.68504"
+       x="-241.85936"
+       y="-15.728497" /></text>
+  <text
+     xml:space="preserve"
+     style="font-size:36px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#808080;stroke:none;stroke-width:3.68504;stroke-linecap:round;stroke-linejoin:round;fill-opacity:1.0"
+     x="354.55557"
+     y="22.514999"
+     id="text2"><tspan
+       sodipodi:role="line"
+       id="tspan2"
+       style="font-size:36px;stroke:none;stroke-width:3.68504;fill:#808080;fill-opacity:1.0"
+       x="354.55557"
+       y="22.514999">NANUQ: Arctic domain 1/12°</tspan></text>
+  <g
+     id="g12"
+     transform="translate(-19.5,-27.747498)">
+    <rect
+       style="fill:#ebebeb;fill-opacity:1;stroke:#8c008c;stroke-width:1.23584;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       id="rect8"
+       width="272.37366"
+       height="82.754135"
+       x="351.69357"
+       y="484.47754" />
+    <text
+       xml:space="preserve"
+       style="font-size:18px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#696969;fill-opacity:1;stroke:none;stroke-width:3.68504;stroke-linecap:round;stroke-linejoin:round"
+       x="366.66165"
+       y="508.13586"
+       id="text2-6"><tspan
+         sodipodi:role="line"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:start;text-anchor:start;fill:#696969;fill-opacity:1;stroke:none;stroke-width:3.68504"
+         x="366.66165"
+         y="508.13586"
+         id="tspan4">Comput. domain: 1475 x 1682</tspan><tspan
+         sodipodi:role="line"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:start;text-anchor:start;fill:#696969;fill-opacity:1;stroke:none;stroke-width:3.68504"
+         x="366.66165"
+         y="530.63586"
+         id="tspan11">N. wet points:    1.2 10<tspan
+   style="font-size:65%;baseline-shift:super"
+   id="tspan8">6</tspan></tspan><tspan
+         sodipodi:role="line"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:start;text-anchor:start;fill:#696969;fill-opacity:1;stroke:none;stroke-width:3.68504"
+         x="366.66165"
+         y="553.13586"
+         id="tspan7">Runtime RAM use: 19.2 GB</tspan><tspan
+         sodipodi:role="line"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:start;text-anchor:start;fill:#696969;fill-opacity:1;stroke:none;stroke-width:3.68504"
+         x="366.66165"
+         y="575.63586"
+         id="tspan5" /></text>
+  </g>
+  <text
+     xml:space="preserve"
+     style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:18px;font-family:'monofur for Powerline';-inkscape-font-specification:'monofur for Powerline';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ebebeb;fill-opacity:1;stroke:#8c008c;stroke-width:0.999997;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     x="364.14993"
+     y="515.75763"
+     id="text9"><tspan
+       sodipodi:role="line"
+       id="tspan9"
+       style="stroke-width:1"
+       x="364.14993"
+       y="515.75763" /><tspan
+       sodipodi:role="line"
+       style="stroke-width:1"
+       x="364.14993"
+       y="538.25763"
+       id="tspan10" /></text>
+</svg>

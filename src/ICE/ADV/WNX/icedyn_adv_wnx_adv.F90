@@ -15,11 +15,11 @@ MODULE icedyn_adv_wnx_adv
       &                weno_lw_f_x, weno_lw_f_y, weno_ow_f_x, weno_ow_f_y
    USE remap_weno, ONLY : weno5_ISx_G, weno7_ISx_G
    !
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
-# else
+#else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-# endif
+#endif
    !
    USE timing
 
@@ -36,15 +36,13 @@ MODULE icedyn_adv_wnx_adv
       &                      r1_4   =  1._wp/4._wp,  &
       &                      r1_3   =  1._wp/3._wp,  &
       &                      r2_3   =  2._wp/3._wp
-   !$acc declare create( r13_12, r3_4, r1_4, r1_3, r2_3 )
-
 
    ! Work array (that should remain once for all in the memory of the GPU)
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)     ::   zfs1, zfs2, zfs3, zfs4
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)     ::   ztrk1, ztrk2, zoper
 
    !!----------------------------------------------------------------------
-   !! NANUQ_beta
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -263,7 +261,7 @@ CONTAINS
 
       !! Linking required here!
       !!  => because `zfs` used +-2 stencils, so can't do better than `Nis0:Nie0,Njs0:Nje0` for them.
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       CALL lbc_lnk_gpu( 'wnx_spc_op', zfs1, zfs2, zfs3, zfs4 )
 #else
       CALL lbc_lnk(     'wnx_spc_op', zfs1,cgtu,-1._wp, zfs2,cgtv,-1._wp, zfs3,cgtu,-1._wp, zfs4,cgtv,-1._wp )
@@ -289,7 +287,7 @@ CONTAINS
 
       !! Linking required here!
       !!  => needed for the next round in RK3 (`pf` has to be complete!)
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       CALL lbc_lnk_gpu( 'wnx_spc_op', pop )
 #else
       CALL lbc_lnk(     'wnx_spc_op', pop,cgt,1._wp )
@@ -362,21 +360,21 @@ CONTAINS
 
       cvar = 'weno'//cwo//'_ow_'//cp//'_x' !
       IF(lwp) WRITE(numout,*) '     --- reading optimal w. 3D array ',TRIM(cvar)
-      CALL iom_get ( inum, jpdom_global, TRIM(cvar), pOWtx(:,:,:) )
+      CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvar), pOWtx(:,:,:) )
 
       cvar = 'weno'//cwo//'_ow_'//cp//'_y'
       IF(lwp) WRITE(numout,*) '     --- reading optimal w. 3D array ',TRIM(cvar)
-      CALL iom_get ( inum, jpdom_global, TRIM(cvar), pOWty(:,:,:) )
+      CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvar), pOWty(:,:,:) )
 
       DO js = 1, kwo
 
          WRITE(cvlw,'("w",i1,"_lw_",a1,"_",i2.2,"_x")') kwo, cp, js   ! Name of linear weight array to read
          IF(lwp) WRITE(numout,*) '     --- reading linear w. 3D array ',TRIM(cvlw)
-         CALL iom_get ( inum, jpdom_global, TRIM(cvlw), pLWtx(:,:,:,js) )
+         CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvlw), pLWtx(:,:,:,js) )
 
          WRITE(cvlw,'("w",i1,"_lw_",a1,"_",i2.2,"_y")') kwo, cp, js   ! Name of linear weight array to read
          IF(lwp) WRITE(numout,*) '     --- reading linear w. 3D array ',TRIM(cvlw)
-         CALL iom_get ( inum, jpdom_global, TRIM(cvlw), pLWty(:,:,:,js) )
+         CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvlw), pLWty(:,:,:,js) )
 
       END DO
 
@@ -391,21 +389,21 @@ CONTAINS
 
          cvar = 'weno'//cwo//'_ow_'//cp//'_x'
          IF(lwp) WRITE(numout,*) '     --- reading optimal w. 3D array ',TRIM(cvar)
-         CALL iom_get ( inum, jpdom_global, TRIM(cvar), pOWfx(:,:,:) )
+         CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvar), pOWfx(:,:,:) )
 
          cvar = 'weno'//cwo//'_ow_'//cp//'_y' !
          IF(lwp) WRITE(numout,*) '     --- reading optimal w. 3D array ',TRIM(cvar)
-         CALL iom_get ( inum, jpdom_global, TRIM(cvar), pOWfy(:,:,:) )
+         CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvar), pOWfy(:,:,:) )
 
          DO js = 1, kwo
 
             WRITE(cvlw,'("w",i1,"_lw_",a1,"_",i2.2,"_x")') kwo, cp, js   ! Name of linear weight array to read
             IF(lwp) WRITE(numout,*) '     --- reading linear w. 3D array ',TRIM(cvlw)
-            CALL iom_get ( inum, jpdom_global, TRIM(cvlw), pLWfx(:,:,:,js) )
+            CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvlw), pLWfx(:,:,:,js) )
 
             WRITE(cvlw,'("w",i1,"_lw_",a1,"_",i2.2,"_y")') kwo, cp, js ! Name of linear weight array to read
             IF(lwp) WRITE(numout,*) '     --- reading linear w. 3D array ',TRIM(cvlw) !
-            CALL iom_get ( inum, jpdom_global, TRIM(cvlw), pLWfy(:,:,:,js) )
+            CALL iom_get( 'read_weno_w', inum, jpdom_global, TRIM(cvlw), pLWfy(:,:,:,js) )
 
          END DO
 

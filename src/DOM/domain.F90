@@ -44,12 +44,10 @@ MODULE domain
    PUBLIC   domain_cfg   ! called by nanuqgcm.F90
 
    !! * Substitutions
-#  include "single_precision_substitute.h90"
 #  include "read_nml_substitute.h90"
-
    !!-------------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: domain.F90 15270 2021-09-17 14:27:55Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!-------------------------------------------------------------------------
 CONTAINS
@@ -71,7 +69,6 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER ::   ji, jj, jk, jt   ! dummy loop indices
       INTEGER ::   iconf = 0    ! local integers
-      REAL(wp)::   zrdt
       CHARACTER (len=64) ::   cform = "(A12, 3(A13, I7))"
       INTEGER , DIMENSION(jpi,jpj) ::   ik_top , ik_bot       ! top and bottom ocean level
       REAL(wp), DIMENSION(jpi,jpj) ::   zbathy, z1_hu_0, z1_hv_0
@@ -107,6 +104,7 @@ CONTAINS
       !
       CALL dom_nam                      ! read namelist ( namrun, namdom )
       !LOLO:
+      !CALL dom_tile_init                ! Tile domain
       ! Stuff that was done by dom_tile_init of deceased `domtile.F90`:
       ntile = 0                     ! Initialise to full domain
       nijtile = 1
@@ -114,12 +112,7 @@ CONTAINS
       ntsj = Njs0
       ntei = Nie0
       ntej = Nje0
-      nthl = 0
-      nthr = 0
-      nthb = 0
-      ntht = 0
       l_istiled = .FALSE.
-      !CALL dom_tile_init                ! Tile domain
       !LOLO.
 
       CALL dom_hgr              ! Horizontal mesh
@@ -130,20 +123,18 @@ CONTAINS
 
       !! Important! (i.e. cross nudging...) Should not be a cause for concern elsewhere...
       e1e2t(:,:) = e1e2t(:,:) * xmskt(:,:)
-      e1e2f(:,:) = e1e2f(:,:) * xmskf(:,:)     
+      e1e2f(:,:) = e1e2f(:,:) * xmskf(:,:)
       r1_e1e2t(:,:) = r1_e1e2t(:,:) * xmskt(:,:)
       r1_e1e2f(:,:) = r1_e1e2f(:,:) * xmskf(:,:)
-      
-      
-      !                                 != ssh initialization
-      !
+
+
       IF( ln_meshmask    )   CALL dom_wri       ! Create a domain file
       IF( .NOT.ln_rstart )   CALL dom_ctl       ! Domain control
       !
       IF( ln_write_cfg   )   CALL cfg_write     ! create the configuration file
       !
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: dom_init() => adding the `gphi*`, `e1*` & `e2*` arrays to memory!'
       PRINT *, '    ==> gphiu, gphiv, e1t, e2t, e1f, e2f, e1u, e2u, e1v, e2v'
       !$acc enter data copyin( gphiu, gphiv, e1t, e2t, e1f, e2f, e1u, e2u, e1v, e2v )
@@ -159,7 +150,7 @@ CONTAINS
       PRINT *, ' * info GPU: dom_init() => adding Coriolis and grid res. arrays to memory!'
       PRINT *, '    ==> ff_u, ff_v, res_grd_loc_t,res_grd_loc_f'
       !$acc enter data copyin( ff_u, ff_v, res_grd_loc_t,res_grd_loc_f )
-# endif
+#endif
 
 
       IF(lwp) THEN
@@ -180,12 +171,11 @@ CONTAINS
       !!
       !! ** input   : - namrun namelist
       !!              - namdom namelist
-      !!              - namnc4 namelist   ! "key_netcdf4" only
+      !!              - namnc4 namelist
       !!----------------------------------------------------------------------
       USE ioipsl
       !!
       INTEGER ::   ios   ! Local integer
-      REAL(wp)::   zrdt
       !!----------------------------------------------------------------------
       !
       NAMELIST/namrun/ nn_stocklist, ln_rst_list,                 &
@@ -194,9 +184,7 @@ CONTAINS
          &             nn_stock, nn_write , ln_mskland  , ln_clobber   , nn_chunksz, &
          &             ln_cfmeta, ln_xios_read, nn_wxios
       NAMELIST/namdom/ rn_Dt, ln_meshmask
-#if defined key_netcdf4
       NAMELIST/namnc4/ nn_nchunks_i, nn_nchunks_j, nn_nchunks_k, ln_nc4zip
-#endif
       !!----------------------------------------------------------------------
       !
       IF(lwp) THEN
@@ -210,21 +198,15 @@ CONTAINS
       !                       !=======================!
       !
       READ_NML_REF(numnam,namdom)
-      !903   IF( ios /= 0 )   CALL ctl_nam ( ios , 'namdom in reference namelist' )
       READ_NML_CFG(numnam,namdom)
-      !904   IF( ios >  0 )   CALL ctl_nam ( ios , 'namdom in configuration namelist' )
       IF(lwm) WRITE( numond, namdom )
       !
       IF(lwp) THEN
          WRITE(numout,*)
          WRITE(numout,*) '   Namelist : namdom   ---   space & time domain'
          WRITE(numout,*) '      create mesh/mask file                   ln_meshmask = ', ln_meshmask
-         WRITE(numout,*) '      ocean time step                         rn_Dt       = ', rn_Dt
+         WRITE(numout,*) '      sea-ice advective time step             rn_Dt       = ', rn_Dt
       ENDIF
-      !
-      ! set current model timestep rDt = 2*rn_Dt if MLF or rDt = rn_Dt if RK3
-      rDt   = 2._wp * rn_Dt
-      r1_Dt = 1._wp / rDt
       !
       !
       !                       !=======================!
@@ -232,12 +214,9 @@ CONTAINS
       !                       !=======================!
       !
       READ_NML_REF(numnam,namrun)
-      !901   IF( ios /= 0 )   CALL ctl_nam ( ios , 'namrun in reference namelist' )
       READ_NML_CFG(numnam,namrun)
-      !902   IF( ios >  0 )   CALL ctl_nam ( ios , 'namrun in configuration namelist' )
       IF(lwm) WRITE ( numond, namrun )
 
-      !
       IF(lwp) THEN                  ! control print
          WRITE(numout,*) '   Namelist : namrun   ---   run parameters'
          WRITE(numout,*) '      Assimilation cycle              nn_no           = ', nn_no
@@ -293,7 +272,7 @@ CONTAINS
       !   IF(lwp) WRITE(numout,*) '   open the restart file'
       !   CALL rst_read_open                                              !- Open the restart file
       !   !
-      !   IF( iom_varid( numror, 'rdt', ldstop = .FALSE. ) > 0 ) THEN     !- Check time-step consistency and force Euler restart if changed
+      !   IF( iom_varid( lili, numror, 'rdt', ldstop = .FALSE. ) > 0 ) THEN     !- Check time-step consistency and force Euler restart if changed
       !      CALL iom_get( numror, 'rdt', zrdt )
       !      IF( zrdt /= rn_Dt ) THEN
       !         IF(lwp) WRITE( numout,*)
@@ -316,7 +295,7 @@ CONTAINS
       ENDIF
 #if ! defined key_xios
       IF( nn_write == -1 )   CALL ctl_warn( 'nn_write = -1 --> no output files will be done' )
-      IF ( nn_write == 0 ) THEN
+      IF( nn_write == 0 ) THEN
          WRITE(ctmp1,*) 'nn_write = ', nn_write, ' it is forced to ', nitend
          CALL ctl_warn( ctmp1 )
          nn_write = nitend
@@ -339,20 +318,17 @@ CONTAINS
       ENDIF
       !
       !
-#if defined key_netcdf4
       !                       !=======================!
-      !                       !==  namelist namnc4  ==!   NetCDF 4 case   ("key_netcdf4" defined)
+      !                       !==  namelist namnc4  ==!
       !                       !=======================!
       !
-      READ_NML_REF(numnam,namnc4,IOSTAT=ios,ERR=907)
-907   IF( ios /= 0 )   CALL ctl_nam ( ios , 'namnc4 in reference namelist' )
-      READ_NML_CFG(numnam,namnc4,IOSTAT=ios,ERR=908)
-908   IF( ios >  0 )   CALL ctl_nam ( ios , 'namnc4 in configuration namelist' )
+      READ_NML_REF(numnam,namnc4)
+      READ_NML_CFG(numnam,namnc4)
       IF(lwm) WRITE( numond, namnc4 )
 
       IF(lwp) THEN                        ! control print
          WRITE(numout,*)
-         WRITE(numout,*) '   Namelist namnc4 - Netcdf4 chunking parameters ("key_netcdf4" defined)'
+         WRITE(numout,*) '   Namelist namnc4 - Netcdf4 chunking parameters'
          WRITE(numout,*) '      number of chunks in i-dimension             nn_nchunks_i = ', nn_nchunks_i
          WRITE(numout,*) '      number of chunks in j-dimension             nn_nchunks_j = ', nn_nchunks_j
          WRITE(numout,*) '      number of chunks in k-dimension             nn_nchunks_k = ', nn_nchunks_k
@@ -365,9 +341,6 @@ CONTAINS
       snc4set%nj   = nn_nchunks_j
       snc4set%nk   = nn_nchunks_k
       snc4set%luse = ln_nc4zip
-#else
-      snc4set%luse = .FALSE.        ! No NetCDF 4 case
-#endif
       !
    END SUBROUTINE dom_nam
 
@@ -387,12 +360,12 @@ CONTAINS
       !
       llmsk = tmask_i(:,:) == 1._wp
       !
-      CALL mpp_minloc( 'domain', CASTDP(glamt(:,:)), llmsk, zglmin, imil )
-      CALL mpp_minloc( 'domain', CASTDP(gphit(:,:)), llmsk, zgpmin, imip )
-      CALL mpp_minloc( 'domain',   CASTDP(e1t(:,:)), llmsk, ze1min, imi1 )
-      CALL mpp_minloc( 'domain',   CASTDP(e2t(:,:)), llmsk, ze2min, imi2 )
-      CALL mpp_maxloc( 'domain', CASTDP(glamt(:,:)), llmsk, zglmax, imal )
-      CALL mpp_maxloc( 'domain', CASTDP(gphit(:,:)), llmsk, zgpmax, imap )
+      CALL mpp_minloc( 'domain', glamt(:,:), llmsk, zglmin, imil )
+      CALL mpp_minloc( 'domain', gphit(:,:), llmsk, zgpmin, imip )
+      CALL mpp_minloc( 'domain',   e1t(:,:), llmsk, ze1min, imi1 )
+      CALL mpp_minloc( 'domain',   e2t(:,:), llmsk, ze2min, imi2 )
+      CALL mpp_maxloc( 'domain', glamt(:,:), llmsk, zglmax, imal )
+      CALL mpp_maxloc( 'domain', gphit(:,:), llmsk, zgpmax, imap )
       CALL mpp_maxloc( 'domain',   e1t(:,:), llmsk, ze1max, ima1 )
       CALL mpp_maxloc( 'domain',   e2t(:,:), llmsk, ze2max, ima2 )
       !
@@ -429,7 +402,7 @@ CONTAINS
       CHARACTER(len=1), INTENT(out) ::   cdNFtype             ! Folding type: T or F
       !
       CHARACTER(len=7) ::   catt                  ! 'T', 'F', '-' or 'UNKNOWN'
-      INTEGER ::   inum, iatt             ! local integer
+      INTEGER ::   inum, iperio, iatt             ! local integer
       REAL(wp) ::   zorca_res                     ! local scalars
       REAL(wp) ::   zperio                        !   -      -
       INTEGER, DIMENSION(4) ::   idvar, idimsz    ! size   of dimensions
@@ -448,11 +421,11 @@ CONTAINS
       !
       ! ------- keep compatibility with OLD VERSION... start -------
       IF( cd_cfg == 'UNKNOWN' .AND. kk_cfg == -999 ) THEN
-         IF(  iom_varid( inum, 'ORCA'       , ldstop = .FALSE. ) > 0  .AND.  &
-            & iom_varid( inum, 'ORCA_index' , ldstop = .FALSE. ) > 0    ) THEN
+         IF(  iom_varid( 'domain_cfg', inum, 'ORCA'       , ldstop = .FALSE. ) > 0  .AND.  &
+            & iom_varid( 'domain_cfg', inum, 'ORCA_index' , ldstop = .FALSE. ) > 0    ) THEN
             !
             cd_cfg = 'ORCA'
-            CALL iom_get( inum, 'ORCA_index', zorca_res )   ;   kk_cfg = NINT( zorca_res )
+            CALL iom_get( 'domain_cfg', inum, 'ORCA_index', zorca_res )   ;   kk_cfg = NINT( zorca_res )
             !
          ELSE
             CALL iom_getatt( inum, 'cn_cfg', cd_cfg )  ! returns 'UNKNOWN' if not found
@@ -461,7 +434,7 @@ CONTAINS
       ENDIF
       ! ------- keep compatibility with OLD VERSION... end -------
       !
-      idvar = iom_varid( inum, 'bathy_metry', kdimsz = idimsz )   ! use `bathy_metry`, that must exist, to get jp(ij)glo
+      idvar = iom_varid( 'domain_cfg', inum, 'bathy_metry', kdimsz = idimsz )   ! use `bathy_metry`, that must exist, to get jp(ij)glo
       kpi = idimsz(1)
       kpj = idimsz(2)
       kpk = 1
@@ -470,19 +443,24 @@ CONTAINS
       CALL iom_getatt( inum, 'Jperio', iatt )   ;   ldJperio = iatt == 1   ! returns      -999 if not found -> default = .false.
       CALL iom_getatt( inum,  'NFold', iatt )   ;   ldNFold  = iatt == 1   ! returns      -999 if not found -> default = .false.
       CALL iom_getatt( inum, 'NFtype', catt )                              ! returns 'UNKNOWN' if not found
-      IF( LEN_TRIM(catt) == 1 ) THEN   ;   cdNFtype = TRIM(catt)
-      ELSE                             ;   cdNFtype = '-'
+      IF( LEN_TRIM(catt) == 1 ) THEN
+         cdNFtype = TRIM(catt)
+      ELSE
+         cdNFtype = '-'
       ENDIF
       !
       ! ------- keep compatibility with OLD VERSION... start -------
-      IF( iatt == -999 .AND. catt == 'UNKNOWN' .AND. iom_varid( inum, 'jperio', ldstop = .FALSE. ) > 0 ) THEN
-         CALL iom_get( inum, 'jperio', zperio )   ;   jperio = NINT( zperio )
-         ldIperio = jperio == 1  .OR. jperio == 4 .OR. jperio == 6 .OR. jperio == 7   ! i-periodicity
-         ldJperio = jperio == 2  .OR. jperio == 7                                     ! j-periodicity
-         ldNFold  = jperio >= 3 .AND. jperio <= 6                                     ! North pole folding
-         IF(     jperio == 3 .OR. jperio == 4 ) THEN   ;   cdNFtype = 'T'             !    folding at T point
-         ELSEIF( jperio == 5 .OR. jperio == 6 ) THEN   ;   cdNFtype = 'F'             !    folding at F point
-         ELSE                                          ;   cdNFtype = '-'             !    default value
+      IF( iatt == -999 .AND. catt == 'UNKNOWN' .AND. iom_varid( 'domain_cfg', inum, 'jperio', ldstop = .FALSE. ) > 0 ) THEN
+         CALL iom_get( 'domain_cfg', inum, 'jperio', zperio )   ;   iperio = NINT( zperio )
+         ldIperio = iperio == 1  .OR. iperio == 4 .OR. iperio == 6 .OR. iperio == 7   ! i-periodicity
+         ldJperio = iperio == 2  .OR. iperio == 7                                     ! j-periodicity
+         ldNFold  = iperio >= 3 .AND. iperio <= 6                                     ! North pole folding
+         IF( iperio == 3 .OR. iperio == 4 ) THEN
+            cdNFtype = 'T' ! folding at T point
+         ELSEIF( iperio == 5 .OR. iperio == 6 ) THEN
+            cdNFtype = 'F' ! folding at F point
+         ELSE
+            cdNFtype = '-' ! default value
          ENDIF
       ENDIF
       ! ------- keep compatibility with OLD VERSION... end -------
@@ -501,38 +479,35 @@ CONTAINS
       !
    END SUBROUTINE domain_cfg
 
-
    SUBROUTINE cfg_write
       !!----------------------------------------------------------------------
       !!                  ***  ROUTINE cfg_write  ***
       !!
-      !! ** Purpose :   Create the "cn_domcfg_out" file, a NetCDF file which
+      !! ** Purpose :   Create the cn_domcfg_out file, a NetCDF file which
       !!              contains all the ocean domain informations required to
       !!              define an ocean configuration.
       !!
       !! ** Method  :   Write in a file all the arrays required to set up an
       !!              ocean configuration.
       !!
-      !! ** output file :   domcfg_out.nc : domain size, characteristics, horizontal
+      !! ** output file :   cn_domcfg_out: domain size, characteristics, horizontal
       !!                       mesh, Coriolis parameter, and vertical scale factors
-      !!                    NB: also contain ORCA family information
+      !!                       also contain periodicity and configuration information
       !!----------------------------------------------------------------------
-      INTEGER           ::   ji, jj, jk   ! dummy loop indices
-      INTEGER           ::   inum     ! local units
-      CHARACTER(len=21) ::   clnam    ! filename (mesh and mask informations)
-      REAL(wp), DIMENSION(jpi,jpj) ::   z2d   ! workspace
+      INTEGER                          ::   ji, jj, jk   ! dummy loop indices
+      INTEGER                          ::   inum         ! local units
+      REAL(wp), DIMENSION(jpi,jpj    ) ::   z2d   ! workspace
       !!----------------------------------------------------------------------
       !
       IF(lwp) WRITE(numout,*)
-      IF(lwp) WRITE(numout,*) 'cfg_write : create the domain configuration file (', TRIM(cn_domcfg_out),'.nc)'
+      IF(lwp) WRITE(numout,*) 'cfg_write : create the domain configuration file: ', TRIM(cn_domcfg_out)
       IF(lwp) WRITE(numout,*) '~~~~~~~~~'
       !
       !                       ! ============================= !
       !                       !  create 'domcfg_out.nc' file  !
       !                       ! ============================= !
       !
-      clnam = cn_domcfg_out  ! filename (configuration information)
-      CALL iom_open( TRIM(clnam), inum, ldwrt = .TRUE. )
+      CALL iom_open( cn_domcfg_out, inum, ldwrt = .TRUE. )
       !
       !                             !==  Configuration specificities  ==!
       !
@@ -546,11 +521,6 @@ CONTAINS
       CALL iom_putatt( inum, 'Jperio', COUNT( (/l_Jperio/) ) )
       CALL iom_putatt( inum,  'NFold', COUNT( (/l_NFold /) ) )
       CALL iom_putatt( inum, 'NFtype',          c_NFtype     )
-
-      !                                   ! type of vertical coordinate
-      IF(ln_zco)   CALL iom_putatt( inum, 'VertCoord', 'zco' )
-      IF(ln_zps)   CALL iom_putatt( inum, 'VertCoord', 'zps' )
-      IF(ln_sco)   CALL iom_putatt( inum, 'VertCoord', 'sco' )
 
       !                                   ! ocean cavities under iceshelves
       CALL iom_putatt( inum, 'IsfCav', COUNT( (/ln_isfcav/) ) )
@@ -576,24 +546,6 @@ CONTAINS
       CALL iom_rstput( 0, 0, inum, 'e2u'  , e2u  , ktype = jp_r8 )
       CALL iom_rstput( 0, 0, inum, 'e2v'  , e2v  , ktype = jp_r8 )
       CALL iom_rstput( 0, 0, inum, 'e2f'  , e2f  , ktype = jp_r8 )
-      !
-      !                             !==  vertical mesh  ==!
-      !
-      !CALL iom_rstput( 0, 0, inum, 'e3t_1d'  , e3t_1d , ktype = jp_r8 )   ! reference 1D-coordinate
-      !CALL iom_rstput( 0, 0, inum, 'e3w_1d'  , e3w_1d , ktype = jp_r8 )
-      !
-      !CALL iom_rstput( 0, 0, inum, 'e3t_0'   , e3t_0  , ktype = jp_r8 )   ! vertical scale factors
-      !CALL iom_rstput( 0, 0, inum, 'e3u_0'   , e3u_0  , ktype = jp_r8 )
-      !CALL iom_rstput( 0, 0, inum, 'e3v_0'   , e3v_0  , ktype = jp_r8 )
-      !CALL iom_rstput( 0, 0, inum, 'e3f_0'   , e3f_0  , ktype = jp_r8 )
-      !CALL iom_rstput( 0, 0, inum, 'e3w_0'   , e3w_0  , ktype = jp_r8 )
-      !CALL iom_rstput( 0, 0, inum, 'e3uw_0'  , e3uw_0 , ktype = jp_r8 )
-      !CALL iom_rstput( 0, 0, inum, 'e3vw_0'  , e3vw_0 , ktype = jp_r8 )
-      !
-      !                             !==  wet top and bottom level  ==!   (caution: multiplied by ssmask)
-      !
-      !CALL iom_rstput( 0, 0, inum, 'top_level'    , REAL( mikt, wp )*ssmask , ktype = jp_i4 )   ! nb of ocean T-points (ISF)
-      !CALL iom_rstput( 0, 0, inum, 'bottom_level' , REAL( mbkt, wp )*ssmask , ktype = jp_i4 )   ! nb of ocean T-points
       !
       !
       !                       ! ============================ !

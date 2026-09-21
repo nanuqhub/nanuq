@@ -1,89 +1,216 @@
-!                          !==  IN: ptab is an array  ==!
-#   if defined REAL_TYPE
-#      if defined SINGLE_PRECISION
-#         define ARRAY_TYPE(i)    REAL(sp)         , INTENT(inout) ::   ARRAY_IN(i)
-#         define TMP_TYPE(i)      REAL(sp)         , ALLOCATABLE   ::   work(i)
-#         define MPI_TYPE mpi_real
-#      else
-#         define ARRAY_TYPE(i)    REAL(dp)         , INTENT(inout) ::   ARRAY_IN(i)
-#         define TMP_TYPE(i)      REAL(dp)         , ALLOCATABLE   ::   work(i)
-#         define MPI_TYPE mpi_double_precision
-#      endif 
-#   endif
 #   if defined INTEGER_TYPE
-#      define ARRAY_TYPE(i)    INTEGER          , INTENT(inout) ::   ARRAY_IN(i)
-#      define TMP_TYPE(i)      INTEGER          , ALLOCATABLE   ::   work(i)
-#      define MPI_TYPE mpi_integer
+#      define ARRAY_TYPE(i)    INTEGER                  , INTENT(inout) ::   ARRAY_IN(i)
+#      if defined DIM_0d
+#         define TMP_TYPE      INTEGER, DIMENSION(1) ::   work
+#      else
+#         define TMP_TYPE      INTEGER, DIMENSION(:), ALLOCATABLE ::   work
+#      endif
+#      define MPI_TYPE MPI_INTEGER
+#      define DELAYBUFF ibuff
+#      define TYPENAME int
 #   endif
-#   if defined COMPLEX_TYPE
-#      define ARRAY_TYPE(i)    COMPLEX(dp)       , INTENT(inout) ::   ARRAY_IN(i)
-#      define TMP_TYPE(i)      COMPLEX(dp)       , ALLOCATABLE   ::   work(i)
-#      define MPI_TYPE mpi_double_complex
+#   if defined INTEGERDP_TYPE
+#      define ARRAY_TYPE(i)    INTEGER(8)               , INTENT(inout) ::   ARRAY_IN(i)
+#      if defined DIM_0d
+#         define TMP_TYPE      INTEGER(8), DIMENSION(1) ::   work
+#      else
+#         define TMP_TYPE      INTEGER(8), DIMENSION(:), ALLOCATABLE ::   work
+#      endif
+#      define MPI_TYPE MPI_INTEGER8
+#      define DELAYBUFF idpbuff
+#      define TYPENAME int_dp
 #   endif
+#   if defined REALSP_TYPE
+#      define PREC sp
+#      define ARRAY_TYPE(i)    REAL(sp)                 , INTENT(inout) ::   ARRAY_IN(i)
+#      if defined DIM_0d
+#         define TMP_TYPE      REAL(sp), DIMENSION(1) ::   work
+#      else
+#         if defined OPERATION_SUM
+#            define TMP_TYPE      COMPLEX(sp), DIMENSION(:), ALLOCATABLE ::   work   /* real sum uses complex with ddpdd*/
+#         else
+#            define TMP_TYPE      REAL(sp), DIMENSION(:), ALLOCATABLE ::   work
+#         endif
+#      endif
+#      define MPI_TYPE MPI_REAL
+#      define DELAYBUFF zspbuff
+#      define TYPENAME real_sp
+#   endif
+#   if defined REALDP_TYPE
+#      define PREC dp
+#      define ARRAY_TYPE(i)    REAL(dp)                 , INTENT(inout) ::   ARRAY_IN(i)
+#      if defined DIM_0d
+#         define TMP_TYPE      REAL(dp), DIMENSION(1) ::   work
+#      else
+#         if defined OPERATION_SUM
+#            define TMP_TYPE      COMPLEX(dp), DIMENSION(:), ALLOCATABLE ::   work   /* real sum uses complex with ddpdd*/
+#         else
+#            define TMP_TYPE      REAL(dp), DIMENSION(:), ALLOCATABLE ::   work
+#         endif
+#      endif
+#      define MPI_TYPE MPI_DOUBLE_PRECISION
+#      define DELAYBUFF zdpbuff
+#      define TYPENAME real_dp
+#   endif
+#   if defined COMPLEXSP_TYPE
+#      define ARRAY_TYPE(i)    COMPLEX(sp)              , INTENT(inout) ::   ARRAY_IN(i)
+#      if defined DIM_0d
+#         define TMP_TYPE      COMPLEX(sp), DIMENSION(1) ::   work
+#      else
+#         define TMP_TYPE      COMPLEX(sp), DIMENSION(:), ALLOCATABLE ::   work
+#      endif
+#      define MPI_TYPE MPI_COMPLEX
+#      define DELAYBUFF yspbuff
+#      define TYPENAME cplx_sp
+#   endif
+#   if defined COMPLEXDP_TYPE
+#      define ARRAY_TYPE(i)    COMPLEX(dp)              , INTENT(inout) ::   ARRAY_IN(i)
+#      if defined DIM_0d
+#         define TMP_TYPE      COMPLEX(dp), DIMENSION(1) ::   work
+#      else
+#         define TMP_TYPE      COMPLEX(dp), DIMENSION(:), ALLOCATABLE ::   work
+#      endif
+#      define MPI_TYPE MPI_DOUBLE_COMPLEX
+#      define DELAYBUFF ydpbuff
+#      define TYPENAME cplx_dp
+#   endif
+   /**/
 #   if defined DIM_0d
 #      define ARRAY_IN(i)   ptab
 #      define I_SIZE(ptab)          1
+#      define XD 0d
 #   endif
 #   if defined DIM_1d
 #      define ARRAY_IN(i)   ptab(i)
 #      define I_SIZE(ptab)          SIZE(ptab,1)
+#      define XD 1d
 #   endif
+   /**/
 #   if defined OPERATION_MAX
-#      define MPI_OPERATION mpi_max
+#      define MPI_OPERATION MPI_MAX
+#      define OPT max
 #   endif
 #   if defined OPERATION_MIN
-#      define MPI_OPERATION mpi_min
+#      define MPI_OPERATION MPI_MIN
+#      define OPT min
 #   endif
 #   if defined OPERATION_SUM
-#      define MPI_OPERATION mpi_sum
+#      if defined INTEGER_TYPE || defined INTEGERDP_TYPE
+#         define MPI_OPERATION MPI_SUM
+#      elif defined REALSP_TYPE || defined COMPLEXSP_TYPE
+#         define MPI_OPERATION mpi_sumdd_sp
+#      elif defined REALDP_TYPE || defined COMPLEXDP_TYPE
+#         define MPI_OPERATION mpi_sumdd_dp
+#      endif
+#      define OPT sum
 #   endif
-#   if defined OPERATION_SUM_DD
-#      define MPI_OPERATION mpi_sumdd
-#   endif
-
-   SUBROUTINE ROUTINE_ALLREDUCE( cdname, ptab, kdim, kcom )
+   SUBROUTINE mpp/**/OPT/**/XD/**/_/**/TYPENAME/**/( cdname, ptab, kcom, cdelay )
       !!----------------------------------------------------------------------
-      CHARACTER(len=*),                   INTENT(in   ) ::   cdname  ! name of the calling subroutine
+      CHARACTER(len=*)         , INTENT(in   ) ::   cdname  ! name of the calling subroutine
       ARRAY_TYPE(:)   ! array or pointer of arrays on which the boundary condition is applied
-      INTEGER, OPTIONAL, INTENT(in   ) ::   kdim        ! optional pointer dimension
-      INTEGER, OPTIONAL, INTENT(in   ) ::   kcom        ! optional communicator
+      INTEGER        , OPTIONAL, INTENT(in   ) ::   kcom    ! optional communicator
+      CHARACTER(len=*),OPTIONAL, INTENT(in   ) ::   cdelay  ! tag of the delayed comm
 #if ! defined key_mpi_off
       !
-      INTEGER :: ipi, ii, ierr
-      INTEGER :: ierror, ilocalcomm
-      TMP_TYPE(:)
+      TMP_TYPE
+#if defined DIM_0d
       !!-----------------------------------------------------------------------
+      work(1) = ptab
+      CALL mpp_/**/OPT( cdname, work, kcom, cdelay )
+      ptab = work(1)
+# elif ( defined REALSP_TYPE || defined REALDP_TYPE ) && defined OPERATION_SUM
+      /* We switch to COMPLEX to use DDPDD instead of SUM to have reproductible sum */
+      INTEGER :: ipi, ji
+      !!-----------------------------------------------------------------------
+      ipi = I_SIZE(ptab)   ! 1st dimension
+      ALLOCATE(work(ipi))
+      work(:) = CMPLX( ARRAY_IN(:), kind = PREC )
+      CALL mpp_/**/OPT( cdname, work, kcom, cdelay )   ! sum over the mpi tasks using complex -> will use mpi_sumdd and ddpdd
+      ARRAY_IN(:) = REAL(work(:), PREC)   ! return to real
+      DEALLOCATE(work)
+# else
+      INTEGER :: ipi, ji, idvar, ierr
+      INTEGER :: ierror, ilocalcomm
+      LOGICAL :: llisdelay
+      CHARACTER(len=8) :: cldname
+      !!-----------------------------------------------------------------------
+      llisdelay = ln_mppdelay .AND. PRESENT(cdelay)
+      IF( narea == 1 .AND. numcom == -1 ) CALL mpp_report( cdname, ld_glb = .NOT. llisdelay, ld_dlg = llisdelay)
+      IF( ln_timing ) THEN
+         cldname = ''
+         IF( llisdelay ) cldname = ' delayed '
+         CALL timing_start( 'global'//TRIM(cldname)//' comm' )
+      ENDIF
       !
-      IF( narea == 1 .AND. numcom == -1 ) CALL mpp_report( cdname, ld_glb = .TRUE. )
-      !
+      ipi = I_SIZE(ptab)   ! 1st dimension
       ilocalcomm = mpi_comm_oce
       IF( PRESENT(kcom) )   ilocalcomm = kcom
       !
-      IF( PRESENT(kdim) ) then
-         ipi = kdim
+      IF( llisdelay ) THEN
+         idvar = -1
+         DO ji = 1, nbdelay
+            IF( c_delaylist(ji) == 'not defined' )   c_delaylist(ji) = cdelay   ! use empty tag
+            IF( cdelay == c_delaylist(ji) ) THEN
+               idvar = ji
+               EXIT   ! exit this do loop
+            ENDIF
+         END DO
+         IF( idvar == -1 )   CALL ctl_stop( 'STOP',' mpp_* : with delay, please add a new delayed exchange for '//TRIM(cdname) )
+
+         IF( ndelayid(idvar) == ndlrstuse ) THEN    ! first call    with restart: DELAYBUFF/**/out defined in iom_delay_rst
+            !                                       --------------------------
+            IF( SIZE(todelay(idvar)%DELAYBUFF/**/out) /= ipi ) THEN                  ! Check dimension coherence
+               IF(lwp) WRITE(numout,*) ' WARNING: the nb of delayed variables in restart file is not the model one'
+               DEALLOCATE(todelay(idvar)%DELAYBUFF/**/in, todelay(idvar)%DELAYBUFF/**/out)
+               ndelayid(idvar) = ndlrstoff                                            ! do as if we had no restart
+            ELSE
+               ndelayid(idvar) = MPI_REQUEST_NULL
+            ENDIF
+         ENDIF
+
+         IF( ndelayid(idvar) == ndlrstoff ) THEN    ! first call without restart: define DELAYBUFF/**/out from ARRAY_IN(:) with a blocking allreduce
+            !                                       --------------------------
+            ALLOCATE(todelay(idvar)%DELAYBUFF/**/in(ipi), todelay(idvar)%DELAYBUFF/**/out(ipi))
+            CALL mpi_allreduce( ARRAY_IN(:), todelay(idvar)%DELAYBUFF/**/out, ipi, MPI_TYPE, MPI_OPERATION, ilocalcomm, ierr )   ! get DELAYBUFF/**/out
+            ndelayid(idvar) = MPI_REQUEST_NULL
+         ENDIF
+
+         ! wait for the communication to be done so we can use the buffers
+         CALL mpi_wait( ndelayid(idvar), MPI_STATUS_IGNORE, ierr ) ! after this ndelayid(idvar) = MPI_REQUEST_NULL
+
+         ! store ARRAY_IN(:) in todelay(idvar)%DELAYBUFF/**/in
+         todelay(idvar)%DELAYBUFF/**/in(:) = ARRAY_IN(:)
+
+         ! send back ARRAY_IN(:) from DELAYBUFF/**/out defined at previous call
+         ARRAY_IN(:) = todelay(idvar)%DELAYBUFF/**/out(:)
+
+         ! send DELAYBUFF/**/in into DELAYBUFF/**/out with a non-blocking communication
+#if ! defined key_mpi2
+         CALL mpi_iallreduce( todelay(idvar)%DELAYBUFF/**/in, todelay(idvar)%DELAYBUFF/**/out, ipi, MPI_TYPE, MPI_OPERATION, ilocalcomm, ndelayid(idvar), ierr )
+#endif
       ELSE
-         ipi = I_SIZE(ptab)   ! 1st dimension
+         ALLOCATE(work(ipi))
+         CALL mpi_allreduce( ARRAY_IN(:), work, ipi, MPI_TYPE, MPI_OPERATION, ilocalcomm, ierr )
+         ARRAY_IN(:) = work(:)
+         DEALLOCATE(work)
       ENDIF
-      !
-      ALLOCATE(work(ipi))
-      IF( ln_timing ) CALL tic_tac(.TRUE., ld_global = .TRUE.)
-      CALL mpi_allreduce( ARRAY_IN(:), work, ipi, MPI_TYPE, MPI_OPERATION, ilocalcomm, ierror )
-      IF( ln_timing ) CALL tic_tac(.FALSE., ld_global = .TRUE.)
-      DO ii = 1, ipi
-         ARRAY_IN(ii) = work(ii)
-      ENDDO
-      DEALLOCATE(work)
+
+      IF( ln_timing )   CALL timing_stop( 'global'//TRIM(cldname)//' comm' )
+#endif
 #else
       ! nothing to do if non-mpp case
       RETURN
 #endif
+   END SUBROUTINE mpp/**/OPT/**/XD/**/_/**/TYPENAME
 
-   END SUBROUTINE ROUTINE_ALLREDUCE
-
-#undef PRECISION
+#undef PREC
 #undef ARRAY_TYPE
 #undef ARRAY_IN
 #undef I_SIZE
 #undef MPI_OPERATION
 #undef TMP_TYPE
 #undef MPI_TYPE
+#undef OPT
+#undef XD
+#undef TYPENAME
+#undef DELAYBUFF

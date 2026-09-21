@@ -1,23 +1,18 @@
 MODULE icedyn_rhg_tools
    !!======================================================================
    !!                     ***  MODULE  icedyn_rhg_tools  ***
-   !!   Sea-Ice dynamics : rheology Britle tools...
+   !!   Sea-Ice dynamics : misc. rheology tools...
    !!======================================================================
-   !! History :
+   !! History : L. Brodeau, 2024
    !!----------------------------------------------------------------------
    !!----------------------------------------------------------------------
    !!----------------------------------------------------------------------
-   USE phycst         ! Physical constant
    USE dom_oce        ! Ocean domain
-   USE par_ice
-   USE ice            ! => taux_ai_v, tauy_ai_u are there
+   USE par_ice, ONLY: rn_delta_ecc, rn_creepl
    USE lib_mpp,        ONLY: ctl_stop
-   USE lbclnk         ! lateral boundary conditions (or mpp links)
-   USE remap_classic,  ONLY: rmpF2T, rmpT2F
-   USE in_out_manager, ONLY: ln_timing
+   !USE lbclnk         ! lateral boundary conditions (or mpp links)
+   USE in_out_manager, ONLY: ln_timing, lwp
    USE timing
-
-   !USE icevar, ONLY : test4nan
 
    IMPLICIT NONE
 
@@ -27,56 +22,27 @@ MODULE icedyn_rhg_tools
    !   MODULE PROCEDURE strain_rate_Cgrid, strain_rate_Egrid
    !END INTERFACE strain_rate
 
-   INTERFACE P_max_sclr
-      MODULE PROCEDURE P_max_bbm_sclr, P_max_cos_sclr
-   END INTERFACE P_max_sclr
-
    PUBLIC sigmaII_sclr
    PUBLIC sigmaII_full
+   PUBLIC update_invariants_Egrid
+
    PUBLIC strain_rate_all
    PUBLIC strain_rate_dsd
    PUBLIC strain_rate_min
+
+   PUBLIC low_conc_canceler
+   PUBLIC cancel_low_conc
+   PUBLIC fdamp_low_conc
+
+   PUBLIC div_stress_tensor
+
    PUBLIC vel_div_t
    PUBLIC vel_ten_t
    PUBLIC vel_shear_f
    PUBLIC vel_maxshr_t
    !PUBLIC vel_delta_t
 
-   PUBLIC div_stress_tensor
-   !
-   PUBLIC mohr_coulomb_dmg
-   PUBLIC mohr_coulomb_dmg_mp
-   !
-   PUBLIC cross_nudging_init
-   PUBLIC apply_cn_trd
-   !PUBLIC apply_cn_wn5s
-   PUBLIC apply_cn_gpu
-   !
-   !PUBLIC d_crit
-   PUBLIC Visco_sclr
-   PUBLIC Lambda_sclr
-   !
-   PUBLIC P_max_sclr
-   !
-   PUBLIC P_tilde_sclr
-   !
-   PUBLIC mc_incrmt
-   !
-   PUBLIC Elast_diag
-   PUBLIC Visco_diag
-   PUBLIC Lambda_diag
-   PUBLIC P_tilde_diag
-   PUBLIC P_max_diag
 
-
-
-   !REAL(wp), DIMENSION(:,:), ALLOCATABLE, PUBLIC, SAVE :: xtcoast, xfcoast ! to prevent doing cross-nudging at the coast!
-   !REAL(wp), DIMENSION(:,:), ALLOCATABLE, PUBLIC, SAVE :: xCNt, xCNf   ! cross nudging coefficients (space-dependant)
-
-   LOGICAL,  PUBLIC, SAVE :: l_CN        !: whether cross nudging is used ?
-   !LOGICAL,  PUBLIC, SAVE :: l_CN_is_2d  !: whether cross nudging coefficient is a 2D array, not a scalar
-   REAL(wp), PUBLIC, SAVE :: rCNC_eff    !: effective cross-nudging coefficient [-]
-   !$acc declare create( l_CN, rCNC_eff )
 
    !!----------------------------------------------------------------------
    !!----------------------------------------------------------------------
@@ -124,264 +90,45 @@ CONTAINS
    END SUBROUTINE sigmaII_full
 
 
-
-
-   SUBROUTINE mohr_coulomb_dmg( pdt, pxpCt, pxpCf, pSclH_t, pSclH_f, p1mdt, p1mdf, psgmt, psgmf )
-      !!======================================================================
-      REAL(wp),                       INTENT(in)    :: pdt            ! (small) time-step [s]
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pxpCt, pxpCf
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pSclH_t, pSclH_f
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmt          ! vertically-integrated T-centric stress tensor (mind that `s12` is @F)
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmf          ! vertically-integrated F-centric stress tensor (mind that `s12` is @T)
-      !!======================================================================
-      REAL(wp) :: zs11t, zs22t, zs12t, zs11f, zs22f, zs12f, zE
-      REAL(wp) :: zdx, zrr, zCohe, zNlim, zsqrtE, zTd, zsigI, zsigII
+   SUBROUTINE update_invariants_Egrid( pSt, pSf,  pSIt, pSIIt, pSIf, pSIIf )
+      !!------------------------------------------------------------------------------------
+      !!------------------------------------------------------------------------------------
+      !! Compute `sigma_II`: maximum shearing stress aka 2nd invariant of stress tensor => same units as input stresses
+      !!------------------------------------------------------------------------------------
+      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(in)  :: pSt, pSf
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(out) :: pSIt, pSIIt, pSIf, pSIIf
+      !!------------------------------------------------------------------------------------
+      REAL(wp) :: ztmp, zs11, zs22, zs12
       INTEGER  :: ji, jj
-      !!======================================================================
-      IF( ln_timing ) CALL timing_start('mohr_coulomb_dmg')
-      !$acc data present( pxpCt, pxpCf, pSclH_t, pSclH_f, p1mdt, p1mdf, psgmt, psgmf, res_grd_loc_t, res_grd_loc_f )
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-
-            zs11t = psgmt(ji,jj,1)
-            zs22t = psgmt(ji,jj,2)
-            zs12f = psgmt(ji,jj,3)
-            zs11f = psgmf(ji,jj,1)
-            zs22f = psgmf(ji,jj,2)
-            zs12t = psgmf(ji,jj,3)
-
-            !! --- Mohr-Coulomb test and britle update if necessary ---
-#           include "icedyn_rhg_tools_mc_t.h90"
-
-#           include "icedyn_rhg_tools_mc_f.h90"
+      !!------------------------------------------------------------------------------------
+      !%acc data present( pSt, pSf, pSI, pSII )
+      !%acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
             !
-            ! ==> pdmgt(:,:), psgmt(:,:,3) | pdmgf(:,:), psgmf(:,:,3)
+            ! T-points:
+            zs11 = pSt(ji,jj,1)
+            zs22 = pSt(ji,jj,2)
+            zs12 = pSf(ji,jj,3)
+            !
+            pSIt(ji,jj)  = 0.5_wp * ( zs11 + zs22 )
+            ztmp         = 0.5_wp * ( zs11 - zs22 )
+            pSIIt(ji,jj) = SQRT( ztmp*ztmp + zs12*zs12 )
+            !
+            ! F-points:
+            zs11 = pSf(ji,jj,1)
+            zs22 = pSf(ji,jj,2)
+            zs12 = pSt(ji,jj,3)
+            !
+            pSIf(ji,jj)  = 0.5_wp * ( zs11 + zs22 )
+            ztmp         = 0.5_wp * ( zs11 - zs22 )
+            pSIIf(ji,jj) = SQRT( ztmp*ztmp + zs12*zs12 )
+            !
          END DO
       END DO
-      !$acc end parallel loop
-
-      !$acc end data
-      IF( ln_timing ) CALL timing_stop('mohr_coulomb_dmg')
-   END SUBROUTINE mohr_coulomb_dmg
-
-
-
-   SUBROUTINE mohr_coulomb_dmg_mp( pdt, pxpCt, pxpCf, pSclH_t, pSclH_f, p1mdt, p1mdf, psgmt, psgmf )
-      !!======================================================================
-      !! Version using a common mid-point MC test (@ points located midway between T and F points)
-      !!======================================================================
-      REAL(wp),                       INTENT(in)    :: pdt            ! (small) time-step [s]
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pxpCt, pxpCf
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pSclH_t, pSclH_f
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmt          ! vertically-integrated T-centric stress tensor (mind that `s12` is @F)
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmf          ! vertically-integrated F-centric stress tensor (mind that `s12` is @T)
-      !!======================================================================
-      REAL(wp), DIMENSION(jpi,jpj)   :: zTd_t, zCh_t, zNl_t, zSI_h_t, zSII_h_t
-      REAL(wp), DIMENSION(jpi,jpj)   :: zTd_f, zCh_f, zNl_f, zSI_h_f, zSII_h_f
-      REAL(wp), DIMENSION(jpi,jpj,4) :: zTd_mp, zCh_mp, zNl_mp, zSI_h_mp, zSII_h_mp !! Contains the 4 mid-points `T-F mean value` of the T-centric cell ji,jj
-      !                                                                             !! NE=1, NW=2, SW=3, SE=4
-      REAL(wp) :: zs11, zs22, zs12, zdx, zrr, zE, zsqrtE, zinc
-      REAL(wp) :: zTd_ne, zTd_nw, zTd_sw, zTd_se, zinc_ne, zinc_nw, zinc_sw, zinc_se
-      INTEGER  :: ji, jj
-      !!======================================================================
-      IF( ln_timing ) CALL timing_start('mohr_coulomb_dmg_mp')
-      !$acc data create(zTd_t,zCh_t,zNl_t,zSI_h_t,zSII_h_t,zTd_f,zCh_f,zNl_f,zSI_h_f,zSII_h_f,zTd_mp,zCh_mp,zNl_mp,zSI_h_mp,zSII_h_mp) present(pxpCt,pxpCf,pSclH_t,pSclH_f,p1mdt,p1mdf,psgmt,psgmf)
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0+1
-         DO ji=Nis0, Nie0+1
-#           include "icedyn_rhg_tools_mp_bmc_t.h90"
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0
-         DO ji=Nis0-1, Nie0
-#           include "icedyn_rhg_tools_mp_bmc_f.h90"
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      CALL build_T_F_mp_val( zSI_h_t,  zSI_h_f,  zSI_h_mp )
-      CALL build_T_F_mp_val( zSII_h_t, zSII_h_f, zSII_h_mp )
-      CALL build_T_F_mp_val( zTd_t,    zTd_f,    zTd_mp )
-      CALL build_T_F_mp_val( zCh_t,    zCh_f,    zCh_mp )
-      CALL build_T_F_mp_val( zNl_t,    zNl_f,    zNl_mp )
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-#           include "icedyn_rhg_tools_mp_mc_t.h90"
-#           include "icedyn_rhg_tools_mp_mc_f.h90"
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      !$acc end data
-
-      IF( ln_timing ) CALL timing_stop('mohr_coulomb_dmg_mp')
-   END SUBROUTINE mohr_coulomb_dmg_mp
-
-
-   SUBROUTINE build_T_F_mp_val( pXt, pXf, pXmp )
-      !!-------------------------------------------------------------------
-      !! Contains the 4 mid-T-F-point mean value for the T-centric cell ji,jj
-      !!-------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)  :: pXt, pXf
-      REAL(wp), DIMENSION(jpi,jpj,4), INTENT(out) :: pXmp
-      !!-------------------------------------------------------------------
-      REAL(wp) :: zxc
-      INTEGER  :: ji, jj
-      !!-------------------------------------------------------------------
-      !LOLOfixme: decrease the halo use (check what is actually needed in `icedyn_rhg_tools_mp_mc_*.h90` !!!)
-      !$acc parallel loop collapse(2) present(pXt, pXf, pXmp)
-      DO jj=Njs0-(nn_hls-1), Nje0+nn_hls
-         DO ji=Nis0-(nn_hls-1), Nie0+nn_hls
-            zxc = pXt(ji,jj)
-            pXmp(ji,jj,1) = 0.5_wp * ( zxc + pXf(ji  ,jj  ) )   !   ne
-            pXmp(ji,jj,2) = 0.5_wp * ( zxc + pXf(ji-1,jj  ) )   !   nw
-            pXmp(ji,jj,3) = 0.5_wp * ( zxc + pXf(ji-1,jj-1) )   !   sw
-            pXmp(ji,jj,4) = 0.5_wp * ( zxc + pXf(ji  ,jj-1) )   !   se
-         END DO
-      END DO
-      !$acc end parallel loop
-      !
-   END SUBROUTINE build_T_F_mp_val
-
-
-
-   SUBROUTINE cross_nudging_init( )
-      !!-------------------------------------------------------------------
-      !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
-      !!-------------------------------------------------------------------
-      INTEGER  :: ierror
-      REAL(wp) :: zr
-      REAL(wp), DIMENSION(:,:), ALLOCATABLE :: zt1, zt2, zt3, zt4
-      INTEGER :: jm
-      !!-------------------------------------------------------------------
-      l_CN = ( rn_crndg > 0._wp )
-      rCNC_eff = rn_crndg / REAL( nbbm, wp )
-      !$acc update device(l_CN, rCNC_eff )
-   END SUBROUTINE cross_nudging_init
-
-
-   SUBROUTINE cross_nudging_trd( cgt, ps11x, ps22x, ps12x,   ps11, ps22, ps12 )
-      !!
-      CHARACTER(len=1),         INTENT(in)    :: cgt                  ! 'T' or 'F' -centric grid ?
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: ps11x, ps22x, ps12x  ! 3 stresses reference on grid [Pa]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: ps11,  ps22,  ps12   ! 3 stresses on grid to correct [Pa]
-      !!
-      REAL(wp), DIMENSION(jpi,jpj) :: zIs11x, zIs22x, zIs12x
-      INTEGER :: i1,i2, j1,j2
-      !
-      i1=Nis0 ; i2=Nie0
-      j1=Njs0 ; j2=Nje0
-      !
-      IF( cgt == 'T' ) THEN
-         !
-         zIs11x(:,:) = rmpF2T( ps11x )
-         zIs22x(:,:) = rmpF2T( ps22x )
-         zIs12x(:,:) = rmpT2F( ps12x )
-         !
-         ps11(i1:i2,j1:j2) = ps11(i1:i2,j1:j2) - rCNC_eff*( ps11(i1:i2,j1:j2) - zIs11x(i1:i2,j1:j2) )
-         ps22(i1:i2,j1:j2) = ps22(i1:i2,j1:j2) - rCNC_eff*( ps22(i1:i2,j1:j2) - zIs22x(i1:i2,j1:j2) )
-         ps12(i1:i2,j1:j2) = ps12(i1:i2,j1:j2) - rCNC_eff*( ps12(i1:i2,j1:j2) - zIs12x(i1:i2,j1:j2) )
-         !
-      ELSEIF( cgt == 'F' ) THEN
-         !
-         zIs11x(:,:) = rmpT2F( ps11x )
-         zIs22x(:,:) = rmpT2F( ps22x )
-         zIs12x(:,:) = rmpF2T( ps12x )
-         !
-         ps11(i1:i2,j1:j2) = ps11(i1:i2,j1:j2) - rCNC_eff*( ps11(i1:i2,j1:j2) - zIs11x(i1:i2,j1:j2) )
-         ps22(i1:i2,j1:j2) = ps22(i1:i2,j1:j2) - rCNC_eff*( ps22(i1:i2,j1:j2) - zIs22x(i1:i2,j1:j2) )
-         ps12(i1:i2,j1:j2) = ps12(i1:i2,j1:j2) - rCNC_eff*( ps12(i1:i2,j1:j2) - zIs12x(i1:i2,j1:j2) )
-         !
-      ELSE
-         CALL ctl_stop( 'STOP', 'cross_nudging_trd() => wrong type of grid-point: '//cgt )
-      ENDIF
-      !!
-   END SUBROUTINE cross_nudging_trd
-
-
-   !SUBROUTINE cross_nudging_wn5s( cgt, ps11x, ps22x, ps12x,   ps11, ps22, ps12 )
-   !   !!
-   !   CHARACTER(len=1),         INTENT(in)    :: cgt                  ! 'T' or 'F' -centric grid ?
-   !   REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: ps11x, ps22x, ps12x  ! 3 stresses reference on grid [Pa]
-   !   REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: ps11,  ps22,  ps12   ! 3 stresses on grid to correct [Pa]
-   !   !!
-   !   REAL(wp), DIMENSION(jpi,jpj) :: zIs11x, zIs22x, zIs12x
-   !   INTEGER :: i1,i2, j1,j2
-   !   !
-   !   i1=Nis0 ; i2=Nie0
-   !   j1=Njs0 ; j2=Nje0
-   !   !
-   !   IF( cgt == 'T' ) THEN
-   !      !
-   !      zIs11x(:,:) = rmpF2T_wn5s( ps11x )
-   !      zIs22x(:,:) = rmpF2T_wn5s( ps22x )
-   !      zIs12x(:,:) = rmpT2F_wn5s( ps12x )
-   !      !
-   !      ps11(i1:i2,j1:j2) = ps11(i1:i2,j1:j2) - rCNC_eff*( ps11(i1:i2,j1:j2) - zIs11x(i1:i2,j1:j2) )
-   !      ps22(i1:i2,j1:j2) = ps22(i1:i2,j1:j2) - rCNC_eff*( ps22(i1:i2,j1:j2) - zIs22x(i1:i2,j1:j2) )
-   !      ps12(i1:i2,j1:j2) = ps12(i1:i2,j1:j2) - rCNC_eff*( ps12(i1:i2,j1:j2) - zIs12x(i1:i2,j1:j2) )
-   !      !
-   !   ELSEIF( cgt == 'F' ) THEN
-   !      !
-   !      zIs11x(:,:) = rmpT2F_wn5s( ps11x )
-   !      zIs22x(:,:) = rmpT2F_wn5s( ps22x )
-   !      zIs12x(:,:) = rmpF2T_wn5s( ps12x )
-   !      !
-   !      ps11(i1:i2,j1:j2) = ps11(i1:i2,j1:j2) - rCNC_eff*( ps11(i1:i2,j1:j2) - zIs11x(i1:i2,j1:j2) )
-   !      ps22(i1:i2,j1:j2) = ps22(i1:i2,j1:j2) - rCNC_eff*( ps22(i1:i2,j1:j2) - zIs22x(i1:i2,j1:j2) )
-   !      ps12(i1:i2,j1:j2) = ps12(i1:i2,j1:j2) - rCNC_eff*( ps12(i1:i2,j1:j2) - zIs12x(i1:i2,j1:j2) )
-   !      !
-   !   ELSE
-   !      CALL ctl_stop( 'STOP', 'cross_nudging_wn5s() => wrong type of grid-point: '//cgt )
-   !   ENDIF
-   !   !!
-   !END SUBROUTINE cross_nudging_wn5s
-
-
-   SUBROUTINE apply_cn_trd( kts, pS_t, pS_f )
-      !!--------------------------------------------------------------------------------
-      INTEGER,                        INTENT(in)    :: kts       ! current small time step
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_t      ! vertically-integrated T-centric stress tensor (mind that `s12` is @F)
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_f      ! vertically-integrated F-centric stress tensor (mind that `s12` is @T)
-      !!--------------------------------------------------------------------------------
-      !
-      IF( MOD(kts,2) == 0 ) THEN
-         !! Correction of T-centric stress tensor components:
-         CALL cross_nudging_trd( 'T', pS_f(:,:,1), pS_f(:,:,2), pS_f(:,:,3),   pS_t(:,:,1), pS_t(:,:,2), pS_t(:,:,3) )
-      ELSE
-         !! Correction of F-centric stress tensor components:
-         CALL cross_nudging_trd( 'F', pS_t(:,:,1), pS_t(:,:,2), pS_t(:,:,3),   pS_f(:,:,1), pS_f(:,:,2), pS_f(:,:,3) )
-      END IF
-      !
-   END SUBROUTINE apply_cn_trd
-
-
-   !SUBROUTINE apply_cn_wn5s( kts, pS_t, pS_f )
-   !   !!--------------------------------------------------------------------------------
-   !   INTEGER,                        INTENT(in)    :: kts       ! current small time step
-   !   REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_t      ! vertically-integrated T-centric stress tensor (mind that `s12` is @F)
-   !   REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_f      ! vertically-integrated F-centric stress tensor (mind that `s12` is @T)
-   !   !!--------------------------------------------------------------------------------
-   !   !
-   !   IF( MOD(kts,2) == 0 ) THEN
-   !      !! Correction of T-centric stress tensor components:
-   !      CALL cross_nudging_wn5s( 'T', pS_f(:,:,1), pS_f(:,:,2), pS_f(:,:,3),   pS_t(:,:,1), pS_t(:,:,2), pS_t(:,:,3) )
-   !   ELSE
-   !      !! Correction of F-centric stress tensor components:
-   !      CALL cross_nudging_wn5s( 'F', pS_t(:,:,1), pS_t(:,:,2), pS_t(:,:,3),   pS_f(:,:,1), pS_f(:,:,2), pS_f(:,:,3) )
-   !   END IF
-   !   !
-   !END SUBROUTINE apply_cn_wn5s
+      !%acc end parallel loop
+      !%acc end data
+   END SUBROUTINE update_invariants_Egrid
 
 
 
@@ -422,19 +169,21 @@ CONTAINS
       l_r_dlt  = PRESENT( pdelta )
 
       IF( l_r_dlt ) THEN
-         PRINT *, 'LOLO [strain_rate_all@icedyn_rhg_tools.F90]: for `delta` => using ecc =', REAL(rn_delta_ecc)
+#if defined key_verbose
+         IF(lwp) PRINT *, 'LOLO [strain_rate_all@icedyn_rhg_tools.F90]: for `delta` => using ecc =', REAL(rn_delta_ecc)
+#endif
          z1_ecc2 = 1._wp / ( rn_delta_ecc*rn_delta_ecc )
       ENDIF
 
       ! Prevent the occurence of NaN on the halos:
-      IF( l_r_e11  )  pe11(:,:)   = 0._wp 
-      IF( l_r_e22  )  pe22(:,:)   = 0._wp 
-      IF( l_r_e12  )  pe12(:,:)   = 0._wp 
-      IF( l_r_dudy )  pdudy(:,:)  = 0._wp 
-      IF( l_r_dvdx )  pdvdx(:,:)  = 0._wp 
-      IF( l_r_div  )  pdiv(:,:)   = 0._wp 
-      IF( l_r_mshr )  pmshr(:,:)  = 0._wp 
-      IF( l_r_dlt  )  pdelta(:,:) = 0._wp 
+      IF( l_r_e11  )  pe11(:,:)   = 0._wp
+      IF( l_r_e22  )  pe22(:,:)   = 0._wp
+      IF( l_r_e12  )  pe12(:,:)   = 0._wp
+      IF( l_r_dudy )  pdudy(:,:)  = 0._wp
+      IF( l_r_dvdx )  pdvdx(:,:)  = 0._wp
+      IF( l_r_div  )  pdiv(:,:)   = 0._wp
+      IF( l_r_mshr )  pmshr(:,:)  = 0._wp
+      IF( l_r_dlt  )  pdelta(:,:) = 0._wp
 
       kq = MAX( nn_hls-1, 0 )
       IF ( cgt == 'T' ) THEN
@@ -457,9 +206,6 @@ CONTAINS
          CALL ctl_stop( 'STOP', 'strain_rate_all(): unknown grid-point type: '//cgt//'!')
       ENDIF
 
-      !*acc data present(pU, pV, pUd, pVd, p1_e1e2, pe2X, pe1Y, p1_e2X, p1_e1Y, pe1e1, pe2e2, pmask) copyout(pe11, pe22, pe12, pdudy, pdvdx, pdiv, pmshr, pdelta)
-
-      !*acc parallel loop collapse(2)
       DO jj=Njs0-k1, Nje0+k2
          DO ji=Nis0-k1, Nie0+k2
 
@@ -508,8 +254,6 @@ CONTAINS
 
          END DO
       END DO
-      !*acc end parallel loop
-      !*acc end data
 
    END SUBROUTINE strain_rate_all
 
@@ -657,10 +401,6 @@ CONTAINS
          CALL ctl_stop( 'STOP', 'strain_rate_min(): unknown grid-point type: '//cgt//'!')
       ENDIF
 
-
-      !*acc data present(pU,pV,pUd,pVd,p1_e1e2,pe2X,pe1Y,p1_e2X,p1_e1Y,pe1e1,pe2e2,pmask) copyout(pe11,pe22,pdiv,pdudy,pdvdx)
-
-      !*acc parallel loop collapse(2)
       DO jj=Njs0-k1, Nje0+k2
          DO ji=Nis0-k1, Nie0+k2
 
@@ -691,11 +431,121 @@ CONTAINS
             !
          END DO
       END DO
-      !*acc end parallel loop
-      !*acc end data
 
    END SUBROUTINE strain_rate_min
 
+
+
+
+
+   SUBROUTINE low_conc_canceler( pA, pcncl )
+      !!------------------------------------------------------------------------------------
+      !!------------------------------------------------------------------------------------
+      !! Create an array intended to be used (trough multiplication) to gradually cancel
+      !! a given array field at low ice concentration.
+      !!
+      !!
+      !! It is mainly used to cancel the components of the divergence of the `h*SIGMA` tensors
+      !! as spatial derivatives of `h*SIGMA` tend to become a nonsense at low ice resolution
+      !!
+      !! Here is the "gnuplot-read" equation of the function we use
+      !!  ``` plot 0.51 * ( 1. + 20.*(x-0.3) / sqrt( 1 + (20.*(x-0.3))**2 ) ) - 0.008 ```
+      !!
+      !! `x` being the ice concentration
+      !!
+      !! => looks like a smooth step function that is 0 at `x=0` and reaches 1 at about `x=0.5`
+      !!
+      !!------------------------------------------------------------------------------------
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pA    ! ice concentration at point "X" [0:1]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pcncl ! correction factor [0:1]
+      !!------------------------------------------------------------------------------------
+      REAL(wp) :: zx, zc
+      INTEGER  :: ji, jj
+      !!------------------------------------------------------------------------------------
+      !$acc data present( pA, pcncl )
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            zx = 20._wp * (pA(ji,jj) - 0.3_wp)
+            zc = 0.51_wp * ( 1._wp + zx / SQRT(1._wp + zx*zx) ) - 0.008_wp
+            pcncl(ji,jj) = MIN( MAX( zc , 0._wp ) , 1._wp )
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc end data
+   END SUBROUTINE low_conc_canceler
+
+
+   SUBROUTINE cancel_low_conc(  pA, pF )
+      !!------------------------------------------------------------------------------------
+      !!------------------------------------------------------------------------------------
+      !! Create an array intended to be used (trough multiplication) to gradually cancel
+      !! a given array field at low ice concentration.
+      !!
+      !!
+      !! It is mainly used to cancel the components of the divergence of the `h*SIGMA` tensors
+      !! as spatial derivatives of `h*SIGMA` tend to become a nonsense at low ice resolution
+      !!
+      !! Here is the "gnuplot-read" equation of the function we use
+      !!  ```plot 0.505 * ( 1. + 25.*(x-0.5) / sqrt( 1 + (25.*(x-0.5))**2 ) ) - 0.003`
+      !!
+      !! `x` being the ice concentration
+      !!
+      !! => looks like a smooth step function that is 0 at `x=0` and reaches 1 at about `x=0.7`
+      !!
+      !!------------------------------------------------------------------------------------
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pA    ! ice concentration at point "X" [0:1]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pF    ! field to correct
+      !!------------------------------------------------------------------------------------
+      REAL(wp) :: zx, zc, zF
+      INTEGER  :: ji, jj
+      !!------------------------------------------------------------------------------------
+      !$acc data present( pA, pF )
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            zF = pF(ji,jj)
+            zx = 25._wp * (pA(ji,jj) - 0.5_wp)
+            zc = 0.505_wp * ( 1._wp + zx / SQRT(1._wp + zx*zx) ) - 0.003_wp
+            zF = MIN( MAX( zc , 0._wp ) , 1._wp ) * zF
+            pF(ji,jj) = zF
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc end data
+   END SUBROUTINE cancel_low_conc
+
+
+   FUNCTION fdamp_low_conc(  pA )
+      !!------------------------------------------------------------------------------------
+      !$acc routine seq
+      !!------------------------------------------------------------------------------------
+      !! Create an array intended to be used (trough multiplication) to gradually cancel
+      !! a given array field at low ice concentration.
+      !!
+      !!
+      !! It is mainly used to cancel the components of the divergence of the `h*SIGMA` tensors
+      !! as spatial derivatives of `h*SIGMA` tend to become a nonsense at low ice resolution
+      !!
+      !! Here is the "gnuplot-read" equation of the function we use
+      !! OLD:  ```plot 0.505 * ( 1. + 25.*(x-0.5 ) / sqrt( 1 + (25.*(x-0.5 ))**2 ) ) - 0.003`
+      !! NEW:  ```plot 0.505 * ( 1. + 40.*(x-0.15) / sqrt( 1 + (40.*(x-0.15))**2 ) ) - 0.005`
+      !!
+      !! `x` being the ice concentration
+      !!
+      !! => looks like a smooth step function that is 0 at `x=0` and reaches 1 at about `x=0.7`
+      !!
+      !!------------------------------------------------------------------------------------
+      REAL(wp)             :: fdamp_low_conc
+      REAL(wp), INTENT(in) :: pA    ! ice concentration at point "X" [0:1]
+      !!------------------------------------------------------------------------------------
+      REAL(wp) :: zx, zc
+      !!------------------------------------------------------------------------------------
+      zx = 40._wp * (pA - 0.15_wp)
+      zc = 0.505_wp * ( 1._wp + zx / SQRT(1._wp + zx*zx) ) - 0.005_wp
+      fdamp_low_conc = MIN( MAX( zc , 0._wp ) , 1._wp )
+      !!
+   END FUNCTION fdamp_low_conc
 
 
 
@@ -704,9 +554,9 @@ CONTAINS
 
 
    SUBROUTINE div_stress_tensor( cgt, phc, phx, pe1e1, pe2e2,  pe1e1_e, pe2e2_e,  p1_e2x, p1_e1x, p1_e1y, p1_e2y, p1_e1e2x, p1_e1e2y,  &
-      &                               ps11c, ps22c, ps12x,  pdivSx, pdivSy,  pm0 )
+      &                               ps11c, ps22c, ps12x,  pdSx, pdSy,  pm0 )
       !!----------------------------------------------------------------------------------------------
-      !! Computes the vector (pdivSx,pdivSy) = divergence of the h-integrated internal stress tensor
+      !! Computes the vector (pdSx,pdSy) = divergence of the h-integrated internal stress tensor
       !!
       !!   depending on the grid: T-centric grid => cgt='T' or F-centric grid => cgt='F'
       !!
@@ -715,18 +565,18 @@ CONTAINS
       !!   * ps12x       :       sigma12                =>  ! @ point F[i,j] | @ point T[i,j] |
       !!
       !! RETURNS:                                             |     cgt=='T'   |    cgt=='F'    |
-      !!   * pdivSx: x-component of the div of the tensor =>  | @ point U[i,j] | @ point V[i,j] |
-      !!   * pdivSy: y-component of the div of the tensor =>  | @ point V[i,j] | @ point U[i,j] |
+      !!   * pdSx: x-component of the div of the tensor =>  | @ point U[i,j] | @ point V[i,j] |
+      !!   * pdSy: y-component of the div of the tensor =>  | @ point V[i,j] | @ point U[i,j] |
       !!
       !!----------------------------------------------------------------------------------------------
-      CHARACTER(len=1),         INTENT(in)  :: cgt
+      CHARACTER(len=1),             INTENT(in)  :: cgt
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: phc, phx   ! ice thickness at center and corner point [m]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pe1e1, pe2e2, pe1e1_e, pe2e2_e
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: p1_e2x, p1_e1x, p1_e1y, p1_e2y
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: p1_e1e2x, p1_e1e2y
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: ps11c, ps22c, ps12x ! components of stress tensors on T- or F-centric grids x h !!!
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pdivSx, pdivSy      ! x,y components of the divergence of the tensor
-      INTEGER,        OPTIONAL, INTENT(in)  :: pm0
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pdSx, pdSy      ! x,y components of the divergence of the tensor
+      INTEGER,        OPTIONAL,     INTENT(in)  :: pm0
       !!
       INTEGER  :: ip, im, jp, jm, ji, jj, m0
       !!--------------------------------------------------------------------------------------------
@@ -748,404 +598,26 @@ CONTAINS
          CALL ctl_stop( 'STOP', 'div_stress_tensor(): unknown grid-point type: '//cgt//'!')
       ENDIF
       !
-      !pdivSx(:,:) = 0._wp
-      !pdivSy(:,:) = 0._wp
+      !pdSx(:,:) = 0._wp
+      !pdSy(:,:) = 0._wp
       !
-      !*acc data copyin(ip, im, jp, jm, phc, phx, ps11c, ps22c, ps12x, p1_e2x, p1_e1x, p1_e1y, p1_e2y, p1_e1e2x, p1_e1e2y)  copyout(pdivSx, pdivSy)
-      !*acc parallel loop
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             !                   !--- ds11/dx + ds12/dy
-            pdivSx(ji,jj) = ( ( ps11c(ji+ip,jj)*phc(ji+ip,jj)*pe2e2(ji+ip,jj)   - ps11c(ji+im,jj)*phc(ji+im,jj)*pe2e2(ji+im,jj)   ) * p1_e2x(ji,jj) &
-               &            + ( ps12x(ji,jj+jp)*phx(ji,jj+jp)*pe1e1_e(ji,jj+jp) - ps12x(ji,jj+jm)*phx(ji,jj+jm)*pe1e1_e(ji,jj+jm) ) * p1_e1x(ji,jj) &
+            pdSx(ji,jj) = ( ( ps11c(ji+ip,jj)*phc(ji+ip,jj)*pe2e2(ji+ip,jj)   - ps11c(ji+im,jj)*phc(ji+im,jj)*pe2e2(ji+im,jj)   ) * p1_e2x(ji,jj) &
+               &          + ( ps12x(ji,jj+jp)*phx(ji,jj+jp)*pe1e1_e(ji,jj+jp) - ps12x(ji,jj+jm)*phx(ji,jj+jm)*pe1e1_e(ji,jj+jm) ) * p1_e1x(ji,jj) &
                &                 ) * p1_e1e2x(ji,jj)
             !                   !--- ds22/dy + ds12/dx
-            pdivSy(ji,jj) = ( ( ps22c(ji,jj-jm)*phc(ji,jj-jm)*pe1e1(ji,jj-jm)   - ps22c(ji,jj-jp)*phc(ji,jj-jp)*pe1e1(ji,jj-jp)   ) * p1_e1y(ji,jj) &
-               &            + ( ps12x(ji-im,jj)*phx(ji-im,jj)*pe2e2_e(ji-im,jj) - ps12x(ji-ip,jj)*phx(ji-ip,jj)*pe2e2_e(ji-ip,jj) ) * p1_e2y(ji,jj) &
-               &                 ) * p1_e1e2y(ji,jj)
+            pdSy(ji,jj) = ( ( ps22c(ji,jj-jm)*phc(ji,jj-jm)*pe1e1(ji,jj-jm)   - ps22c(ji,jj-jp)*phc(ji,jj-jp)*pe1e1(ji,jj-jp)   ) * p1_e1y(ji,jj) &
+               &          + ( ps12x(ji-im,jj)*phx(ji-im,jj)*pe2e2_e(ji-im,jj) - ps12x(ji-ip,jj)*phx(ji-ip,jj)*pe2e2_e(ji-ip,jj) ) * p1_e2y(ji,jj) &
+               &               ) * p1_e1e2y(ji,jj)
             !
          END DO
       END DO
-      !*acc end parallel loop
-      !*acc end data
       !
       IF( ln_timing )   CALL timing_stop('div_stress_tensor')
       !
    END SUBROUTINE div_stress_tensor
-
-
-
-
-   SUBROUTINE apply_cn_gpu( kts, pS_t, pS_f )
-      !!========================================================================================================================
-      INTEGER,                        INTENT(in)    :: kts       ! current small time step
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_t      ! MIND that pS_t is the stress tensor with all the stress components @T,
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_f      !  it is not the same thing as the "T-centric" stress tensor (s12@F)!
-      !
-      REAL(wp) :: zms, zrc, zml, zr1, zr2, zr3, zr4, zs11x, zs22x, zs12x
-      INTEGER  :: ji, jj, i2, i3, i4, j2, j3, j4, kp
-      !!========================================================================================================================
-      !$acc data present( pS_t, pS_f )
-      IF( ln_timing )   CALL timing_start('apply_cn_gpu')
-      kp = MIN( nn_hls-1 , 1 )
-
-      IF( MOD(kts,2) == 0 ) THEN
-         !! Correction of T-centric stress tensor components
-         !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-kp, Nje0+kp
-            DO ji=Nis0-kp, Nie0+kp
-               !!
-#              include "icedyn_rhg_tools_cn_t.h90"
-               !!
-            END DO
-         END DO
-         !$acc end parallel loop
-      ELSE
-         !!
-         !! Correction of F-centric stress tensor components
-         !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-kp, Nje0+kp
-            DO ji=Nis0-kp, Nie0+kp
-               !!
-#              include "icedyn_rhg_tools_cn_f.h90"
-               !!
-            END DO
-         END DO
-         !$acc end parallel loop
-      END IF
-      !
-      !$acc end data
-      IF( ln_timing )   CALL timing_stop('apply_cn_gpu')
-   END SUBROUTINE apply_cn_gpu
-
-
-
-   !FUNCTION d_crit( pcohe, pNlim, pE, pdx, pSGM )
-   !   !!----------------------------------------------------------------------
-   !   !! Fully Explicit Euler Operator for damage update
-   !   !!----------------------------------------------------------------------
-   !   REAL(wp), DIMENSION(jpi,jpj)                :: d_crit
-   !   REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)  :: pcohe  ! cohesion
-   !   REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)  :: pNlim  ! N
-   !   REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)  :: pE     ! Elasticity of damaged ice
-   !   REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)  :: pdx    ! Local grid resolution [m]
-   !   REAL(wp), DIMENSION(jpi,jpj,3), INTENT(in)  :: pSGM   ! Stress tensor components
-   !   !!
-   !   REAL(wp) :: zsigI, zsigII, zMC
-   !   REAL(wp) :: zsqrtE, zTd, zc0, z1_zsigI, z1_zMC, zNlim, ztmp
-   !   INTEGER  :: ji, jj
-   !   !!----------------------------------------------------------------------
-   !   !*acc data copyin(rsqrt_nu_rhoi, epsi06, epsi20, pcohe, pNlim, pE, pdx) copyout(d_crit) present(pSGM)
-   !   !*acc parallel loop collapse(2)
-   !   DO jj=Njs0, Nje0
-   !      DO ji=Nis0, Nie0
-   !
-   !         zNlim = pNlim(ji,jj)
-   !
-   !         zsqrtE = SQRT(MAX(pE(ji,jj),epsi06))                               ! `sqrt(E)` (damaged ice)...
-   !         zTd    = MAX( pdx(ji,jj) * rsqrt_nu_rhoi / zsqrtE , epsi06 )       ! characteristic time for damage [s] |  (we shall divide by it)...
-   !
-   !         zsigI  = 0.5_wp * (pSGM(ji,jj,1) + pSGM(ji,jj,2))
-   !         ztmp   =           pSGM(ji,jj,1) - pSGM(ji,jj,2)
-   !         zsigII = SQRT( 0.25_wp*ztmp*ztmp +  pSGM(ji,jj,3)*pSGM(ji,jj,3) )
-   !
-   !         z1_zsigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
-   !
-   !         zMC = zsigII + rmuMC*zsigI                             ! Mohr-Coulomb  [Eq.29.2]
-   !         z1_zMC = SIGN( 1._wp , zMC ) / MAX( ABS(zMC), epsi20 )   ! 1/MC without the MC=0 singularity...
-   !
-   !         zc0 = 0.5_wp + SIGN( 0.5_wp , zsigI + zNlim       )   ! if zsigI<-Nlim => zc0=0 ; zc0=1 otherwize
-   !
-   !         d_crit(ji,jj) = zc0 * pcohe(ji,jj) * z1_zMC  +  (zc0-1._wp) * zNlim * z1_zsigI   ! `zc0-1` because we need `-Nlim`
-   !
-   !      END DO
-   !   ENDDO
-   !   !*acc end parallel loop
-   !   !*acc end data
-   !END FUNCTION d_crit
-
-
-
-   FUNCTION Visco_sclr( pexpC, p1md )
-      !***************************************************************************************
-      !   Returns `eta`, the viscosity of sea-ice [N/m^2.s]
-      !***************************************************************************************
-      !*acc routine
-      !***************************************************************************************
-      REAL(wp)                       :: Visco_sclr ! [s]
-      REAL(wp),           INTENT(in) :: pexpC       ! `EXP[ rn_C0*(1 - pA) ) ]` with `rn_C0=-20`
-      REAL(wp),           INTENT(in) :: p1md        ! `1-damage`   [:]
-      !***************************************************************************************
-      !REAL(wp) :: zE, zeta
-      !***************************************************************************************
-      ! Viscosity [Pa.s]:
-      !    *** MEB (Dansereau et al., 2016):
-      !       * V = V0 * (1 - d)**a * exp[-C*(1-A)]  (viscosity)
-      !    *** BBM (Olason et al. 2022) [Eq.10/Eq.9]:
-      !       *    V = V0 * (1 - d)**a * exp[b*-C*(1-A)]    (with b=a in Olason et al. 2022)
-      Visco_sclr = rn_eta0 * p1md**nn_alrlx * pexpC**nn_btrlx  ! viscosity [Pa.s]
-      !
-   END FUNCTION Visco_sclr
-
-
-
-
-   FUNCTION Lambda_sclr( pexpC, p1md, pE, pdt )
-      !***************************************************************************************
-      !   Returns `Lambda`, the " viscous relaxation time" [s]
-      !***************************************************************************************
-      !*acc routine
-      !***************************************************************************************
-      REAL(wp)                       :: Lambda_sclr ! [s]
-      REAL(wp),           INTENT(in) :: pexpC       ! `EXP[ rn_C0*(1 - pA) ) ]` with `rn_C0=-20`
-      REAL(wp),           INTENT(in) :: p1md        ! `1-damage`   [:]
-      REAL(wp),           INTENT(in) :: pE          ! elasticity           [N/m^2]
-      REAL(wp),           INTENT(in) :: pdt         ! small time step used [s]
-      !***************************************************************************************
-      REAL(wp) :: zeta
-      !***************************************************************************************
-      !
-      zeta = Visco_sclr( pexpC, p1md ) ! viscosity [Pa.s]
-      !
-      Lambda_sclr = MAX( zeta / MAX( pE, epsi20 ) , pdt )
-      !
-   END FUNCTION Lambda_sclr
-
-
-
-   !!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   !! `P_max` interface
-   !!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-   FUNCTION P_max_bbm_sclr( pexpC, ph )
-      !***************************************************************************************
-      ! This function is to be used with vertically-integrated stresses in [N/m^2*m]
-      !    => hence the `h**2.5` in place of the `h**1.5`
-      !    => returns `-P_max*h`, [Eq.8] of Olason et al. 2022
-      !
-      !***************************************************************************************
-      !*acc routine
-      !***************************************************************************************
-      REAL(wp)                       :: P_max_bbm_sclr
-      REAL(wp),           INTENT(in) :: pexpC       ! `EXP[ rn_C0*(1 - pA) ) ]` with `rn_C0=-20`
-      REAL(wp),           INTENT(in) :: ph          ! Ice thickness            [m]
-      !***************************************************************************************
-      !
-      !P_max_bbm_sclr = -rn_P0 * ph**1.5_wp * pexpC  ! `-P_max` (for sigI<0)
-      P_max_bbm_sclr = -rn_P0 * ph**2.5_wp * pexpC   ! `-P_max` (for sigI<0)  !#LOLOsh `Pmax` must be in [N/m^2*m]
-      !
-   END FUNCTION P_max_bbm_sclr
-
-   FUNCTION P_max_cos_sclr( pexpC, ph, p1_SgmI, pSgmII )
-      !***************************************************************************************
-      ! This function is to be used with vertically-integrated stresses in [N/m^2*m]
-      !    => hence the `h**2.5` in place of the `h**1.5`
-      !    => returns `-P_max*h`, [Eq.8] of Olason et al. 2022
-      !***************************************************************************************
-      !*acc routine
-      !***************************************************************************************
-      REAL(wp)                       :: P_max_cos_sclr
-      REAL(wp),           INTENT(in) :: pexpC       ! `EXP[ rn_C0*(1 - pA) ) ]` with `rn_C0=-20`
-      REAL(wp),           INTENT(in) :: ph          ! Ice thickness            [m]
-      REAL(wp),           INTENT(in) :: p1_SgmI     ! `1/sigma_I`              [m^2/N/m] vertically-integrated stress !
-      REAL(wp),           INTENT(in) :: pSgmII      ! `sigma_II`               [N/m^2*m] vertically-integrated stress !
-      !***************************************************************************************
-      REAL(wp) :: zang
-      !***************************************************************************************
-      !
-      zang  = ATAN( pSgmII * p1_SgmI )
-      !
-      !!P_max_cos_sclr = -rn_P0 * ph**1.5_wp * pexpC  * COS( zang )   ! `-P_max` (for sigI<0)
-      !
-      P_max_cos_sclr = -rn_P0 * ph**2.5_wp * pexpC  * COS( zang )   ! `-P_max` (for sigI<0)  !#LOLOsh `Pmax` must be in [N/m^2*m]
-      !
-      !P_max_cos_sclr = -rn_P0 * ph**2.5_wp          * COS( zang )   ! `-P_max` (for sigI<0)  !#LOLOsh `Pmax` must be in [N/m^2*m]
-      !
-   END FUNCTION P_max_cos_sclr
-
-   !!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   !!~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-   FUNCTION P_tilde_sclr( pPmax, pSgmI, p1_SgmI )
-      !***************************************************************************************
-      ! Expects vertically-integrated stress !!!
-      !    => returns `-P_max*h`, [Eq.8] of Olason et al. 2022
-      !
-      !***************************************************************************************
-      !*acc routine
-      !***************************************************************************************
-      REAL(wp)                       :: P_tilde_sclr
-      REAL(wp),           INTENT(in) :: pPmax        ! vertically-integrated `P_max`   [N/m^2*m]
-      REAL(wp),           INTENT(in) :: pSgmI        ! vertically-integrated `sigma_I` [N/m^2*m]
-      REAL(wp),           INTENT(in) :: p1_SgmI      ! `1/pSgmI`
-      !***************************************************************************************
-      REAL(wp) :: zc0
-      !***************************************************************************************
-      !
-      zc0          = 0.5_wp + SIGN( 0.5_wp, -pSgmI-epsi20 ) ! => if sigI<-epsi20 => zc0=1 else: zc0=0
-      P_tilde_sclr = -zc0 * MIN( pPmax*p1_SgmI , 1._wp )
-      !
-   END FUNCTION P_tilde_sclr
-
-
-
-   FUNCTION mc_incrmt( pSI, pSII, pN, pC, pTd )
-      !$acc routine
-      !!---------------------------------------------------------------------
-      REAL(wp) :: mc_incrmt
-      !!----------------------------------------------------------------------
-      REAL(wp), INTENT(in) :: pSI, pSII ! 1st and second invariant of vertically-integrated (or not) stress tensor [N/m^2] or [N/m^2*m]
-      REAL(wp), INTENT(in) :: pN        ! `Nlim` [N/m^2] or [N/m^2*m]
-      REAL(wp), INTENT(in) :: pC        ! Cohesion [N/m^2] or [N/m^2*m]
-      REAL(wp), INTENT(in) :: pTd       ! Characteristic time of propagation of damage [s]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: z1_zsigI, zMC, z1_zMC, zc0, zc1, zdcrit
-      !!----------------------------------------------------------------------
-      z1_zsigI = SIGN( 1._wp , pSI ) / MAX( ABS(pSI), epsi20 )
-      zMC = pSII + rmuMC*pSI
-      z1_zMC   = SIGN( 1._wp , zMC ) / MAX( ABS(zMC), epsi20 )
-      zc0 = 0.5_wp + SIGN( 0.5_wp , pSI + pN )     ! => `zc0=0` if `pSI < -pN` (`pSI` is negative!)
-      zdcrit = zc0 * pC * z1_zMC  +  (zc0-1._wp) * pN * z1_zsigI
-      zc0 = 0.5_wp + SIGN( 0.5_wp , zdcrit-epsi20 )        ! => `zc0=1` if `dcrit>0`
-      zc1 = 0.5_wp + SIGN( 0.5_wp , 1._wp-zdcrit-epsi20 )  ! => `zc1=1` if `dcrit<1`
-      !
-      mc_incrmt = zc0*zc1 * (1._wp - zdcrit) / pTd
-      !
-      ! Comprehensive version:
-      !zdcrit = 9999._wp
-      !IF( pSI < -pN ) THEN
-      !   zdcrit = -pN / pSI
-      !ELSEIF( ABS(zMC) > epsi10 ) THEN
-      !   zdcrit = pC / zMC
-      !ENDIF
-      !mc_incrmt = 0._wp
-      !IF( (zdcrit>0._wp).AND.(zdcrit<1._wp) ) mc_incrmt = (1._wp - zdcrit) / pTd
-      !
-   END FUNCTION mc_incrmt
-
-
-
-   FUNCTION Elast_diag( pA, p1md )
-      !!----------------------------------------------------------------------
-      !! Returns the elasticity of (damaged) sea-ice [N/m^2]
-      !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             :: Elast_diag       ! [N/m^2]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pA               ! sea-ice concentration [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: p1md             ! sea-ice damage [-]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: zxpC, z1md
-      INTEGER  :: ji, jj
-      !!----------------------------------------------------------------------
-      !*acc data pcopyin(pA, p1md) copyout(Elast_diag)
-      !*acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            z1md = p1md(ji,jj)
-            zxpC = EXP( rn_C0*(1._wp - pA(ji,jj)) )  ! `expC` [Eq.8]
-            Elast_diag(ji,jj) = rn_E0 * z1md * zxpC                 !  `E = E0 * (1 - d) * exp[-C*(1-A)]`
-         END DO
-      END DO
-      !*acc end parallel loop
-      !*acc end data
-   END FUNCTION Elast_diag
-
-
-   FUNCTION Visco_diag( pA, p1md )
-      !!----------------------------------------------------------------------
-      !! Returns the viscosity of (damaged) sea-ice [Pa.s]
-      !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             :: Visco_diag       ! [N/m^2]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pA               ! sea-ice concentration [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: p1md               ! sea-ice damage [-]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: zxpC, z1md
-      INTEGER  :: ji, jj
-      !!----------------------------------------------------------------------
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            z1md = p1md(ji,jj)
-            zxpC = EXP( rn_C0*(1._wp - pA(ji,jj)) )
-            Visco_diag(ji,jj) = Visco_sclr( zxpC, z1md )
-         END DO
-      END DO
-   END FUNCTION Visco_diag
-
-
-   FUNCTION Lambda_diag( pA, p1md, pdt )
-      !!----------------------------------------------------------------------
-      !! Returns the viscosity of (damaged) sea-ice [Pa.s]
-      !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             :: Lambda_diag       ! [N/m^2]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pA               ! sea-ice concentration [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: p1md               ! sea-ice damage [-]
-      REAL(wp),                     INTENT(in) :: pdt              ! small time step used [s]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: zxpC, z1md, zE
-      INTEGER  :: ji, jj
-      !!----------------------------------------------------------------------
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            z1md = p1md(ji,jj)
-            zxpC = EXP( rn_C0*(1._wp - pA(ji,jj)) )
-            zE   = rn_E0 * z1md * zxpC     ! elasticity [N/m^2]
-            Lambda_diag(ji,jj) = Lambda_sclr( zxpC, z1md, zE, pdt )
-         END DO
-      END DO
-   END FUNCTION Lambda_diag
-
-
-
-
-   FUNCTION P_max_diag( pA, ph, ps11, ps22, ps12 )
-      !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             :: P_max_diag       ! [N/m^2]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pA               ! Ice concentration
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: ph               ! Ice thickness
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: ps11, ps22, ps12 ! Vertically-integrated stress tensor components at given point! [N/m^2*m]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: zxpC, zsigI, zsigII, z1_zsigI
-      INTEGER  :: ji, jj
-      !!----------------------------------------------------------------------
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            zxpC   = EXP( rn_C0*(1._wp - pA(ji,jj)) )  ! `expC` [Eq.8]
-            zsigI  = 0.5_wp * ( ps11(ji,jj) + ps22(ji,jj) ) ! sigI: normal stress aka first invariant
-            zsigII = sigmaII_sclr( ps11(ji,jj), ps22(ji,jj), ps12(ji,jj) )
-            z1_zsigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
-            !
-            P_max_diag(ji,jj) = -1._wp * P_max_sclr( zxpC, ph(ji,jj), z1_zsigI, zsigII ) !COS `P_max` with the right sign !
-            !P_max_diag(ji,jj) = -1._wp * P_max_sclr( zxpC, ph(ji,jj) ) !BBM `P_max` with the right sign !
-            !
-         END DO
-      END DO
-   END FUNCTION P_max_diag
-
-   FUNCTION P_tilde_diag( pA, ph, ps11, ps22, ps12 )
-      !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             :: P_tilde_diag     !   [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pA               ! Ice concentration [-]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: ph               ! Ice thickness [m]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: ps11, ps22, ps12 ! Vertically-integrated stress tensor components at given point! [N/m^2*m]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: zxpC, zsigI, zsigII, zPmax, zc0, z1_zsigI
-      INTEGER  :: ji, jj
-      !!----------------------------------------------------------------------
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            zxpC     = EXP( rn_C0*(1._wp - pA(ji,jj)) )  ! `expC` [Eq.8]
-            zsigI    = 0.5_wp * ( ps11(ji,jj) + ps22(ji,jj) ) ! sigI: normal stress aka first invariant
-            zsigII   = sigmaII_sclr( ps11(ji,jj), ps22(ji,jj), ps12(ji,jj) )
-            z1_zsigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
-            zPmax    = P_max_sclr( zxpC, ph(ji,jj), z1_zsigI, zsigII ) !COS      ! `-P_max` (for sigI<0)
-            !zPmax    = P_max_sclr( zxpC, ph(ji,jj) ) !BBM      ! `-P_max` (for sigI<0)
-            zc0      = 0.5_wp + SIGN( 0.5_wp, -zsigI-epsi20 )           ! => if sigI<-epsi20 => zc0=1 else: zc0=0
-            P_tilde_diag(ji,jj) = -1._wp * zc0 * MIN( zPmax*z1_zsigI , 1._wp )  ! => P~ with the right sign !
-         END DO
-      END DO
-   END FUNCTION P_tilde_diag
-
 
 
 
@@ -1234,8 +706,8 @@ CONTAINS
          DO ji=Nis0, Nie0
             ! Shear at F points:
             zzf = p1_e1e2f(ji,jj) * pmskf(ji,jj)
-            zS1 = ( u_ice(ji,jj+1) * p1_e1u(ji,jj+1) - u_ice(ji,jj) * p1_e1u(ji,jj) ) * pe1e1f(ji,jj) * zzf
-            zS2 = ( v_ice(ji+1,jj) * p1_e2v(ji+1,jj) - v_ice(ji,jj) * p1_e2v(ji,jj) ) * pe2e2f(ji,jj) * zzf
+            zS1 = ( pU(ji,jj+1) * p1_e1u(ji,jj+1) - pU(ji,jj) * p1_e1u(ji,jj) ) * pe1e1f(ji,jj) * zzf
+            zS2 = ( pV(ji+1,jj) * p1_e2v(ji+1,jj) - pV(ji,jj) * p1_e2v(ji,jj) ) * pe2e2f(ji,jj) * zzf
             pe12f(ji,jj) = 0.5_wp * ( zS1 + zS2 )    ! eps12 =  1/2 `shearing strain rate` !
             !
          END DO
@@ -1296,9 +768,6 @@ CONTAINS
          END DO
       END DO
    END SUBROUTINE vel_maxshr_t
-
-
-
 
    !!==============================================================================
 END MODULE icedyn_rhg_tools

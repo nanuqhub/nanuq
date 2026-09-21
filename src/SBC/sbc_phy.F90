@@ -36,14 +36,13 @@ MODULE sbc_phy
    REAL(wp), PARAMETER, PUBLIC :: rctv0   = R_vap/R_dry - 1._wp   !: for virtual temperature (== (1-eps)/eps) => ~ 0.608
    REAL(wp), PARAMETER, PUBLIC :: rCp_air = 1000.5_wp             !: specific heat of air (only used for ice fluxes now...)
    REAL(wp), PARAMETER, PUBLIC :: albo    = 0.066_wp              !: ocean albedo assumed to be constant
+   REAL(wp), PARAMETER, PUBLIC :: r1malbo = 1._wp - albo        !: 1 - ocean albedo assumed to be constant
    REAL(wp), PARAMETER, PUBLIC :: R_gas   = 8.314510_wp           !: Universal molar gas constant                    [J/mol/K]
    REAL(wp), PARAMETER, PUBLIC :: rmm_dryair = 28.9647e-3_wp      !: dry air molar mass / molecular weight           [kg/mol]
    REAL(wp), PARAMETER, PUBLIC :: rmm_water  = 18.0153e-3_wp      !: water   molar mass / molecular weight           [kg/mol]
    REAL(wp), PARAMETER, PUBLIC :: rmm_ratio  = rmm_water / rmm_dryair
    REAL(wp), PARAMETER, PUBLIC :: rgamma_dry = R_gas / ( rmm_dryair * rCp_dry )  !: Poisson constant for dry air
    REAL(wp), PARAMETER, PUBLIC :: rpref      = 1.e5_wp            !: reference air pressure for exner function       [Pa]
-   !$acc declare create( reps0, rpref, rgamma_dry, rpref, rmm_dryair, rmm_water, albo, R_gas )
-   
    !
    REAL(wp), PARAMETER, PUBLIC :: rho0_a  = 1.2_wp      !: Approx. of density of air                       [kg/m^3]
    REAL(wp), PARAMETER, PUBLIC :: rho0_w  = 1025._wp    !: Density of sea-water  (ECMWF->1025)             [kg/m^3]
@@ -56,36 +55,28 @@ MODULE sbc_phy
    REAL(wp), PARAMETER, PUBLIC :: emiss_w = 0.98_wp     !: Long-wave (thermal) emissivity of sea-water []
    !
    REAL(wp), PARAMETER, PUBLIC :: emiss_i = 0.996_wp    !:  "   for ice and snow => but Rees 1993 suggests can be lower in winter on fresh snow... 0.72 ...
-   !$acc declare create( rk0_w, emiss_w, emiss_i )
 
-   
    REAL(wp), PARAMETER, PUBLIC :: wspd_thrshld_ice = 0.2_wp !: minimum scalar wind speed accepted over sea-ice... [m/s]
 
    !
-   REAL(wp), PARAMETER, PUBLIC :: rdct_qsat_salt = 0.98_wp  !: reduction factor on specific humidity at saturation (q_sat(T_s)) due to salt
-   REAL(wp), PARAMETER, PUBLIC :: rtt0 = 273.16_wp        !: triple point of temperature    [K]
+   REAL(wp), PARAMETER, PUBLIC :: rdct_qsat_salt = 0.98_wp !: reduction factor on specific humidity at saturation (q_sat(T_s)) due to salt
+   REAL(wp), PARAMETER, PUBLIC :: rtt0 = 273.16_wp         !: triple point of temperature    [K]
    !
    REAL(wp), PARAMETER, PUBLIC :: rcst_cs = -16._wp*9.80665_wp*rho0_w*rCp0_w*rnu0_w*rnu0_w*rnu0_w/(rk0_w*rk0_w) !: for cool-skin parameterizations... (grav = 9.80665_wp)
    !                              => see eq.(14) in Fairall et al. 1996   (eq.(6) of Zeng aand Beljaars is WRONG! (typo?)
 
    REAL(wp), PARAMETER, PUBLIC :: z0_sea_max = 0.0025_wp   !: maximum realistic value for roughness length of sea-surface... [m]
+   REAL(wp), PARAMETER, PUBLIC :: Cx_min = 0.05E-3_wp      !: smallest value allowed for bulk transfer coefficients (usually in stable conditions with now wind)
+   REAL(wp), PARAMETER, PUBLIC :: Cx_max =  2.5E-3_wp      !: largest  value allowed for bulk transfer coefficients (usually in stable conditions with now wind)
 
-   REAL(wp), PUBLIC, SAVE ::   pp_cldf = 0.81    !: cloud fraction over sea ice, summer CLIO value   [-]
+   REAL(wp), PARAMETER, PUBLIC ::   pp_cldf = 0.81    !: cloud fraction over sea ice, summer CLIO value   [-]
 
-
-   REAL(wp), PARAMETER, PUBLIC :: Cx_min = 0.1E-3_wp ! smallest value allowed for bulk transfer coefficients (usually in stable conditions with now wind)
-   !$acc declare create( wspd_thrshld_ice, rdct_qsat_salt, rtt0, rcst_cs, z0_sea_max, pp_cldf, Cx_min )
-
-   
    !! Constants for Goff formula in the presence of ice:
    REAL(wp), PARAMETER :: rAg_i = -9.09718_wp
    REAL(wp), PARAMETER :: rBg_i = -3.56654_wp
    REAL(wp), PARAMETER :: rCg_i = 0.876793_wp
-   REAL(wp), PARAMETER :: rDg_i = LOG10(6.1071_wp)   
-   !$acc declare create( rAg_i, rBg_i, rCg_i, rDg_i )
+   REAL(wp), PARAMETER :: rDg_i = LOG10(6.1071_wp)
 
-
-   
    REAL(wp), PARAMETER :: rc_louis  = 5._wp
    REAL(wp), PARAMETER :: rc2_louis = rc_louis * rc_louis
    REAL(wp), PARAMETER :: ram_louis = 2. * rc_louis
@@ -143,7 +134,7 @@ MODULE sbc_phy
    INTERFACE q_air_rh
       MODULE PROCEDURE q_air_rh_vctr, q_air_rh_sclr
    END INTERFACE q_air_rh
-   
+
    INTERFACE dq_sat_dt_ice
       MODULE PROCEDURE dq_sat_dt_ice_vctr, dq_sat_dt_ice_sclr
    END INTERFACE dq_sat_dt_ice
@@ -209,7 +200,7 @@ MODULE sbc_phy
    PUBLIC delta_skin_layer_sclr
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: sbcblk.F90 10535 2019-01-16 17:36:47Z clem $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -228,7 +219,8 @@ CONTAINS
       !! Author: L. Brodeau, June 2019 / AeroBulk
       !!         (https://github.com/brodeau/aerobulk/)
       !!------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!------------------------------------------------------------------------
       REAL(wp)             :: virt_temp_sclr !: virtual temperature [K]
       REAL(wp), INTENT(in) :: pta       !: absolute or potential air temperature [K]
       REAL(wp), INTENT(in) :: pqa       !: specific humidity of air   [kg/kg]
@@ -261,7 +253,7 @@ CONTAINS
       !!              from either potential or absolute air temperature
       !! ** Author: G. Samson, Feb 2021
       !!-------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
       !!-------------------------------------------------------------------------------
       REAL(wp)                          :: pres_temp_sclr    ! air pressure              [Pa]
       REAL(wp), INTENT(in )             :: pqspe             ! air specific humidity     [kg/kg]
@@ -286,12 +278,12 @@ CONTAINS
          zta   = pta
       ENDIF
 
-      
+
       lice = .FALSE.
       IF( PRESENT(l_ice) ) lice = l_ice
 
       zpa = pslp              ! air pressure first guess [Pa]
-      
+
       !$acc loop seq
       DO it = 1, niter
          zta   = ztpot * ( zpa / rpref )**rgamma_dry * zmask + (1._wp - zmask) * zta
@@ -354,7 +346,7 @@ CONTAINS
       !!              and pressure using Exner function
       !! ** Author: G. Samson, Feb 2021
       !!-------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
       !!-------------------------------------------------------------------------------
       REAL(wp)             :: theta_exner_sclr   ! air/surface potential temperature [K]
       REAL(wp), INTENT(in) :: pta                ! air/surface absolute temperature  [K]
@@ -420,12 +412,13 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, June 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!-------------------------------------------------------------------------------
+      !$acc routine seq
+      !!-------------------------------------------------------------------------------
       REAL(wp), INTENT(in) :: ptak           ! air absolute temperature    [K]
       REAL(wp), INTENT(in) :: pqa            ! air specific humidity   [kg/kg]
       REAL(wp), INTENT(in) :: ppa            ! pressure in                [Pa]
       REAL(wp)             :: rho_air_sclr   ! density of moist air   [kg/m^3]
       !!-------------------------------------------------------------------------------
-      !$acc routine
       rho_air_sclr = MAX( ppa / MAX( R_dry*ptak * ( 1._wp + rctv0*pqa ), 1.E-15_wp ) , 0.8_wp )
       !!
    END FUNCTION rho_air_sclr
@@ -437,7 +430,8 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp)             :: visc_air_sclr   ! kinetic viscosity (m^2/s)
       REAL(wp), INTENT(in) :: ptak       ! air temperature in (K)
       !
@@ -466,7 +460,6 @@ CONTAINS
 
 
    FUNCTION L_vap( ptc )
-      !$acc routine
       !!---------------------------------------------------------------------------------
       !!                           ***  FUNCTION L_vap  ***
       !!
@@ -474,6 +467,8 @@ CONTAINS
       !!              on its temperature.
       !!
       !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
+      !!----------------------------------------------------------------------------------
+      !$acc routine seq
       !!----------------------------------------------------------------------------------
       REAL(wp)             ::   L_vap   ! latent heat of vaporization   [J/kg]
       REAL(wp), INTENT(in) ::   ptc     ! water temperature             [deg.C]
@@ -508,7 +503,8 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!-------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!-------------------------------------------------------------------------------
       REAL(wp), INTENT(in) :: pqa           ! air specific humidity         [kg/kg]
       REAL(wp)             :: cp_air_sclr   ! specific heat of moist air   [J/K/kg]
       !!-------------------------------------------------------------------------------
@@ -569,7 +565,8 @@ CONTAINS
       !! Author: L. Brodeau, June 2019 / AeroBulk
       !!         (https://github.com/brodeau/aerobulk/)
       !!------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!------------------------------------------------------------------------
       REAL(wp)             :: One_on_L_sclr !: 1./(Obukhov length) [m^-1]
       REAL(wp), INTENT(in) :: pThta     !: reference potential temperature of air [K]
       REAL(wp), INTENT(in) :: pqa      !: reference specific humidity of air   [kg/kg]
@@ -615,7 +612,8 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, June 2019 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp)             :: Ri_bulk_sclr
       REAL(wp), INTENT(in) :: pz    ! height above the sea (aka "delta z")  [m]
       REAL(wp), INTENT(in) :: psst  ! potential SST                         [K]
@@ -685,7 +683,8 @@ CONTAINS
       !!
       !!    Note: what rt0 should be here, is 273.16 (triple point of water) and not 273.15 like here
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp)             ::   e_sat_sclr   ! water vapor at saturation   [kg/kg]
       REAL(wp), INTENT(in) ::   ptak    ! air temperature                  [K]
       REAL(wp) ::   zta, ztmp   ! local scalar
@@ -721,7 +720,8 @@ CONTAINS
       !!
       REAL(wp) :: zta, zle, ztmp
       !!---------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!---------------------------------------------------------------------------------
       zta = MAX( ptak , 180._wp )   ! air temp., prevents fpe0 errors dute to unrealistically low values over masked regions...
       ztmp = rtt0/zta
       !!
@@ -752,7 +752,8 @@ CONTAINS
       !! Analytical exact formulation: double checked!!!
       !!  => DOUBLE-check possible / finite-difference version with "./bin/test_phymbl.x"
       !!---------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!---------------------------------------------------------------------------------
       REAL(wp)             :: de_sat_dt_ice_sclr !:  [Pa/K]
       REAL(wp), INTENT(in) :: ptak
       !!
@@ -784,12 +785,13 @@ CONTAINS
       !!---------------------------------------------------------------------------------
       !!                           ***  FUNCTION q_sat_sclr  ***
       !!
-      !! ** Purpose : Conputes specific humidity of air at saturation
+      !! ** Purpose : Conputes specific humidity of air at saturation [kg/kg]
       !!
       !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
-      REAL(wp) :: q_sat_sclr
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
+      REAL(wp) :: q_sat_sclr       !:      [kg/kg]
       REAL(wp), INTENT(in) :: pta  !: absolute temperature of air [K]
       REAL(wp), INTENT(in) :: ppa  !: atmospheric pressure        [Pa]
       LOGICAL,  INTENT(in), OPTIONAL :: l_ice  !: we are above ice
@@ -799,12 +801,12 @@ CONTAINS
       lice = .FALSE.
       IF( PRESENT(l_ice) ) lice = l_ice
       IF( lice ) THEN
-         ze_s = e_sat_ice( pta )
+         ze_s = e_sat_ice_sclr( pta )
       ELSE
-         ze_s = e_sat( pta ) ! Vapour pressure at saturation (Goff) :
+         ze_s = e_sat_sclr( pta ) ! Vapour pressure at saturation (Goff)
       END IF
       q_sat_sclr = reps0*ze_s/(ppa - (1._wp - reps0)*ze_s)
-
+      !
    END FUNCTION q_sat_sclr
 
    FUNCTION q_sat_vctr( pta, ppa,  l_ice )
@@ -834,7 +836,8 @@ CONTAINS
       !! Analytical exact formulation: double checked!!!
       !!  => DOUBLE-check possible / finite-difference version with "./bin/test_phymbl.x"
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp) :: dq_sat_dt_ice_sclr
       REAL(wp), INTENT(in) :: pta  !: absolute temperature of air [K]
       REAL(wp), INTENT(in) :: ppa  !: atmospheric pressure        [Pa]
@@ -871,7 +874,7 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
       !!----------------------------------------------------------------------------------
       REAL(wp)             :: q_air_rh_sclr
       REAL(wp), INTENT(in) :: prha        !: relative humidity      [fraction, not %!!!]
@@ -885,7 +888,7 @@ CONTAINS
       q_air_rh_sclr = ze*reps0/(ppa - (1. - reps0)*ze)
       !
    END FUNCTION q_air_rh_sclr
-   
+
    FUNCTION q_air_rh_vctr(prha, ptak, ppa)
       !!----------------------------------------------------------------------------------
       !! Specific humidity of air out of Relative Humidity
@@ -919,7 +922,8 @@ CONTAINS
       !!          and the module of the wind stress => pTau = Tau
       !! ** Author: L. Brodeau, Sept. 2019 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp), INTENT(in)  :: pzu  ! height above the sea-level where all this takes place (normally 10m)
       REAL(wp), INTENT(in)  :: pts  ! water temperature at the air-sea interface [deg.C]
       REAL(wp), INTENT(in)  :: pqs  ! satur. spec. hum. at T=pts   [kg/kg]
@@ -1010,7 +1014,8 @@ CONTAINS
       &                          pTau, pQsen, pQlat,       &
       &                          pEvap, prhoa, l_ice      )
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp),                     INTENT(in)  :: pzu  ! height above the sea-level where all this takes place (normally 10m)
       REAL(wp), INTENT(in)  :: pts  ! water temperature at the air-sea interface [deg.C]
       REAL(wp), INTENT(in)  :: pqs  ! satur. spec. hum. at T=pts   [kg/kg]
@@ -1038,7 +1043,7 @@ CONTAINS
       IF( PRESENT(l_ice) ) lice = l_ice
 
       zts = pts + rt0   ! to Kelvin !
-   
+
       !! Need zta, absolute temperature at pzu (formula to estimate rho_air needs absolute temperature, not the potential temperature "pThta")
       zta  = pThta - rgamma_dry*pzu   ! Absolute temp. is slightly colder...
       zrho = rho_air(zta, pqa, pslp)
@@ -1048,21 +1053,17 @@ CONTAINS
 
       pTau = zUrho * pCd * pwnd ! Wind stress module ( `pwnd` here because `pUb` already in `zUrho`
 
-      zevap = zUrho * pCe * (  pqa - pqs)
-      
-      pQsen = zUrho * pCh * (pThta - zts) * cp_air(pqa)
+      zevap = MIN( zUrho * pCe * (  pqa - pqs)                , 0._wp )  ! forget "positive evaporation" aka condensation events, that are quite dodgy out of bulk formulae!
 
-      !IF(ABS(pQsen)>1000._wp) THEN
-      !   PRINT *, 'LOLO BULK_FORMULA_SCLR: zUrho, pCh, pThta, zts, cp_air(pqa) =', REAL(zUrho,4), REAL(pCh,4), REAL(pThta,4), REAL(zts,4), REAL(cp_air(pqa),4)
-      !   PRINT *, '  ==> pQsen =', pQsen ; PRINT *, ''
-      !ENDIF         
+      pQsen =      zUrho * pCh * (pThta - zts) * cp_air(pqa)
+
       IF( lice ) THEN
          pQlat =      rLsub * zevap
-         IF( PRESENT(pEvap) ) pEvap = MIN( zevap , 0._wp )
       ELSE
          pQlat = L_vap(pts) * zevap   ! `pts` is in Celsius!
-         IF( PRESENT(pEvap) ) pEvap = zevap
       END IF
+
+      IF( PRESENT(pEvap) ) pEvap = zevap
 
       IF( PRESENT(prhoa) ) prhoa = zrho
 
@@ -1152,10 +1153,11 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, june 2016 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp)             ::   alpha_sw_sclr   ! thermal expansion coefficient of sea-water [1/K]
       REAL(wp), INTENT(in) ::   psst   ! sea-water temperature                   [K]
       !!----------------------------------------------------------------------------------
-      !$acc routine
       alpha_sw_sclr = 2.1e-5_wp * MAX(psst-rt0 + 3.2_wp, 0._wp)**0.79
       !
    END FUNCTION alpha_sw_sclr
@@ -1167,7 +1169,8 @@ CONTAINS
       !!
       !! ** Purpose : Estimate of the net longwave flux at the surface
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp) :: qlw_net_sclr
       REAL(wp), INTENT(in) :: pdwlw !: downwelling longwave (aka infrared, aka thermal) radiation [W/m^2]
       REAL(wp), INTENT(in) :: pts   !: surface temperature [K]
@@ -1205,7 +1208,9 @@ CONTAINS
 
    !===============================================================================================
    FUNCTION z0_from_Cd_sclr( pzu, pCd,  ppsi )
-      !$acc routine
+      !!----------------------------------------------------------------------------------
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------
       REAL(wp)                       :: z0_from_Cd_sclr        !: roughness length [m]
       REAL(wp), INTENT(in)           :: pzu   !: reference height zu [m]
       REAL(wp), INTENT(in)           :: pCd   !: (neutral or non-neutral) drag coefficient []
@@ -1360,9 +1365,10 @@ CONTAINS
 
    !===============================================================================================
    FUNCTION UN10_from_CD( pzu, pUb, pCd, ppsi )
-      !$acc routine
       !!----------------------------------------------------------------------------------
       !!  Provides the neutral-stability wind speed at 10 m
+      !!----------------------------------------------------------------------------------
+      !$acc routine seq
       !!----------------------------------------------------------------------------------
       REAL(wp)             :: UN10_from_CD  !: [m/s]
       REAL(wp),                     INTENT(in) :: pzu  !: measurement heigh of bulk wind speed
@@ -1468,7 +1474,8 @@ CONTAINS
       !!
       !! L. Brodeau, october 2019
       !!---------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
+      !!---------------------------------------------------------------------
       REAL(wp),           INTENT(in) :: palpha   ! thermal expansion coefficient of sea-water (SST accurate enough!)
       REAL(wp),           INTENT(in) :: pQd   ! (<0!) part of `Qnet` absorbed in the WL [W/m^2] => term "Q + Rs*fs" in eq.6 of Fairall et al. 1996
       REAL(wp),           INTENT(in) :: pustar_a ! friction velocity in the air (u*) [m/s]

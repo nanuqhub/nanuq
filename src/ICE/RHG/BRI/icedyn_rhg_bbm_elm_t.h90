@@ -1,0 +1,34 @@
+   
+               !! T-centric cell
+               !! ~~~~~~~~~~~~~~
+               zsigI  = pSI1t(ji,jj)
+               zsigII = pSI2t(ji,jj)
+   
+               zxpC = pxpCt(ji,jj)  ! `expC` [Eq.8]
+               z1md = p1mdt(ji,jj)
+               zml  = z1md * zxpC                 !                   => `zml = (1-d)*exp(-C*(1-A))`
+   
+               zE   = rn_E0 * zml                 ! elasticity [Pa] `E = E0*(1-d)*exp[-C*(1-A)]`
+   
+               zc0  = zml*zml                     !                   => `zc0 = [(1-d)*exp(-C*(1-A))]^2`
+               zeta = rn_eta0 * zc0 * zc0 * zml   ! viscosity [Pa.s]  => `zeta = rn_eta0 * [(1-d)*exp(-C*(1-A))]^5
+               zL = MAX( zeta / MAX( zE, epsi20 ) , pdt )  ! lambda [s]
+   
+               z1_sigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
+   
+               ! As opposed to Olason et al 2022, for which we would simply have `zPmax = pPmax_p(ji,jj)`,
+               ! we want Pmax to be (pPmax_p) when PURE compression but decreases as shearing becomes
+               ! increasingly important w.r.t to compression:
+               zPmax = pPmax_t(ji,jj)                 ! `P_max * h` (<0)
+               zCohe = rn_c_ref * pScHt(ji,jj)        ! `C * h` cohesion scaled to the local `Δx` * h
+               zecc  = ABS(zPmax) / MAX(zCohe,epsi20) ! eccentricity of the "Pmax" ellipse that crosses the `sigma_II` axis right at the cohesion value
+   
+               zc0   = zecc * zsigII * z1_sigI
+   
+               zPmax = zPmax / SQRT( 1._wp + zc0*zc0 ) ! Effective `P_max * h`  (for sigI<0)
+   
+               zc0 = MERGE( 1._wp, 0._wp,  zsigI<-epsi20 )
+   
+               zPtld = -zc0 * MIN( zPmax*z1_sigI , 1._wp )
+   
+               zmul = MIN( zL/(zL + pdt*(1._wp + zPtld)) , 1._wp ) ! Multiplicator term [Eq.32]

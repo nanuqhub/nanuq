@@ -23,13 +23,11 @@ MODULE bdydta
    USE phycst         ! physical constants
    USE bdy        ! ocean open boundary conditions
 
-   USE par_ice, ONLY : r1_nlay_i, r1_nlay_s, ln_pnd, ln_pnd_lids
-
-   USE ice            ! sea-ice variables
-
-   USE icevar         ! redistribute ice input into categories
+   USE par_ice, ONLY : nlay_i, nlay_s, r1_nlay_i, r1_nlay_s, ln_pnd, ln_pnd_lids
+   USE ice     , ONLY : a_i, h_i, h_s, t_i, t_s, t_su, sz_i, dmdt  !, a_ip, h_ip, h_il
+   USE icevar  , ONLY : ice_var_itd
    !
-   USE lib_mpp, ONLY: ctl_stop, ctl_nam
+   USE lib_mpp , ONLY : ctl_stop, ctl_nam
    USE fldread        ! read input fields
    USE iom            ! IOM library
    USE in_out_manager ! I/O logical units
@@ -38,10 +36,15 @@ MODULE bdydta
    IMPLICIT NONE
    PRIVATE
 
-   PUBLIC   bdy_dta          ! routine called by step.F90 and dynspg_ts.F90
+   PUBLIC   bdy_dta          ! routine called by step.F90
    PUBLIC   bdy_dta_init     ! routine called by nanuqgcm.F90
 
+   TYPE :: VFLD_N
+      TYPE(FLD_N), DIMENSION(1) :: XX
+   END TYPE VFLD_N
+
    INTEGER , PARAMETER ::   jpbdyfld  = 11    ! maximum number of files to read
+   !!
    INTEGER , PARAMETER ::   jp_bdya_i = 1
    INTEGER , PARAMETER ::   jp_bdyh_i = 2
    INTEGER , PARAMETER ::   jp_bdyh_s = 3
@@ -54,14 +57,21 @@ MODULE bdydta
    INTEGER , PARAMETER ::   jp_bdyhip = 10
    INTEGER , PARAMETER ::   jp_bdyhil = 11
 
-   TYPE(FLD), PUBLIC, ALLOCATABLE, DIMENSION(:,:), TARGET ::   bf   ! structure of input fields (file informations, fields read)
+   CHARACTER(len=3), DIMENSION(jpbdyfld) :: vnames = (/ 'a_i', 'h_i', 'h_s', 't_i', 't_s', 'tsu', 's_i', 'dmg', 'aip', 'hip', 'hil' /)
+
+
+   TYPE(FLD), PUBLIC, ALLOCATABLE, DIMENSION(:,:) :: bf   ! structure of input fields (file informations, fields read)
+
+   ! Flags used to indicate boundary-data arrays that have been separated from the corresponding input-data arrays and need to be
+   ! reset at each time step
+   LOGICAL, DIMENSION(:,:), ALLOCATABLE ::   l_bdydta_reset
 
    !! * Substitutions
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: bdydta.F90 15368 2021-10-14 08:25:34Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.1.a, NEMO Consortium (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -75,104 +85,75 @@ CONTAINS
       !! ** Method  :   Use fldread.F90
       !!
       !!----------------------------------------------------------------------
-      INTEGER, INTENT(in)           ::   kt           ! ocean time-step index
-      INTEGER, INTENT(in)           ::   Kmm          ! ocean time level index
+      INTEGER, INTENT(in)              ::   kt                                  ! ocean time-step index
+      INTEGER, INTENT(in)              ::   Kmm                                 ! ocean time level index
       !
-      INTEGER ::  jbdy, jfld, jstart, jend, ib, jl    ! dummy loop indices
-      INTEGER ::  ii, ij, ik, igrd, ipl               ! local integers
-      TYPE(OBC_DATA)         , POINTER ::   dta_alias        ! short cut
-      TYPE(FLD), DIMENSION(:), POINTER ::   bf_alias
+      INTEGER ::  jbdy, jfld, jstart, jend, ib, jl, jk
+      INTEGER ::  ii, ij, ik, igrd, ipl
+      REAL(wp) :: zmsk, ztim_k, zsim_k, ztsm_k
       !!---------------------------------------------------------------------------
       !
       IF( ln_timing )   CALL timing_start('bdy_dta')
-      !
+      !$acc data present( idx_bdy, dta_bdy )
+
+
       ! Initialise data arrays once for all from initial conditions where required
       !---------------------------------------------------------------------------
       IF( kt == nit000 ) THEN
 
-         ! Calculate depth-mean currents
-         !-----------------------------
-
+         !$acc loop seq
          DO jbdy = 1, nb_bdy
-            !
-            !IF( nn_dyn2d_dta(jbdy) == 0 ) THEN
-            !   IF( dta_bdy(jbdy)%lneed_ssh ) THEN
-            !      igrd = 1
-            !      DO ib = 1, idx_bdy(jbdy)%nblenrim(igrd)   ! ssh is allocated and used only on the rim
-            !         ii = idx_bdy(jbdy)%nbi(ib,igrd)
-            !         ij = idx_bdy(jbdy)%nbj(ib,igrd)
-            !         dta_bdy(jbdy)%ssh(ib) = ssh(ii,ij,Kmm) * tmask(ii,ij,1)
-            !      END DO
-            !   ENDIF
-            !   IF( ASSOCIATED(dta_bdy(jbdy)%u2d) ) THEN   ! no SIZE with a unassociated pointer. v2d and u2d can differ on subdomain
-            !      igrd = 2
-            !      DO ib = 1, SIZE(dta_bdy(jbdy)%u2d)      ! u2d is used either over the whole bdy or only on the rim
-            !         ii = idx_bdy(jbdy)%nbi(ib,igrd)
-            !         ij = idx_bdy(jbdy)%nbj(ib,igrd)
-            !         dta_bdy(jbdy)%u2d(ib) = uu_b(ii,ij,Kmm) * umask(ii,ij,1)
-            !      END DO
-            !   ENDIF
-            !   IF( ASSOCIATED(dta_bdy(jbdy)%v2d) ) THEN   ! no SIZE with a unassociated pointer. v2d and u2d can differ on subdomain
-            !      igrd = 3
-            !      DO ib = 1, SIZE(dta_bdy(jbdy)%v2d)      ! v2d is used either over the whole bdy or only on the rim
-            !         ii = idx_bdy(jbdy)%nbi(ib,igrd)
-            !         ij = idx_bdy(jbdy)%nbj(ib,igrd)
-            !         dta_bdy(jbdy)%v2d(ib) = vv_b(ii,ij,Kmm) * vmask(ii,ij,1)
-            !      END DO
-            !   ENDIF
-            !ENDIF
-            !
 
-            !IF( nn_tra_dta(jbdy) == 0 ) THEN
-            !   IF( dta_bdy(jbdy)%lneed_tra ) THEN
-            !      igrd = 1
-            !      DO ib = 1, idx_bdy(jbdy)%nblen(igrd)
-            !         DO ik = 1, jpkm1
-            !            ii = idx_bdy(jbdy)%nbi(ib,igrd)
-            !            ij = idx_bdy(jbdy)%nbj(ib,igrd)
-            !            dta_bdy(jbdy)%tem(ib,ik) = ts(ii,ij,ik,jp_tem,Kmm) * tmask(ii,ij,ik)
-            !            dta_bdy(jbdy)%sal(ib,ik) = ts(ii,ij,ik,jp_sal,Kmm) * tmask(ii,ij,ik)
-            !         END DO
-            !      END DO
-            !   ENDIF
-            !ENDIF
-
-            IF( nn_ice_dta(jbdy) == 0 ) THEN    ! set ice to initial values
+            IF( nn_ice_dta(jbdy) == 0 ) THEN    ! set BDY ice values to initial state values
                IF( dta_bdy(jbdy)%lneed_ice ) THEN
                   igrd = 1
+                  !$acc parallel loop collapse(2) present( idx_bdy(jbdy)%nblen, idx_bdy(jbdy)%nbi, idx_bdy(jbdy)%nbj, dta_bdy(jbdy)%a_i, dta_bdy(jbdy)%h_i )
                   DO jl = 1, jpl
                      DO ib = 1, idx_bdy(jbdy)%nblen(igrd)
                         ii = idx_bdy(jbdy)%nbi(ib,igrd)
                         ij = idx_bdy(jbdy)%nbj(ib,igrd)
-                        dta_bdy(jbdy)%a_i(ib,jl) =  a_i(ii,ij,jl) * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%h_i(ib,jl) =  h_i(ii,ij,jl) * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%h_s(ib,jl) =  h_s(ii,ij,jl) * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%t_i(ib,jl) =  SUM(t_i(ii,ij,:,jl)) * r1_nlay_i * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%t_s(ib,jl) =  SUM(t_s(ii,ij,:,jl)) * r1_nlay_s * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%tsu(ib,jl) =  t_su(ii,ij,jl) * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%s_i(ib,jl) =  s_i(ii,ij,jl) * tmask(ii,ij,1)
+                        zmsk = xmskt(ii,ij)
+                        dta_bdy(jbdy)%a_i(ib,jl) =  a_i (ii,ij,jl) * zmsk
+                        dta_bdy(jbdy)%h_i(ib,jl) =  h_i (ii,ij,jl) * zmsk
+                        dta_bdy(jbdy)%h_s(ib,jl) =  h_s (ii,ij,jl) * zmsk
+                        dta_bdy(jbdy)%tsu(ib,jl) =  t_su(ii,ij,jl) * zmsk
+                        !
+                        ztim_k = 0 ; zsim_k = 0 ; ztsm_k = 0
+                        !$acc loop seq
+                        DO jk =1, nlay_i
+                           ztim_k = ztim_k +  t_i(ii,ij,jk,jl)
+                           zsim_k = zsim_k + sz_i(ii,ij,jk,jl)
+                        END DO
+                        !$acc loop seq
+                        DO jk =1, nlay_s
+                           ztsm_k = ztsm_k +  t_s(ii,ij,jk,jl)
+                        END DO
+                        dta_bdy(jbdy)%t_i(ib,jl) =  ztim_k * r1_nlay_i * zmsk
+                        dta_bdy(jbdy)%s_i(ib,jl) =  zsim_k * r1_nlay_i * zmsk
+                        dta_bdy(jbdy)%t_s(ib,jl) =  ztsm_k * r1_nlay_s * zmsk
                         ! melt ponds
-                        dta_bdy(jbdy)%aip(ib,jl) =  a_ip(ii,ij,jl) * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%hip(ib,jl) =  h_ip(ii,ij,jl) * tmask(ii,ij,1)
-                        dta_bdy(jbdy)%hil(ib,jl) =  h_il(ii,ij,jl) * tmask(ii,ij,1)
+                        !dta_bdy(jbdy)%aip(ib,jl) =  a_ip(ii,ij,jl) * zmsk
+                        !dta_bdy(jbdy)%hip(ib,jl) =  h_ip(ii,ij,jl) * zmsk
+                        !dta_bdy(jbdy)%hil(ib,jl) =  h_il(ii,ij,jl) * zmsk
                      END DO
                   END DO
+                  !$acc end parallel loop
                ENDIF
-            ENDIF ! IF( nn_ice_dta(jbdy) == 0 )
+            ENDIF
 
             !! Damage:
             IF( nn_dmg_dta(jbdy) == 0 ) THEN    ! set damage to initial values
                IF( dta_bdy(jbdy)%lneed_dmg ) THEN
                   igrd = 1
+                  !$acc parallel loop present( dmdt, dta_bdy(jbdy)%dmg )
                   DO ib = 1, idx_bdy(jbdy)%nblen(igrd)
                      ii = idx_bdy(jbdy)%nbi(ib,igrd)
                      ij = idx_bdy(jbdy)%nbj(ib,igrd)
-                     dta_bdy(jbdy)%dmg(ib) = (1._wp - dmdt(ii,ij)) * tmask(ii,ij,1)
+                     dta_bdy(jbdy)%dmg(ib) = (1._wp - dmdt(ii,ij)) * xmskt(ii,ij)
                   END DO
+                  !$acc end parallel loop
                ENDIF
             ENDIF ! IF( nn_dmg_dta(jbdy) == 0 )
-
-
 
 
          END DO ! jbdy
@@ -181,77 +162,99 @@ CONTAINS
 
       ! update external data from files
       !--------------------------------
-
+      !$acc loop seq
       DO jbdy = 1, nb_bdy
-
-         dta_alias => dta_bdy(jbdy)
-         bf_alias  => bf(:,jbdy)
 
          ! read/update all bdy data
          ! ------------------------
          ! BDY: use pt_offset=0.5 as applied at the end of the step and fldread is referenced at the middle of the step
-         CALL fld_read( kt, bf_alias, pt_offset = 0.5_wp, Kmm = Kmm )
+         CALL fld_read( kt, bf(:,jbdy), pt_offset = 0.5_wp, Kmm = Kmm )
+
          ! apply some corrections in some specific cases...
          ! --------------------------------------------------
 
-         IF( dta_alias%lneed_ice .AND. idx_bdy(jbdy)%nblen(1) > 0 ) THEN
+         IF( dta_bdy(jbdy)%lneed_ice .AND. idx_bdy(jbdy)%nblen(1) > 0 ) THEN
             ! fill temperature and salinity arrays
-            IF( TRIM(bf_alias(jp_bdyt_i)%clrootname) == 'NOT USED' )   bf_alias(jp_bdyt_i)%fnow(:,1,:) = rice_tem(jbdy)
-            IF( TRIM(bf_alias(jp_bdyt_s)%clrootname) == 'NOT USED' )   bf_alias(jp_bdyt_s)%fnow(:,1,:) = rice_tem(jbdy)
-            IF( TRIM(bf_alias(jp_bdytsu)%clrootname) == 'NOT USED' )   bf_alias(jp_bdytsu)%fnow(:,1,:) = rice_tem(jbdy)
-            IF( TRIM(bf_alias(jp_bdys_i)%clrootname) == 'NOT USED' )   bf_alias(jp_bdys_i)%fnow(:,1,:) = rice_sal(jbdy)
-            IF( TRIM(bf_alias(jp_bdydmg)%clrootname) == 'NOT USED' )   bf_alias(jp_bdydmg)%fnow(:,1,:) = rice_dmg(jbdy)
+            IF( TRIM(bf(jp_bdyt_i,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdyt_i,jbdy)%fnow(:,1,:) = rice_tem(jbdy)
+            IF( TRIM(bf(jp_bdyt_s,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdyt_s,jbdy)%fnow(:,1,:) = rice_tem(jbdy)
+            IF( TRIM(bf(jp_bdytsu,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdytsu,jbdy)%fnow(:,1,:) = rice_tem(jbdy)
+            IF( TRIM(bf(jp_bdys_i,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdys_i,jbdy)%fnow(:,1,:) = rice_sal(jbdy)
+            IF( TRIM(bf(jp_bdydmg,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdydmg,jbdy)%fnow(:,1,:) = rice_dmg(jbdy)
             !
-            IF( TRIM(bf_alias(jp_bdyaip)%clrootname) == 'NOT USED' )   &               ! rice_apnd is the pond fraction
-               &   bf_alias(jp_bdyaip)%fnow(:,1,:) = rice_apnd(jbdy) * bf_alias(jp_bdya_i)%fnow(:,1,:)   ! ( a_ip = rice_apnd*a_i )
-            IF( TRIM(bf_alias(jp_bdyhip)%clrootname) == 'NOT USED' )   bf_alias(jp_bdyhip)%fnow(:,1,:) = rice_hpnd(jbdy)
-            IF( TRIM(bf_alias(jp_bdyhil)%clrootname) == 'NOT USED' )   bf_alias(jp_bdyhil)%fnow(:,1,:) = rice_hlid(jbdy)
+            !IF( TRIM(bf(jp_bdyaip,jbdy)%clrootname) == 'NOT_USED' )   &               ! rice_apnd is the pond fraction
+            !   &   bf(jp_bdyaip,jbdy)%fnow(:,1,:) = rice_apnd(jbdy) * bf(jp_bdya_i,jbdy)%fnow(:,1,:)   ! ( a_ip = rice_apnd*a_i )
+            !IF( TRIM(bf(jp_bdyhip,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdyhip,jbdy)%fnow(:,1,:) = rice_hpnd(jbdy)
+            !IF( TRIM(bf(jp_bdyhil,jbdy)%clrootname) == 'NOT_USED' )   bf(jp_bdyhil,jbdy)%fnow(:,1,:) = rice_hlid(jbdy)
 
             ! if T_i is read and not T_su, set T_su = T_i
-            IF( TRIM(bf_alias(jp_bdyt_i)%clrootname) /= 'NOT USED' .AND. TRIM(bf_alias(jp_bdytsu)%clrootname) == 'NOT USED' ) &
-               &   bf_alias(jp_bdytsu)%fnow(:,1,:) = bf_alias(jp_bdyt_i)%fnow(:,1,:)
+            IF( TRIM(bf(jp_bdyt_i,jbdy)%clrootname) /= 'NOT_USED' .AND. TRIM(bf(jp_bdytsu,jbdy)%clrootname) == 'NOT_USED' ) &
+               &   bf(jp_bdytsu,jbdy)%fnow(:,1,:) = bf(jp_bdyt_i,jbdy)%fnow(:,1,:)
             ! if T_s is read and not T_su, set T_su = T_s
-            IF( TRIM(bf_alias(jp_bdyt_s)%clrootname) /= 'NOT USED' .AND. TRIM(bf_alias(jp_bdytsu)%clrootname) == 'NOT USED' ) &
-               &   bf_alias(jp_bdytsu)%fnow(:,1,:) = bf_alias(jp_bdyt_s)%fnow(:,1,:)
+            IF( TRIM(bf(jp_bdyt_s,jbdy)%clrootname) /= 'NOT_USED' .AND. TRIM(bf(jp_bdytsu,jbdy)%clrootname) == 'NOT_USED' ) &
+               &   bf(jp_bdytsu,jbdy)%fnow(:,1,:) = bf(jp_bdyt_s,jbdy)%fnow(:,1,:)
             ! if T_i is read and not T_s, set T_s = T_i
-            IF( TRIM(bf_alias(jp_bdyt_i)%clrootname) /= 'NOT USED' .AND. TRIM(bf_alias(jp_bdyt_s)%clrootname) == 'NOT USED' ) &
-               &   bf_alias(jp_bdyt_s)%fnow(:,1,:) = bf_alias(jp_bdyt_i)%fnow(:,1,:)
+            IF( TRIM(bf(jp_bdyt_i,jbdy)%clrootname) /= 'NOT_USED' .AND. TRIM(bf(jp_bdyt_s,jbdy)%clrootname) == 'NOT_USED' ) &
+               &   bf(jp_bdyt_s,jbdy)%fnow(:,1,:) = bf(jp_bdyt_i,jbdy)%fnow(:,1,:)
             ! if T_su is read and not T_s, set T_s = T_su
-            IF( TRIM(bf_alias(jp_bdytsu)%clrootname) /= 'NOT USED' .AND. TRIM(bf_alias(jp_bdyt_s)%clrootname) == 'NOT USED' ) &
-               &   bf_alias(jp_bdyt_s)%fnow(:,1,:) = bf_alias(jp_bdytsu)%fnow(:,1,:)
+            IF( TRIM(bf(jp_bdytsu,jbdy)%clrootname) /= 'NOT_USED' .AND. TRIM(bf(jp_bdyt_s,jbdy)%clrootname) == 'NOT_USED' ) &
+               &   bf(jp_bdyt_s,jbdy)%fnow(:,1,:) = bf(jp_bdytsu,jbdy)%fnow(:,1,:)
             ! if T_su is read and not T_i, set T_i = (T_su + T_freeze)/2
-            IF( TRIM(bf_alias(jp_bdytsu)%clrootname) /= 'NOT USED' .AND. TRIM(bf_alias(jp_bdyt_i)%clrootname) == 'NOT USED' ) &
-               &   bf_alias(jp_bdyt_i)%fnow(:,1,:) = 0.5_wp * ( bf_alias(jp_bdytsu)%fnow(:,1,:) + 271.15 )
+            IF( TRIM(bf(jp_bdytsu,jbdy)%clrootname) /= 'NOT_USED' .AND. TRIM(bf(jp_bdyt_i,jbdy)%clrootname) == 'NOT_USED' ) &
+               &   bf(jp_bdyt_i,jbdy)%fnow(:,1,:) = 0.5_wp * ( bf(jp_bdytsu,jbdy)%fnow(:,1,:) + 271.15 )
             ! if T_s is read and not T_i, set T_i = (T_s + T_freeze)/2
-            IF( TRIM(bf_alias(jp_bdyt_s)%clrootname) /= 'NOT USED' .AND. TRIM(bf_alias(jp_bdyt_i)%clrootname) == 'NOT USED' ) &
-               &   bf_alias(jp_bdyt_i)%fnow(:,1,:) = 0.5_wp * ( bf_alias(jp_bdyt_s)%fnow(:,1,:) + 271.15 )
+            IF( TRIM(bf(jp_bdyt_s,jbdy)%clrootname) /= 'NOT_USED' .AND. TRIM(bf(jp_bdyt_i,jbdy)%clrootname) == 'NOT_USED' ) &
+               &   bf(jp_bdyt_i,jbdy)%fnow(:,1,:) = 0.5_wp * ( bf(jp_bdyt_s,jbdy)%fnow(:,1,:) + 271.15 )
 
             ! make sure ponds = 0 if no ponds scheme
-            IF ( .NOT.ln_pnd ) THEN
-               bf_alias(jp_bdyaip)%fnow(:,1,:) = 0._wp
-               bf_alias(jp_bdyhip)%fnow(:,1,:) = 0._wp
-               bf_alias(jp_bdyhil)%fnow(:,1,:) = 0._wp
-            ENDIF
-            IF ( .NOT.ln_pnd_lids ) THEN
-               bf_alias(jp_bdyhil)%fnow(:,1,:) = 0._wp
-            ENDIF
+            !IF( .NOT.ln_pnd ) THEN
+            !   bf(jp_bdyaip,jbdy)%fnow(:,1,:) = 0._wp
+            !   bf(jp_bdyhip,jbdy)%fnow(:,1,:) = 0._wp
+            !   bf(jp_bdyhil,jbdy)%fnow(:,1,:) = 0._wp
+            !ENDIF
+            !IF( .NOT.ln_pnd_lids ) THEN
+            !   bf(jp_bdyhil,jbdy)%fnow(:,1,:) = 0._wp
+            !ENDIF
+
+#if defined _OPENACC || defined _OPENMP
+            ! ==> updating read+corrected data into GPU's memory:
+#if defined key_verbose
+            PRINT *, '*LOLO [bdy_dta()]: updating freshly read `bf(jp_bdyXXX,jbdy)%fnow` onto GPU [1], jbdy, kt=',jbdy,kt
+#endif
+            !$acc update device( bf(jp_bdya_i,jbdy)%fnow, bf(jp_bdyh_i,jbdy)%fnow, bf(jp_bdyh_s,jbdy)%fnow, bf(jp_bdyt_i,jbdy)%fnow )
+            !$acc update device( bf(jp_bdyt_s,jbdy)%fnow, bf(jp_bdytsu,jbdy)%fnow, bf(jp_bdys_i,jbdy)%fnow, bf(jp_bdydmg,jbdy)%fnow )
+#endif
 
             ! convert N-cat fields (input) into jpl-cat (output)
-            ipl = SIZE(bf_alias(jp_bdya_i)%fnow, 3)
+            ipl = SIZE(bf(jp_bdya_i,jbdy)%fnow, 3)
             IF( ipl /= jpl ) THEN      ! ice: convert N-cat fields (input) into jpl-cat (output)
-               CALL ice_var_itd( bf_alias(jp_bdyh_i)%fnow(:,1,:), bf_alias(jp_bdyh_s)%fnow(:,1,:), bf_alias(jp_bdya_i)%fnow(:,1,:), & ! in
-                  &              dta_alias%h_i                  , dta_alias%h_s                  , dta_alias%a_i                  , & ! out
-                  &              bf_alias(jp_bdyt_i)%fnow(:,1,:), bf_alias(jp_bdyt_s)%fnow(:,1,:), &                                  ! in (optional)
-                  &              bf_alias(jp_bdytsu)%fnow(:,1,:), bf_alias(jp_bdys_i)%fnow(:,1,:), &                                  ! in     -
-                  &              bf_alias(jp_bdyaip)%fnow(:,1,:), bf_alias(jp_bdyhip)%fnow(:,1,:), bf_alias(jp_bdyhil)%fnow(:,1,:), & ! in     -
-                  &              dta_alias%t_i                  , dta_alias%t_s                  , &                                  ! out    -
-                  &              dta_alias%tsu                  , dta_alias%s_i                  , &                                  ! out    -
-                  &              dta_alias%aip                  , dta_alias%hip                  , dta_alias%hil )                    ! out    -
+               CALL ice_var_itd( bf(jp_bdyh_i,jbdy)%fnow(:,1,:), bf(jp_bdyh_s,jbdy)%fnow(:,1,:), bf(jp_bdya_i,jbdy)%fnow(:,1,:), & ! in
+                  &              dta_bdy(jbdy)%h_i                  , dta_bdy(jbdy)%h_s                  , dta_bdy(jbdy)%a_i   , & ! out
+                  &              bf(jp_bdyt_i,jbdy)%fnow(:,1,:), bf(jp_bdyt_s,jbdy)%fnow(:,1,:), &                                 ! in (optional)
+                  &              bf(jp_bdytsu,jbdy)%fnow(:,1,:), bf(jp_bdys_i,jbdy)%fnow(:,1,:), &                                 ! in     -
+                  &              bf(jp_bdyaip,jbdy)%fnow(:,1,:), bf(jp_bdyhip,jbdy)%fnow(:,1,:), bf(jp_bdyhil,jbdy)%fnow(:,1,:), & ! in     -
+                  &              dta_bdy(jbdy)%t_i                  , dta_bdy(jbdy)%t_s                  , &                       ! out    -
+                  &              dta_bdy(jbdy)%tsu                  , dta_bdy(jbdy)%s_i                 ) ! , &                    ! out    -
+               !&              dta_bdy(jbdy)%aip                  , dta_bdy(jbdy)%hip                  , dta_bdy(jbdy)%hil )       ! out    -
             ENDIF
-         ENDIF
+
+         ELSE
+
+#if defined _OPENACC || defined _OPENMP
+            ! ==> updating read+corrected data into GPU's memory:
+#if defined key_verbose
+            PRINT *, '*LOLO [bdy_dta()]: updating freshly read `bf(jp_bdyXXX)%fnow` onto GPU [2], kt=',kt
+#endif
+            !$acc update device( bf(jp_bdya_i,jbdy)%fnow, bf(jp_bdyh_i,jbdy)%fnow, bf(jp_bdyh_s,jbdy)%fnow, bf(jp_bdyt_i,jbdy)%fnow )
+            !$acc update device( bf(jp_bdyt_s,jbdy)%fnow, bf(jp_bdytsu,jbdy)%fnow, bf(jp_bdys_i,jbdy)%fnow, bf(jp_bdydmg,jbdy)%fnow )
+#endif
+
+         ENDIF !IF( dta_bdy(jbdy)%lneed_ice .AND. idx_bdy(jbdy)%nblen(1) > 0 )
+
       END DO  ! jbdy
 
-      !
+      !LB [GPU]: we cannot have a single `!$acc update device( bf(jp_bdyt_s)%fnow, ...)` block because `ice_var_itd()` works on the GPU!
+
+      !$acc end data
       IF( ln_timing )   CALL timing_stop('bdy_dta')
       !
    END SUBROUTINE bdy_dta
@@ -272,23 +275,23 @@ CONTAINS
       INTEGER(1) :: iread
       !
       INTEGER ::   nbdy_rdstart, nbdy_loc
-      CHARACTER(LEN=50)                      ::   cerrmsg       ! error string
-      CHARACTER(len=3)                       ::   cl3           !
-      CHARACTER(len=100)                     ::   cn_dir        ! Root directory for location of data files
-      REAL(wp)                               ::   rn_ice_tem, rn_ice_sal, rn_ice_age, rn_ice_dmg, rn_ice_apnd, rn_ice_hpnd, rn_ice_hlid
-      INTEGER                                ::   ipk,ipl       !
-      INTEGER                                ::   idvar         ! variable ID
-      INTEGER                                ::   indims        ! number of dimensions of the variable
-      INTEGER                                ::   iszdim        ! number of dimensions of the variable
-      INTEGER, DIMENSION(4)                  ::   i4dimsz       ! size of variable dimensions
-      INTEGER                                ::   igrd          ! index for grid type (1,2,3 = T,U,V)
-      LOGICAL                                ::   lluld         ! is the variable using the unlimited dimension
-      LOGICAL                                ::   llneed        !
-      LOGICAL                                ::   llread        !
-      LOGICAL                                ::   llfullbdy     !
-      TYPE(FLD_N), DIMENSION(1), TARGET  ::   bn_a_i, bn_h_i, bn_h_s, bn_t_i, bn_t_s, bn_tsu, bn_s_i, bn_dmg, bn_aip, bn_hip, bn_hil
-      TYPE(FLD_N), DIMENSION(:), POINTER ::   bn_alias                        ! must be an array to be used with fld_fill
-      TYPE(FLD  ), DIMENSION(:), POINTER ::   bf_alias
+      CHARACTER(LEN=50)           ::   cerrmsg       ! error string
+      CHARACTER(len=3)            ::   cl3           !
+      CHARACTER(len=100)          ::   cn_dir        ! Root directory for location of data files
+      REAL(wp)                    ::   rn_ice_tem, rn_ice_sal, rn_ice_age, rn_ice_dmg, rn_ice_apnd, rn_ice_hpnd, rn_ice_hlid
+      INTEGER                     ::   ipk,ipl       !
+      INTEGER                     ::   idvar         ! variable ID
+      INTEGER                     ::   indims        ! number of dimensions of the variable
+      INTEGER                     ::   iszdim        ! number of dimensions of the variable
+      INTEGER, DIMENSION(4)       ::   i4dimsz       ! size of variable dimensions
+      INTEGER                     ::   igrd          ! index for grid type (1,2,3 = T,U,V)
+      LOGICAL                     ::   lluld         ! is the variable using the unlimited dimension
+      LOGICAL                     ::   llneed        !
+      LOGICAL                     ::   llread        !
+      LOGICAL                     ::   llfullbdy     !
+      TYPE(FLD_N), DIMENSION(1)   ::   bn_a_i, bn_h_i, bn_h_s, bn_t_i, bn_t_s, bn_tsu, bn_s_i, bn_dmg, bn_aip, bn_hip, bn_hil
+      !
+      TYPE(VFLD_N), DIMENSION(jpbdyfld) ::  vbn
       !
       NAMELIST/nambdy_dta/ cn_dir, &
          & bn_a_i, bn_h_i, bn_h_s, bn_t_i, bn_t_s, bn_tsu, bn_s_i, bn_dmg, bn_aip, bn_hip, bn_hil, &
@@ -304,9 +307,31 @@ CONTAINS
       IF( ierror > 0 ) THEN
          CALL ctl_stop( 'bdy_dta: unable to allocate bf structure' )   ;   RETURN
       ENDIF
-      bf(:,:)%clrootname = 'NOT USED'   ! default definition used as a flag in fld_read to do nothing.
+      bf(:,:)%clrootname = 'NOT_USED'   ! default definition used as a flag in fld_read to do nothing.
       bf(:,:)%lzint      = .FALSE.      ! default definition
       bf(:,:)%ltotvel    = .FALSE.      ! default definition
+
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: bdy_dta_init() => adding `bf(:)` derived type array to memory'
+      PRINT *, '            => bf'
+      !$acc enter data copyin( bf )
+      PRINT *, '   => will add `bf(:)%fnow(:,:,:)` arrays 1 by 1...'
+#endif
+
+      ! Prepare flags that indicate the presence of boundary-data arrays that have been separated from the corresponding input-data
+      ! arrays
+      ALLOCATE( l_bdydta_reset(jpbdyfld,nb_bdy), STAT=ierror )
+      IF( ierror > 0 ) THEN
+         CALL ctl_stop( 'bdy_dta: memory-allocation failure' )   ;   RETURN
+      ENDIF
+      l_bdydta_reset(:,:) = .FALSE.
+
+
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ''
+      PRINT *, ' * info GPU: bdy_dta_init() => adding derived type array `dta_bdy` to memory'
+      !$acc enter data copyin(dta_bdy)
+#endif
 
       ! Read namelists
       ! --------------
@@ -336,7 +361,8 @@ CONTAINS
                ios = -1
                CALL ctl_nam ( ios , cerrmsg )
             ENDIF
-            READ(numnam_cfg( MAX( 1, nbdy_rdstart - 2 ): ), nambdy_dta)
+            READ( numnam_cfg( MAX( 1, nbdy_rdstart - 2 ): ), nambdy_dta, IOSTAT=ios )
+            CALL ctl_nam( ios, 'nambdy_dta (numnam_cfg)', .FALSE.)
             IF(lwm) WRITE( numond, nambdy_dta )
          ENDIF
 
@@ -344,19 +370,23 @@ CONTAINS
          ipl = jpl   ! default definition
          IF( dta_bdy(jbdy)%lneed_ice ) THEN    ! if we need ice bdy data
             IF( nn_ice_dta(jbdy) == 1 ) THEN   ! if we get ice bdy data from netcdf file
-               CALL fld_fill(  bf(jp_bdya_i,jbdy:jbdy), bn_a_i, cn_dir, 'bdy_dta', 'a_i'//' '//ctmp1, ctmp2 )   ! use namelist info
+               CALL fld_fill(  bf(jp_bdya_i,jbdy:jbdy), bn_a_i, cn_dir, 'bdy_dta', vnames(jp_bdya_i)//' '//ctmp1, ctmp2 )   ! use namelist info
                CALL fld_def( bf(jp_bdya_i,jbdy) )
                CALL iom_open( bf(jp_bdya_i,jbdy)%clname, bf(jp_bdya_i,jbdy)%num )
-               idvar = iom_varid( bf(jp_bdya_i,jbdy)%num, bf(jp_bdya_i,jbdy)%clvar, kndims=indims, kdimsz=i4dimsz, lduld=lluld )
-               IF( indims == 4 .OR. ( indims == 3 .AND. .NOT. lluld ) ) THEN   ;   ipl = i4dimsz(3)   ! xylt or xyl
-               ELSE                                                            ;   ipl = 1            ! xy or xyt
+               idvar = iom_varid( 'bdy_dta_init', bf(jp_bdya_i,jbdy)%num, bf(jp_bdya_i,jbdy)%clvar, kndims=indims, kdimsz=i4dimsz, lduld=lluld )
+               IF( indims == 4 .OR. ( indims == 3 .AND. .NOT. lluld ) ) THEN
+                  ipl = i4dimsz(3) ! xylt or xyl
+               ELSE
+                  ipl = 1 ! xy or xyt
                ENDIF
                CALL iom_close( bf(jp_bdya_i,jbdy)%num )
-               bf(jp_bdya_i,jbdy)%clrootname = 'NOT USED'   ! reset to default value as this subdomain may not need to read this bdy
+               bf(jp_bdya_i,jbdy)%clrootname = 'NOT_USED'   ! reset to default value as this subdomain may not need to read this bdy
             ENDIF
          ENDIF
+#if defined key_verbose
          IF(lwp) WRITE(numout,*) ' *** LOLO: n. of ice categories deduced from NC ice bdys: ipl=', ipl !lolorm
-         
+#endif
+
          IF( .NOT.ln_pnd ) THEN
             rn_ice_apnd = 0. ; rn_ice_hpnd = 0. ; rn_ice_hlid = 0.
             CALL ctl_warn( 'rn_ice_apnd & rn_ice_hpnd = 0 & rn_ice_hlid = 0 when no ponds' )
@@ -365,27 +395,38 @@ CONTAINS
             rn_ice_hlid = 0.
          ENDIF
 
+         vbn( 1)%XX = bn_a_i
+         vbn( 2)%XX = bn_h_i
+         vbn( 3)%XX = bn_h_s
+         vbn( 4)%XX = bn_t_i
+         vbn( 5)%XX = bn_t_s
+         vbn( 6)%XX = bn_tsu
+         vbn( 7)%XX = bn_s_i
+         vbn( 8)%XX = bn_dmg
+         vbn( 9)%XX = bn_aip
+         vbn(10)%XX = bn_hip
+         vbn(11)%XX = bn_hil
+
          ! temp, salt, age and ponds of incoming ice
          rice_tem (jbdy) = rn_ice_tem
          rice_sal (jbdy) = rn_ice_sal
          rice_age (jbdy) = rn_ice_age
          rice_dmg (jbdy) = rn_ice_dmg
-         rice_apnd(jbdy) = rn_ice_apnd
-         rice_hpnd(jbdy) = rn_ice_hpnd
-         rice_hlid(jbdy) = rn_ice_hlid
+         !rice_apnd(jbdy) = rn_ice_apnd
+         !rice_hpnd(jbdy) = rn_ice_hpnd
+         !rice_hlid(jbdy) = rn_ice_hlid
 
 
          DO jfld = 1, jpbdyfld
 
             iread = 1
-            
+
             ! =====================
             !          ice
             ! =====================
             IF(  jfld == jp_bdya_i .OR. jfld == jp_bdyh_i .OR. jfld == jp_bdyh_s .OR. &
                & jfld == jp_bdyt_i .OR. jfld == jp_bdyt_s .OR. jfld == jp_bdytsu .OR. &
-               & jfld == jp_bdys_i .OR. jfld == jp_bdyaip .OR. &
-               & jfld == jp_bdyhip .OR. jfld == jp_bdyhil ) THEN
+               & jfld == jp_bdys_i .OR. jfld == jp_bdyaip .OR. jfld == jp_bdyhip .OR. jfld == jp_bdyhil ) THEN
                igrd = 1                                                    ! T point
                ipk = ipl                                                   ! jpl-cat data
                llneed = dta_bdy(jbdy)%lneed_ice                            ! ice will be needed
@@ -399,146 +440,142 @@ CONTAINS
                llread = nn_dmg_dta(jbdy) == 1                              ! get data from NetCDF file
                iszdim = idx_bdy(jbdy)%nblen(igrd)                          ! length of this bdy on this MPI processus
             ENDIF
-            !
-            !
-            IF( jfld == jp_bdya_i ) THEN
-               cl3 = 'a_i'
-               bf_alias => bf(jp_bdya_i,jbdy:jbdy)                         ! alias for a_i structure of bdy number jbdy
-               bn_alias => bn_a_i                                          ! alias for a_i structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdyh_i ) THEN
-               cl3 = 'h_i'
-               bf_alias => bf(jp_bdyh_i,jbdy:jbdy)                         ! alias for h_i structure of bdy number jbdy
-               bn_alias => bn_h_i                                          ! alias for h_i structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdyh_s ) THEN
-               cl3 = 'h_s'
-               bf_alias => bf(jp_bdyh_s,jbdy:jbdy)                         ! alias for h_s structure of bdy number jbdy
-               bn_alias => bn_h_s                                          ! alias for h_s structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdyt_i ) THEN
-               cl3 = 't_i'
-               bf_alias => bf(jp_bdyt_i,jbdy:jbdy)                         ! alias for t_i structure of bdy number jbdy
-               bn_alias => bn_t_i                                          ! alias for t_i structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdyt_s ) THEN
-               cl3 = 't_s'
-               bf_alias => bf(jp_bdyt_s,jbdy:jbdy)                         ! alias for t_s structure of bdy number jbdy
-               bn_alias => bn_t_s                                          ! alias for t_s structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdytsu ) THEN
-               cl3 = 'tsu'
-               bf_alias => bf(jp_bdytsu,jbdy:jbdy)                         ! alias for tsu structure of bdy number jbdy
-               bn_alias => bn_tsu                                          ! alias for tsu structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdys_i ) THEN
-               cl3 = 's_i'
-               bf_alias => bf(jp_bdys_i,jbdy:jbdy)                         ! alias for s_i structure of bdy number jbdy
-               bn_alias => bn_s_i                                          ! alias for s_i structure of nambdy_dta
-            ENDIF
+
+            cl3 = vnames(jfld)
+
             IF( jfld == jp_bdydmg ) THEN
-               cl3 = 'dmg'
-               bf_alias => bf(jp_bdydmg,jbdy:jbdy)                         ! alias for dmg structure of bdy number jbdy
-               bn_alias => bn_dmg                                          ! alias for dmg structure of nambdy_dta
                IF( TRIM(cn_dmg(jbdy))/='frs' ) iread = 0
-            ENDIF
-            IF( jfld == jp_bdyaip ) THEN
-               cl3 = 'aip'
-               bf_alias => bf(jp_bdyaip,jbdy:jbdy)                         ! alias for aip structure of bdy number jbdy
-               bn_alias => bn_aip                                          ! alias for aip structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdyhip ) THEN
-               cl3 = 'hip'
-               bf_alias => bf(jp_bdyhip,jbdy:jbdy)                         ! alias for hip structure of bdy number jbdy
-               bn_alias => bn_hip                                          ! alias for hip structure of nambdy_dta
-            ENDIF
-            IF( jfld == jp_bdyhil ) THEN
-               cl3 = 'hil'
-               bf_alias => bf(jp_bdyhil,jbdy:jbdy)                         ! alias for hil structure of bdy number jbdy
-               bn_alias => bn_hil                                          ! alias for hil structure of nambdy_dta
             ENDIF
 
             IF( llneed .AND. iszdim > 0 .AND. (iread==1) ) THEN            ! dta_bdy(jbdy)%xxx will be needed
-               !                                                           !   -> must be associated with an allocated target
-               ALLOCATE( bf_alias(1)%fnow( iszdim, 1, ipk ) )              ! allocate the target
+               ALLOCATE( bf(jfld,jbdy)%fnow( iszdim, 1, ipk ) )
+#if defined _OPENACC || defined _OPENMP
+               PRINT *, '            => bf(jfld,jbdy)%fnow for jfld,jbdy =', jfld,jbdy
+               !$acc enter data copyin( bf(jfld,jbdy)%fnow )
+#endif
                !
-               IF( llread  ) THEN                                           ! get data from NetCDF file
-                  CALL fld_fill( bf_alias, bn_alias, cn_dir, 'bdy_dta', cl3//' '//ctmp1, ctmp2 )   ! use namelist info
-                  IF( bf_alias(1)%ln_tint ) ALLOCATE( bf_alias(1)%fdta( iszdim, 1, ipk, 2 ) )
-                  bf_alias(1)%imap    => idx_bdy(jbdy)%nbmap(1:iszdim,igrd)   ! associate the mapping used for this bdy
-                  bf_alias(1)%igrd    = igrd                                  ! used only for vertical integration of 3D arrays
-                  bf_alias(1)%ibdy    = jbdy                                  !  "    "    "     "          "      "  "    "
-                  bf_alias(1)%ltotvel = .TRUE.   !LOLO don't need             ! T if u3d is full velocity
-                  bf_alias(1)%lzint   = .FALSE.  !LOLO don't need             ! T if it requires a vertical interpolation
+               IF( llread ) THEN                                           ! get data from NetCDF file
+                  CALL fld_fill( bf(jfld,jbdy:jbdy), vbn(jfld)%XX, cn_dir, 'bdy_dta', cl3//' '//ctmp1, ctmp2 )   ! use namelist info
+                  IF( bf(jfld,jbdy)%ln_tint ) ALLOCATE( bf(jfld,jbdy)%fdta( iszdim, 1, ipk, 2 ) )
+                  ALLOCATE( bf(jfld,jbdy)%imap(iszdim) )
+                  bf(jfld,jbdy)%imap    = idx_bdy(jbdy)%nbmap(1:iszdim,igrd)   ! associate the mapping used for this bdy
+                  bf(jfld,jbdy)%igrd    = igrd                                  ! used only for vertical integration of 3D arrays
+                  bf(jfld,jbdy)%ibdy    = jbdy                                  !  "    "    "     "          "      "  "    "
+                  bf(jfld,jbdy)%ltotvel = .TRUE.   !LOLO don't need             ! T if u3d is full velocity
+                  bf(jfld,jbdy)%lzint   = .FALSE.  !LOLO don't need             ! T if it requires a vertical interpolation
                ENDIF
 
                ! associate the pointer and get rid of the dimensions with a size equal to 1
-               !IF( jfld == jp_bdyssh )        dta_bdy(jbdy)%ssh => bf_alias(1)%fnow(:,1,1)
-               !IF( jfld == jp_bdyu2d )        dta_bdy(jbdy)%u2d => bf_alias(1)%fnow(:,1,1)
-               !IF( jfld == jp_bdyv2d )        dta_bdy(jbdy)%v2d => bf_alias(1)%fnow(:,1,1)
-               !IF( jfld == jp_bdyu3d )        dta_bdy(jbdy)%u3d => bf_alias(1)%fnow(:,1,:)
-               !IF( jfld == jp_bdyv3d )        dta_bdy(jbdy)%v3d => bf_alias(1)%fnow(:,1,:)
-               !IF( jfld == jp_bdytem )        dta_bdy(jbdy)%tem => bf_alias(1)%fnow(:,1,:)
-               !IF( jfld == jp_bdysal )        dta_bdy(jbdy)%sal => bf_alias(1)%fnow(:,1,:)
-               IF( jfld == jp_bdydmg )        dta_bdy(jbdy)%dmg => bf_alias(1)%fnow(:,1,1)
+
+               IF( jfld == jp_bdydmg ) THEN
+#if defined key_verbose
+                  PRINT *, '*LOLO [bdy_dta_init()] => allocating and filling `dta_bdy(jbdy)%dmg`, jbdy =',jbdy
+#endif
+                  ALLOCATE( dta_bdy(jbdy)%dmg(iszdim) )
+                  dta_bdy(jbdy)%dmg = bf(jfld,jbdy)%fnow(:,1,1)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%dmg(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%dmg)
+#endif
+               ENDIF
 
                IF( jfld == jp_bdya_i ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%a_i => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%a_i(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%a_i(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%a_i = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%a_i(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%a_i)
+#endif
                ENDIF
+
                IF( jfld == jp_bdyh_i ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%h_i => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%h_i(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%h_i(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%h_i = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%h_i(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%h_i)
+#endif
                ENDIF
+
                IF( jfld == jp_bdyh_s ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%h_s => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%h_s(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%h_s(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%h_s = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%h_s(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%h_s)
+#endif
                ENDIF
+
                IF( jfld == jp_bdyt_i ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%t_i => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%t_i(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%t_i(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%t_i = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%t_i(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%t_i)
+#endif
                ENDIF
+
                IF( jfld == jp_bdyt_s ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%t_s => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%t_s(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%t_s(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%t_s = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%t_s(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%t_s)
+#endif
                ENDIF
+
                IF( jfld == jp_bdytsu ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%tsu => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%tsu(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%tsu(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%tsu = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%tsu(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%tsu)
+#endif
                ENDIF
+
                IF( jfld == jp_bdys_i ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%s_i => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%s_i(iszdim,jpl) )
-                  ENDIF
+                  ALLOCATE( dta_bdy(jbdy)%s_i(iszdim,jpl) )
+                  IF( ipk == jpl )  dta_bdy(jbdy)%s_i = bf(jfld,jbdy)%fnow(:,1,:)
+#if defined _OPENACC || defined _OPENMP
+                  PRINT *, '            => dta_bdy(jbdy)%s_i(:,:), jbdy=',jbdy
+                  !$acc enter data copyin(dta_bdy(jbdy)%s_i)
+#endif
                ENDIF
-               IF( jfld == jp_bdyaip ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%aip => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%aip(iszdim,jpl) )
-                  ENDIF
-               ENDIF
-               IF( jfld == jp_bdyhip ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%hip => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%hip(iszdim,jpl) )
-                  ENDIF
-               ENDIF
-               IF( jfld == jp_bdyhil ) THEN
-                  IF( ipk == jpl ) THEN   ;   dta_bdy(jbdy)%hil => bf_alias(1)%fnow(:,1,:)
-                  ELSE                    ;   ALLOCATE( dta_bdy(jbdy)%hil(iszdim,jpl) )
-                  ENDIF
-               ENDIF
-               
+
+               !IF( jfld == jp_bdyaip ) THEN
+               !   IF( ipk == jpl ) THEN
+               !      dta_bdy(jbdy)%aip = bf(jfld,jbdy)%fnow(:,1,:)
+               !   ELSE
+               !      ALLOCATE( dta_bdy(jbdy)%aip(iszdim,jpl) )
+               !   ENDIF
+               !ENDIF
+               !IF( jfld == jp_bdyhip ) THEN
+               !   IF( ipk == jpl ) THEN
+               !      dta_bdy(jbdy)%hip = bf(jfld,jbdy)%fnow(:,1,:)
+               !   ELSE
+               !      ALLOCATE( dta_bdy(jbdy)%hip(iszdim,jpl) )
+               !   ENDIF
+               !ENDIF
+               !IF( jfld == jp_bdyhil ) THEN
+               !   IF( ipk == jpl ) THEN
+               !      dta_bdy(jbdy)%hil = bf(jfld,jbdy)%fnow(:,1,:)
+               !   ELSE
+               !      ALLOCATE( dta_bdy(jbdy)%hil(iszdim,jpl) )
+               !   ENDIF
+               !ENDIF
+
             ENDIF !IF( llneed .AND. iszdim > 0 .AND. (iread==1) )
 
          END DO   ! jpbdyfld
          !
       END DO ! jbdy
-      !
+
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: bdy_dta_init() => adding `rice_*` 1D arrays to memory'
+      PRINT *, '            => rice_tem, rice_sal, rice_dmg, rice_age'
+      !$acc enter data copyin( rice_tem, rice_sal, rice_dmg, rice_age )
+#endif
+
    END SUBROUTINE bdy_dta_init
 
    !!==============================================================================

@@ -51,14 +51,15 @@ MODULE icedyn_adv_umx
    INTEGER, ALLOCATABLE, DIMENSION(:,:,:) ::   imsk_small, jmsk_small
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2025)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL licence     (./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_dyn_adv_umx( kn_umx, kt, pUu, pVv, ph_i, ph_s, ph_ip,  &
-      &                        pato_i, pv_i, pv_s, psv_i, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i )
+   !SUBROUTINE ice_dyn_adv_umx( kn_umx, kt, pUu, pVv, ph_i, ph_s, ph_ip,  &
+   !   &                        pato_i, pv_i, pv_s, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i )
+   SUBROUTINE ice_dyn_adv_umx( kn_umx, kt, pUu, pVv, ph_i, ph_s, pato_i, pv_i, pv_s, poa_i, pa_i, pe_s, pe_i, pszv_i, prdgc )
       !!----------------------------------------------------------------------
       !!                  ***  ROUTINE ice_dyn_adv_umx  ***
       !!
@@ -74,19 +75,19 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj)           , INTENT(in   ) ::   pVv    ! ice j-velocity
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_i   ! ice thickness
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_s   ! snw thickness
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_ip  ! ice pond thickness
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_ip  ! ice pond thickness
       REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   pato_i ! open water area
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_i   ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_s   ! snw volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   psv_i  ! salt content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   poa_i  ! age content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_i   ! ice concentration
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_ip  ! melt pond concentration
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_ip  ! melt pond volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_il  ! melt pond lid volume
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_ip  ! melt pond concentration
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_ip  ! melt pond volume
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_il  ! melt pond lid volume
       REAL(wp), DIMENSION(jpi,jpj,nlay_s,jpl), INTENT(inout) ::   pe_s   ! snw heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pe_i   ! ice heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pszv_i ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   prdgc  ! ridged-ice fraction 
       !!----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk, jl, jm      ! dummy loop indices
       INTEGER  ::   ndim                    ! number of variables to advect
@@ -103,7 +104,7 @@ CONTAINS
       REAL(wp), ALLOCATABLE, DIMENSION(:,:,:,:) ::   ze_i
       REAL(wp), ALLOCATABLE, DIMENSION(:,:,:,:) ::   ze_s
       !
-      REAL(wp), ALLOCATABLE, DIMENSION(:,:,:)   ::   z1_aip
+      !REAL(wp), ALLOCATABLE, DIMENSION(:,:,:)   ::   z1_aip
       REAL(wp), ALLOCATABLE, DIMENSION(:,:,:)   ::   zs_i
       REAL(wp), ALLOCATABLE, DIMENSION(:,:,:,:) ::   zsz_i
       !
@@ -112,7 +113,7 @@ CONTAINS
       !
       REAL(wp), ALLOCATABLE, DIMENSION(:,:,:)   ::   zuv_ho, zvv_ho, zuv_ups, zvv_ups, z1_vi, z1_vs
       !! diagnostics
-      REAL(wp), DIMENSION(jpi,jpj) ::   zdiag_adv_mass, zdiag_adv_salt, zdiag_adv_heat
+      !REAL(wp), DIMENSION(jpi,jpj) ::   zdiag_adv_mass, zdiag_adv_salt, zdiag_adv_heat
       !!----------------------------------------------------------------------
       !
       IF( kt == nit000 .AND. lwp )   WRITE(numout,*) '-- ice_dyn_adv_umx: Ultimate-Macho advection scheme'
@@ -121,7 +122,7 @@ CONTAINS
       !
       ! --- Allocate arrays --- !
       ALLOCATE( zvar(jpi,jpj,jpl,ndim), zhvar(jpi,jpj,jpl,ndim), zamsk(ndim) )
-      IF( ln_pnd_LEV .OR. ln_pnd_TOPO )   ALLOCATE( z1_aip(jpi,jpj,jpl) )
+      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO )   ALLOCATE( z1_aip(jpi,jpj,jpl) )
       IF( np_advS == 3 )   ALLOCATE( zuv_ho(jpi,jpj,jpl), zvv_ho(jpi,jpj,jpl), zuv_ups(jpi,jpj,jpl), zvv_ups(jpi,jpj,jpl), &
          &                           z1_vi (jpi,jpj,jpl), z1_vs (jpi,jpj,jpl) )
 
@@ -136,11 +137,7 @@ CONTAINS
 
          IF( ln_icethd ) THEN
             ! Salt content
-            IF( nn_icesal == 4 ) THEN
-               CALL icemax4D_cnt( nlay_i, pszv_i, pv_i, sszi_max )
-            ELSE
-               CALL icemax3D_cnt( psv_i,          pv_i,  ssi_max )
-            ENDIF
+            CALL icemax4D_cnt( nlay_i, pszv_i, pv_i, sszi_max )
             ! Enthalpies
             CALL icemax4D_cnt( nlay_i, pe_i,   pv_i,  sei_max )
             CALL icemax4D_cnt( nlay_s, pe_s,   pv_s,  ses_max )
@@ -148,14 +145,10 @@ CONTAINS
 
          !! LOLO: with my wide halos, the following might not be needed:
          IF( ln_icethd ) THEN
-            IF( nn_icesal == 4 ) THEN
-               CALL lbc_lnk( crtnm, shi_max,'T',1._wp, shs_max,'T',1._wp )   ! 3D
-               CALL lbc_lnk( crtnm, sei_max,'T',1._wp, sszi_max,'T',1._wp )  ! 4D / nlay_i
-            ELSE
-               CALL lbc_lnk( crtnm, shi_max,'T',1._wp, shs_max,'T',1._wp,  ssi_max,'T',1._wp )   ! 3D
-               CALL lbc_lnk( crtnm, sei_max,'T',1._wp )                      ! 4D / nlay_i
-            ENDIF
-            CALL lbc_lnk(    crtnm, ses_max,'T',1._wp )                      ! 4D / nlay_s
+            CALL lbc_lnk( crtnm,  shi_max,'T',1._wp, shs_max,'T',1._wp )   ! 3D
+            CALL lbc_lnk( crtnm,  sei_max,'T',1._wp )  ! 4D / nlay_i
+            CALL lbc_lnk( crtnm,  ses_max,'T',1._wp )  ! 4D / nlay_s
+            CALL lbc_lnk( crtnm, sszi_max,'T',1._wp )  ! 4D / nlay_i
          ELSE
             CALL lbc_lnk( crtnm, shi_max,'T',1._wp, shs_max,'T',1._wp ) ! 3D
          ENDIF
@@ -220,13 +213,13 @@ CONTAINS
       ELSEWHERE
          z1_ai(:,:,:) = 0.
       END WHERE
-      IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-         WHERE( pa_ip(:,:,:) >= epsi20 )
-            z1_aip(:,:,:) = 1._wp / pa_ip(:,:,:)
-         ELSEWHERE
-            z1_aip(:,:,:) = 0.
-         END WHERE
-      ENDIF
+      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
+      !   WHERE( pa_ip(:,:,:) >= epsi20 )
+      !      z1_aip(:,:,:) = 1._wp / pa_ip(:,:,:)
+      !   ELSEWHERE
+      !      z1_aip(:,:,:) = 0.
+      !   END WHERE
+      !ENDIF
       !
       ! setup a mask where advection will be upstream
       IF( ll_neg ) THEN
@@ -257,26 +250,18 @@ CONTAINS
       ENDIF
       !
       ! diagnostics
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            zdiag_adv_mass(ji,jj) =   SUM( pv_i (ji,jj,:) ) * rhoi + SUM( pv_s (ji,jj,:) ) * rhos &
-               &                    + SUM( pv_ip(ji,jj,:) ) * rhow + SUM( pv_il(ji,jj,:) ) * rhow
-            zdiag_adv_heat(ji,jj) = - SUM( SUM( pe_i(ji,jj,1:nlay_i,:), dim=2 ) ) - SUM( SUM( pe_s(ji,jj,1:nlay_s,:), dim=2 ) )
-         END DO
-      END DO
-      IF( nn_icesal == 4 ) THEN
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               zdiag_adv_salt(ji,jj) = SUM( SUM( pszv_i(ji,jj,:,:), dim=2 ) ) * rhoi
-            END DO
-         END DO
-      ELSE
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               zdiag_adv_salt(ji,jj) = SUM( psv_i(ji,jj,:) ) * rhoi
-            END DO
-         END DO
-      ENDIF
+      !DO jj=Njs0, Nje0
+      !   DO ji=Nis0, Nie0
+      !      zdiag_adv_mass(ji,jj) =   SUM( pv_i (ji,jj,:) ) * rhoi + SUM( pv_s (ji,jj,:) ) * rhos &
+      !         &                    + SUM( pv_ip(ji,jj,:) ) * rhow + SUM( pv_il(ji,jj,:) ) * rhow
+      !      zdiag_adv_heat(ji,jj) = - SUM( SUM( pe_i(ji,jj,1:nlay_i,:), dim=2 ) ) - SUM( SUM( pe_s(ji,jj,1:nlay_s,:), dim=2 ) )
+      !   END DO
+      !END DO
+      !DO jj=Njs0, Nje0
+      !   DO ji=Nis0, Nie0
+      !      zdiag_adv_salt(ji,jj) = SUM( SUM( pszv_i(ji,jj,:,:), dim=2 ) ) * rhoi
+      !   END DO
+      !END DO
       !
       ! record at_i before advection (for open water)
       sati1(:,:) = SUM( pa_i(:,:,:), dim=3 )
@@ -294,18 +279,20 @@ CONTAINS
       pa_i(:,:,:) = zvar(:,:,:,1)
 
       !== Ice age ==!
-      zvar(:,:,:,1) = poa_i(:,:,:)
-      CALL adv_umx( zamsk(1:1), kn_umx, kt, zdt, pUu , pVv , zu_cat, zv_cat, zcu_box, zcv_box, &
-         &                                           zvar(:,:,:,1:1), zvar(:,:,:,1:1) )
-      poa_i(:,:,:) = zvar(:,:,:,1)
+      IF(ln_age) THEN
+         zvar(:,:,:,1) = poa_i(:,:,:)
+         CALL adv_umx( zamsk(1:1), kn_umx, kt, zdt, pUu , pVv , zu_cat, zv_cat, zcu_box, zcv_box, &
+            &                                           zvar(:,:,:,1:1), zvar(:,:,:,1:1) )
+         poa_i(:,:,:) = zvar(:,:,:,1)
+      ENDIF
 
       !== melt ponds area ==!
-      IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-         zvar(:,:,:,1) = pa_ip(:,:,:)
-         CALL adv_umx( zamsk(1:1), kn_umx, kt, zdt, pUu , pVv , zu_cat , zv_cat , zcu_box, zcv_box,  &
-            &                                           zvar(:,:,:,1:1), zvar(:,:,:,1:1), zuap_ups, zvap_ups, zuap_ho, zvap_ho )
-         pa_ip(:,:,:) = zvar(:,:,:,1)
-      ENDIF
+      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
+      !   zvar(:,:,:,1) = pa_ip(:,:,:)
+      !   CALL adv_umx( zamsk(1:1), kn_umx, kt, zdt, pUu , pVv , zu_cat , zv_cat , zcu_box, zcv_box,  &
+      !      &                                           zvar(:,:,:,1:1), zvar(:,:,:,1:1), zuap_ups, zvap_ups, zuap_ho, zvap_ho )
+      !   pa_ip(:,:,:) = zvar(:,:,:,1)
+      !ENDIF
       !
       !                             ! --------------------------------- !
       IF( np_advS == 1 ) THEN       ! -- advection form: -div( uVS ) -- !
@@ -332,17 +319,11 @@ CONTAINS
             zhvar(:,:,:,jm) = pe_s(:,:,jk,:)
          ENDDO
          !== Ice salt content ==!
-         IF( nn_icesal == 4 ) THEN
-            DO jk = 1, nlay_i
-               jm = jm+1 ; zamsk(jm) = 1._wp
-               zvar (:,:,:,jm) = pszv_i(:,:,jk,:)
-               zhvar(:,:,:,jm) = pszv_i(:,:,jk,:)
-            ENDDO
-         ELSE
+         DO jk = 1, nlay_i
             jm = jm+1 ; zamsk(jm) = 1._wp
-            zvar (:,:,:,jm) = psv_i(:,:,:)
-            zhvar(:,:,:,jm) = psv_i(:,:,:)
-         ENDIF
+            zvar (:,:,:,jm) = pszv_i(:,:,jk,:)
+            zhvar(:,:,:,jm) = pszv_i(:,:,jk,:)
+         ENDDO
 
          !== advection ==!
          CALL adv_umx( zamsk(1:jm), kn_umx, kt, zdt, pUu, pVv, zua_ho, zva_ho, zcu_box, zcv_box, &
@@ -358,13 +339,9 @@ CONTAINS
          DO jk = 1, nlay_s
             jm = jm+1 ;    pe_s  (:,:,jk,:) = zvar (:,:,:,jm)
          ENDDO
-         IF( nn_icesal == 4 ) THEN
-            DO jk = 1, nlay_i
-               jm = jm+1 ; pszv_i(:,:,jk,:) = zvar (:,:,:,jm)
-            ENDDO
-         ELSE
-            jm = jm+1 ;    psv_i (:,:,:)    = zvar (:,:,:,jm)
-         ENDIF
+         DO jk = 1, nlay_i
+            jm = jm+1 ; pszv_i(:,:,jk,:) = zvar (:,:,:,jm)
+         ENDDO
 
          !
          !                          ! ------------------------------------------ !
@@ -392,17 +369,11 @@ CONTAINS
             zhvar(:,:,:,jm) = pe_s(:,:,jk,:) * z1_ai(:,:,:)
          ENDDO
          !== Ice salt content ==!
-         IF( nn_icesal == 4 ) THEN
-            DO jk = 1, nlay_i
-               jm = jm+1 ; zamsk(jm) = 0._wp
-               zvar (:,:,:,jm) = pszv_i(:,:,jk,:)
-               zhvar(:,:,:,jm) = pszv_i(:,:,jk,:) * z1_ai(:,:,:)
-            ENDDO
-         ELSE
+         DO jk = 1, nlay_i
             jm = jm+1 ; zamsk(jm) = 0._wp
-            zvar (:,:,:,jm) = psv_i(:,:,:)
-            zhvar(:,:,:,jm) = psv_i(:,:,:) * z1_ai(:,:,:)
-         ENDIF
+            zvar (:,:,:,jm) = pszv_i(:,:,jk,:)
+            zhvar(:,:,:,jm) = pszv_i(:,:,jk,:) * z1_ai(:,:,:)
+         ENDDO
 
          !== advection ==!
          CALL adv_umx( zamsk(1:jm), kn_umx, kt, zdt, pUu, pVv, zua_ho, zva_ho, zcu_box, zcv_box, &
@@ -417,13 +388,9 @@ CONTAINS
          DO jk = 1, nlay_s
             jm = jm+1 ;    pe_s  (:,:,jk,:) = zvar (:,:,:,jm)
          ENDDO
-         IF( nn_icesal == 4 ) THEN
-            DO jk = 1, nlay_i
-               jm = jm+1 ; pszv_i(:,:,jk,:) = zvar (:,:,:,jm)
-            ENDDO
-         ELSE
-            jm = jm+1 ;    psv_i (:,:,:)    = zvar (:,:,:,jm)
-         ENDIF
+         DO jk = 1, nlay_i
+            jm = jm+1 ; pszv_i(:,:,jk,:) = zvar (:,:,:,jm)
+         ENDDO
 
          !                          ! ----------------------------------------- !
       ELSEIF( np_advS == 3 ) THEN   ! -- advection form: -div( uV * uS / u ) -- !
@@ -459,17 +426,11 @@ CONTAINS
             zhvar(:,:,:,jm) = pe_i(:,:,jk,:) * z1_vi(:,:,:)
          ENDDO
          !== Ice salt content ==!
-         IF( nn_icesal == 4 ) THEN
-            DO jk = 1, nlay_i
-               jm = jm+1 ; zamsk(jm) = 0._wp
-               zvar (:,:,:,jm) = pszv_i(:,:,jk,:)
-               zhvar(:,:,:,jm) = pszv_i(:,:,jk,:) * z1_vi(:,:,:)
-            ENDDO
-         ELSE
+         DO jk = 1, nlay_i
             jm = jm+1 ; zamsk(jm) = 0._wp
-            zvar (:,:,:,jm) = psv_i(:,:,:)
-            zhvar(:,:,:,jm) = psv_i(:,:,:) * z1_vi(:,:,:)
-         ENDIF
+            zvar (:,:,:,jm) = pszv_i(:,:,jk,:)
+            zhvar(:,:,:,jm) = pszv_i(:,:,jk,:) * z1_vi(:,:,:)
+         ENDDO
          CALL adv_umx( zamsk(2:jm), kn_umx, kt, zdt, pUu, pVv, zuv_ho, zvv_ho, zcu_box, zcv_box, &
             &                                            zhvar(:,:,:,2:jm), zvar(:,:,:,2:jm), zuv_ups, zvv_ups )
          !
@@ -478,13 +439,9 @@ CONTAINS
          DO jk = 1, nlay_i
             jm = jm+1 ;    pe_i  (:,:,jk,:) = zvar (:,:,:,jm)
          ENDDO
-         IF( nn_icesal == 4 ) THEN
-            DO jk = 1, nlay_i
-               jm = jm+1 ; pszv_i(:,:,jk,:) = zvar (:,:,:,jm)
-            ENDDO
-         ELSE
-            jm = jm+1 ;    psv_i (:,:,:)    = zvar (:,:,:,jm)
-         ENDIF
+         DO jk = 1, nlay_i
+            jm = jm+1 ; pszv_i(:,:,jk,:) = zvar (:,:,:,jm)
+         ENDDO
 
          !== Snw volume ==!
          jm = 1 ; zamsk(jm) = 0._wp
@@ -514,52 +471,42 @@ CONTAINS
       !
       !
       !== melt ponds ==!
-      IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-
-         !== pond volume ==!
-         jm = 1    ; zamsk(jm) = 0._wp
-         zvar (:,:,:,jm) = pv_ip(:,:,:)
-         zhvar(:,:,:,jm) = pv_ip(:,:,:) * z1_aip(:,:,:)
-         !== lid volume ==!
-         jm = jm+1 ; zamsk(jm) = 0._wp
-         zvar (:,:,:,jm) = pv_il(:,:,:)
-         zhvar(:,:,:,jm) = pv_il(:,:,:) * z1_aip(:,:,:)
-         !
-         !== advection ==!
-         CALL adv_umx( zamsk(1:jm), kn_umx, kt, zdt, pUu, pVv, zuap_ho, zvap_ho, zcu_box, zcv_box, &
-            &                                            zhvar(:,:,:,1:jm), zvar(:,:,:,1:jm), zuap_ups, zvap_ups )
-
-         !== Recover quantities ==!
-         jm = 1       ;    pv_ip  (:,:,:)    = zvar (:,:,:,jm)
-         jm = jm+1    ;    pv_il  (:,:,:)    = zvar (:,:,:,jm)
-      ENDIF
+      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
+      !   !== pond volume ==!
+      !   jm = 1    ; zamsk(jm) = 0._wp
+      !   zvar (:,:,:,jm) = pv_ip(:,:,:)
+      !   zhvar(:,:,:,jm) = pv_ip(:,:,:) * z1_aip(:,:,:)
+      !   !== lid volume ==!
+      !   jm = jm+1 ; zamsk(jm) = 0._wp
+      !   zvar (:,:,:,jm) = pv_il(:,:,:)
+      !   zhvar(:,:,:,jm) = pv_il(:,:,:) * z1_aip(:,:,:)
+      !   !
+      !   !== advection ==!
+      !   CALL adv_umx( zamsk(1:jm), kn_umx, kt, zdt, pUu, pVv, zuap_ho, zvap_ho, zcu_box, zcv_box, &
+      !      &                                            zhvar(:,:,:,1:jm), zvar(:,:,:,1:jm), zuap_ups, zvap_ups )
+      !
+      !   !== Recover quantities ==!
+      !   jm = 1       ;    pv_ip  (:,:,:)    = zvar (:,:,:,jm)
+      !   jm = jm+1    ;    pv_il  (:,:,:)    = zvar (:,:,:,jm)
+      !ENDIF
 
       ! --- diagnostics --- !
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            diag_adv_mass(ji,jj) = diag_adv_mass(ji,jj) + (   SUM( pv_i (ji,jj,:) ) * rhoi + SUM( pv_s (ji,jj,:) ) * rhos &
-               &                                            + SUM( pv_ip(ji,jj,:) ) * rhow + SUM( pv_il(ji,jj,:) ) * rhow &
-               &                                          - zdiag_adv_mass(ji,jj) ) * r1_Dt_ice
-            diag_adv_heat(ji,jj) = diag_adv_heat(ji,jj) + ( - SUM(SUM( pe_i(ji,jj,1:nlay_i,:) , dim=2 ) ) &
-               &                                            - SUM(SUM( pe_s(ji,jj,1:nlay_s,:) , dim=2 ) ) &
-               &                                          - zdiag_adv_heat(ji,jj) ) * r1_Dt_ice
-         END DO
-      END DO
-      IF( nn_icesal == 4 ) THEN
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               diag_adv_salt(ji,jj) = diag_adv_salt(ji,jj) + ( SUM( SUM( pszv_i(ji,jj,:,:), dim=2 ) ) * rhoi &
-                  &                                          - zdiag_adv_salt(ji,jj) ) * r1_Dt_ice
-            END DO
-         END DO
-      ELSE
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               diag_adv_salt(ji,jj) = diag_adv_salt(ji,jj) + ( SUM( psv_i(ji,jj,:) ) * rhoi &
-                  &                                          - zdiag_adv_salt(ji,jj) ) * r1_Dt_ice
-            END DO
-         END DO
-      ENDIF
+      !DO jj=Njs0, Nje0
+      !   DO ji=Nis0, Nie0
+      !      diag_adv_mass(ji,jj) = diag_adv_mass(ji,jj) + (   SUM( pv_i (ji,jj,:) ) * rhoi + SUM( pv_s (ji,jj,:) ) * rhos &
+      !         &                                            + SUM( pv_ip(ji,jj,:) ) * rhow + SUM( pv_il(ji,jj,:) ) * rhow &
+      !         &                                          - zdiag_adv_mass(ji,jj) ) * r1_Dt_ice
+      !      diag_adv_heat(ji,jj) = diag_adv_heat(ji,jj) + ( - SUM(SUM( pe_i(ji,jj,1:nlay_i,:) , dim=2 ) ) &
+      !         &                                            - SUM(SUM( pe_s(ji,jj,1:nlay_s,:) , dim=2 ) ) &
+      !         &                                          - zdiag_adv_heat(ji,jj) ) * r1_Dt_ice
+      !   END DO
+      !END DO
+      !DO jj=Njs0, Nje0
+      !   DO ji=Nis0, Nie0
+      !      diag_adv_salt(ji,jj) = diag_adv_salt(ji,jj) + ( SUM( SUM( pszv_i(ji,jj,:,:), dim=2 ) ) * rhoi &
+      !         &                                          - zdiag_adv_salt(ji,jj) ) * r1_Dt_ice
+      !   END DO
+      !END DO
 
       IF( .NOT. ln_pureADV2D ) THEN
          ! --- Ensure non-negative fields --- !
@@ -567,29 +514,22 @@ CONTAINS
          !     (because advected fields are not perfectly bounded and tiny negative values can occur, e.g. -1.e-20)
          IF( ln_icethd ) THEN
             !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-            !   CALL ice_var_zapneg( zdt, pv_i, pv_s, psv_i, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i )
+            !   CALL ice_var_zapneg( zdt, pv_i, pv_s, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i )
             !ELSE
-            IF( nn_icesal == 4 ) THEN
-               CALL ice_var_zapneg( zdt, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i,  pszv_i=pszv_i )
-            ELSE
-               CALL ice_var_zapneg( zdt, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i )
-            ENDIF
+            !CALL ice_var_zapneg( zdt, pv_i, pv_s, poa_i, pa_i, pe_s, pe_i, pszv_i )
+            CALL ice_var_zapneg( zdt, pv_i, pv_s,        poa_i, pa_i, pe_s, pe_i, pszv_i, prdgc )
             !ENDIF
          ELSE
-            CALL ice_var_zapneg( zdt, pv_i, pv_s,               pa_i )
+            CALL ice_var_zapneg( zdt, pv_i, pv_s,               pa_i, prdgc )
          ENDIF
          !
          ! --- Make sure ice thickness is not too big --- !
          !     (because ice thickness can be too large where ice concentration is very small)
          IF( ln_icethd ) THEN
             !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-            !   CALL Hbig( zdt, shi_max, shs_max, zhip_max, ssi_max, ses_max, sei_max, pv_i, pv_s, pa_i, pa_ip, pv_ip, psv_i, pe_s, pe_i )
+            !   CALL Hbig( zdt, shi_max, shs_max, zhip_max, ssi_max, ses_max, sei_max, pv_i, pv_s, pa_i, pa_ip, pv_ip, pe_s, pe_i )
             !ELSE
-            IF( nn_icesal == 4 ) THEN
-               CALL Hbig( zdt, shi_max, shs_max, sszi_max, ses_max, sei_max, pv_i, pv_s, pa_i, pszv_i, pe_s, pe_i )
-            ELSE
-               CALL Hbig( zdt, shi_max, shs_max,  ssi_max, ses_max, sei_max, pv_i, pv_s, pa_i,  psv_i, pe_s, pe_i )
-            ENDIF
+            CALL Hbig( zdt, shi_max, shs_max, sszi_max, ses_max, sei_max, pv_i, pv_s, pa_i, pszv_i, pe_s, pe_i )
             !ENDIF
          ELSE
             CALL    Hbig( zdt, shi_max, shs_max,                            pv_i, pv_s, pa_i )
@@ -621,7 +561,7 @@ CONTAINS
       !
       ! --- Deallocate arrays --- !
       DEALLOCATE( zvar, zhvar, zamsk )
-      IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) DEALLOCATE( z1_aip )
+      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) DEALLOCATE( z1_aip )
       IF( np_advS == 3 )                DEALLOCATE( zuv_ho, zvv_ho, zuv_ups, zvv_ups, z1_vi, z1_vs )
       !
    END SUBROUTINE ice_dyn_adv_umx
@@ -648,13 +588,7 @@ CONTAINS
       !
       IF( ln_icethd ) THEN
          IF( .NOT. ln_pureADV2D ) THEN
-            IF( nn_icesal == 4 ) THEN
-               ALLOCATE( sei_max(jpi,jpj,nlay_i,jpl), ses_max(jpi,jpj,nlay_s,jpl), sszi_max(jpi,jpj,nlay_i,jpl), STAT = ierr(3) )
-               !%acc enter data copyin( sei_max, ses_max, sszi_max )
-            ELSE
-               ALLOCATE( sei_max(jpi,jpj,nlay_i,jpl), ses_max(jpi,jpj,nlay_s,jpl), ssi_max(jpi,jpj,jpl), STAT = ierr(4) )
-               !%acc enter data copyin( sei_max, ses_max, ssi_max )
-            ENDIF
+            ALLOCATE( sei_max(jpi,jpj,nlay_i,jpl), ses_max(jpi,jpj,nlay_s,jpl), sszi_max(jpi,jpj,nlay_i,jpl), STAT = ierr(3) )
          ENDIF
       ENDIF
       !

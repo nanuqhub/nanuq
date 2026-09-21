@@ -1,4 +1,4 @@
-            !$acc parallel loop collapse(2) present( utau_ice, au_i, V_oce, ff_u, ztaux_base, ztaux_bi )
+            !$acc parallel loop collapse(2) present( taux_ai_t, au_i, V_oce, ff_u, ztaux_base, ztaux_bi )
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
                   !
@@ -9,7 +9,7 @@
                   zUo   = V_oce(ji,jj,1) ! U oce @ u-points
                   zVo   = V_oce(ji,jj,4) ! V oce @ u-points
                   !
-                  ztau_ai = 0.5_wp*( utau_ice(ji,jj) + utau_ice(ji+1,jj) )* (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
+                  ztau_ai = 0.5_wp*( taux_ai_t(ji,jj) + taux_ai_t(ji+1,jj) )* (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
                   ztau_ai = zA * ztau_ai
                   !
                   !                 !--- tau_io/(u_oce - u_ice)
@@ -36,18 +36,18 @@
                   zbetau = MAX( zbeta(ji,jj), zbeta(ji+1,jj) )
                   u_ice(ji,jj) = ( ( (  u_ice_b(ji,jj) + u_ice(ji,jj) * MAX( 0._wp, zbetau - zdtevp * rn_lf_relax ) & ! static friction => slow decrease to v=0
                      &                                    ) / ( zbetau + 1._wp )                                    &
-                     &             ) * zmask + zUo * 0.01_wp * (1._wp - zmask)           & ! v_ice = v_oce/100 if mass < rmass_min & conc < rconc_min
+                     &             ) * zmask + zUo * 0.01_wp * (1._wp - zmask)           & ! v_ice = v_oce/100 if mass < rMmin_vel & conc < rAmin_vel
                      &           ) * REAL(kmsk00x(ji,jj),wp)
                   !
                END DO
             END DO
             !$acc end parallel loop
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
             CALL lbc_lnk_gpu( 'icedyn_rhg_evp', u_ice )
-# else
+#else
             CALL lbc_lnk(     'icedyn_rhg_evp', u_ice,'U',-1._wp )
-# endif
+#endif
 
             ! Since we have just updated `u_ice` it is now time to update `uVice`:
             !      energy conserving formulation:
@@ -61,8 +61,8 @@
             END DO
             !$acc end parallel loop
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
             CALL lbc_lnk_gpu( 'icedyn_rhg_evp', uVice )
-# else
+#else
             CALL lbc_lnk(     'icedyn_rhg_evp', uVice,'V',-1._wp )
-# endif
+#endif

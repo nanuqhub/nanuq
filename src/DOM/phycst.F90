@@ -27,18 +27,17 @@ MODULE phycst
    REAL(wp), PARAMETER, PUBLIC ::   rsmall   = 0.5 * EPSILON( 1.e0 )            !: smallest real computer value
 
    REAL(wp), PARAMETER, PUBLIC ::   rday     = 24.*60.*60.      !: day                                [s]
-   REAL(wp), PUBLIC ::   rsiyea                      !: sideral year                       [s]
-   REAL(wp), PUBLIC ::   rsiday                      !: sideral day                        [s]
+   REAL(wp), PARAMETER, PUBLIC ::   rsiyea   = 365.25_wp * rday * 2._wp * rpi / 6.283076_wp !: sideral year [s]
+   REAL(wp), PARAMETER, PUBLIC ::   rsiday   = rday / ( 1._wp + rday / rsiyea )                      !: sideral day                        [s]
    REAL(wp), PARAMETER, PUBLIC ::   raamo    =  12._wp          !: number of months in one year
    REAL(wp), PARAMETER, PUBLIC ::   rjjhh    =  24._wp          !: number of hours in one day
    REAL(wp), PARAMETER, PUBLIC ::   rhhmm    =  60._wp          !: number of minutes in one hour
    REAL(wp), PARAMETER, PUBLIC ::   rmmss    =  60._wp          !: number of seconds in one minute
-   REAL(wp), PUBLIC ::   omega                       !: earth rotation parameter           [s-1]
+   REAL(wp), PARAMETER, PUBLIC ::   omega    = 2._wp * rpi / rsiday !: earth rotation parameter           [s-1]
    REAL(wp), PARAMETER, PUBLIC ::   ra       = 6371229._wp      !: earth radius                       [m]
    REAL(wp), PARAMETER, PUBLIC ::   grav     = 9.80665_wp       !: gravity                            [m/s2]
    REAL(wp), PARAMETER, PUBLIC ::   rt0      = 273.15_wp        !: freezing point of fresh water [Kelvin]
-   !$acc declare create( rsiyea, rsiday, omega, grav, rt0 )
-   
+
    REAL(wp), PUBLIC ::   rho0                        !: volumic mass of reference     [kg/m3]
    REAL(wp), PUBLIC ::   r1_rho0                     !: = 1. / rho0                   [m3/kg]
    REAL(wp), PUBLIC ::   rcp                         !: ocean specific heat           [J/Kelvin/kg]
@@ -55,32 +54,30 @@ MODULE phycst
    REAL(wp), PARAMETER, PUBLIC ::   vkarmn   =    0.4_wp        !: von Karman constant
    REAL(wp), PARAMETER, PUBLIC ::   vkarmn2  =    0.4_wp*0.4_wp !: square of von Karman constant
    REAL(wp), PARAMETER, PUBLIC ::   stefan   =    5.67e-8_wp    !: Stefan-Boltzmann constant
-   !$acc declare create( emic, sice, soce, rLevap, vkarmn, vkarmn2, stefan )
-   
+
    REAL(wp), PARAMETER, PUBLIC ::   rhos     =  330._wp         !: volumic mass of snow                                  [kg/m3]
    REAL(wp), PARAMETER, PUBLIC ::   rhoi     =  917._wp         !: volumic mass of sea ice                               [kg/m3]
    REAL(wp), PARAMETER, PUBLIC ::   rhow     = 1000._wp         !: volumic mass of freshwater in melt ponds              [kg/m3]
    REAL(wp), PARAMETER, PUBLIC ::   rcnd_i   = 2.034396_wp      !: thermal conductivity of fresh ice                     [W/m/K]
-   REAL(wp),            PUBLIC ::   rcnd_s   = 0.31_wp          !: thermal conductivity of snow (0.31 W/m/K, Maykut and Untersteiner, 1971) [W/m/K]
    REAL(wp), PARAMETER, PUBLIC ::   rcpi     = 2067.0_wp        !: specific heat of fresh ice                            [J/kg/K]
    REAL(wp), PARAMETER, PUBLIC ::   rLsub    =    2.834e+6_wp   !: pure ice latent heat of sublimation                   [J/kg]
    REAL(wp), PARAMETER, PUBLIC ::   rLfus    =    0.334e+6_wp   !: latent heat of fusion of fresh ice                    [J/kg]
    REAL(wp), PARAMETER, PUBLIC ::   rTmlt    =    0.054_wp      !: decrease of seawater meltpoint with salinity
-   !$acc declare create( rhos, rhoi, rhow, rcnd_i, rcnd_s, rcpi, rLsub, rLfus, rTmlt )
+   !
+   REAL(wp),            PUBLIC ::   rcnd_s   = 0.31_wp          !: thermal conductivity of snow (0.31 W/m/K, Maykut and Untersteiner, 1971) [W/m/K]
+   !$acc declare create( rcnd_s )
 
-   REAL(wp), PUBLIC ::   r1_rhoi                     !: 1 / rhoi
-   REAL(wp), PUBLIC ::   r1_rhos                     !: 1 / rhos
-   REAL(wp), PUBLIC ::   r1_rcpi                     !: 1 / rcpi
+   REAL(wp), PARAMETER, PUBLIC ::   r1_rhoi = 1._wp / rhoi      !: 1 / rhoi
+   REAL(wp), PARAMETER, PUBLIC ::   r1_rhos = 1._wp / rhos      !: 1 / rhos
+   REAL(wp), PARAMETER, PUBLIC ::   r1_rcpi = 1._wp / rcpi      !: 1 / rcpi
 
    REAL(wp), PARAMETER, PUBLIC :: rnup   = 1._wp/3._wp  !: Poisson's ratio
-   REAL(wp), PARAMETER, PUBLIC :: rmuMC  = 0.7_wp       !: slope of Mohr-Coulomb enveloppe
+   REAL(wp), PARAMETER, PUBLIC :: rmuMC  = 0.7_wp       !: internal angle of friction, i.e. slope of the Mohr-Coulomb enveloppe
    REAL(wp), PARAMETER, PUBLIC :: rsqrt_nu_rhoi = SQRT( 2._wp*(1._wp + rnup)*rhoi )
-   
-   REAL(wp), PUBLIC, PARAMETER :: ref_tau_max = 10._wp ! Wind stress [N/m2]
-   !$acc declare create( r1_rhoi, r1_rhos, r1_rcpi, rnup, rmuMC, rsqrt_nu_rhoi, ref_tau_max )
-   
+   REAL(wp), PARAMETER, PUBLIC :: ref_tau_max = 10._wp ! Wind stress [N/m2]
+
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: phycst.F90 14072 2020-12-04 07:48:38Z laurent $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -93,15 +90,6 @@ CONTAINS
       !!
       !! ** Purpose :   set and print the constants
       !!----------------------------------------------------------------------
-
-      rsiyea = 365.25_wp * rday * 2._wp * rpi / 6.283076_wp
-      rsiday = rday / ( 1._wp + rday / rsiyea )
-      omega  = 2._wp * rpi / rsiday
-
-      r1_rhoi = 1._wp / rhoi
-      r1_rhos = 1._wp / rhos
-      r1_rcpi = 1._wp / rcpi
-
       IF(lwp) THEN
          WRITE(numout,*)
          WRITE(numout,*) 'phy_cst : initialization of ocean parameters and constants'
@@ -143,9 +131,6 @@ CONTAINS
          WRITE(numout,*) '      smallest real computer value       rsmall = ', rsmall
       ENDIF
 
-
-      !$acc update device ( rsiyea, rsiday, omega, r1_rhoi, r1_rhos, r1_rcpi )
-      
    END SUBROUTINE phy_cst
 
    !!======================================================================

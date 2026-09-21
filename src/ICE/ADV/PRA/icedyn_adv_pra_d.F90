@@ -21,11 +21,11 @@ MODULE icedyn_adv_pra_d
    !
    USE icedyn_adv_pra_adv
    !
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
-# else
+#else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-# endif
+#endif
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -39,7 +39,7 @@ MODULE icedyn_adv_pra_d
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:) :: sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f ! moments for `1-damage` @F
 
    !!----------------------------------------------------------------------
-   !! NANUQ_beta
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 
@@ -92,12 +92,12 @@ CONTAINS
 
          ! --- Lateral boundary conditions --- !
          !     caution: for gradients (sx and sy) the sign changes
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL lbc_lnk_gpu( crtnm,  p1md, sx1md_t, sy1md_t, sxx1md_t, syy1md_t, sxy1md_t )
-# else
+#else
          CALL lbc_lnk(     crtnm, p1md,cgt,1._wp,     sx1md_t,cgt,-1._wp, sy1md_t,cgt,-1._wp,  &
             &                 sxx1md_t,cgt,1._wp, syy1md_t,cgt,1._wp, sxy1md_t,cgt,1._wp  )
-# endif
+#endif
          !
       ELSEIF( cgt=='F' ) THEN
 
@@ -105,12 +105,12 @@ CONTAINS
 
          ! --- Lateral boundary conditions --- !
          !     caution: for gradients (sx and sy) the sign changes
-# if  defined _OPENACC
+#if  defined _OPENACC || defined _OPENMP
          CALL lbc_lnk_gpu( crtnm,  p1md, sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f )
-# else
+#else
          CALL lbc_lnk( crtnm, p1md,cgt,1._wp,    sx1md_f,cgt,-1._wp, sy1md_f,cgt,-1._wp,  &
             &                 sxx1md_f,cgt,1._wp, syy1md_f,cgt,1._wp, sxy1md_f,cgt,1._wp  )
-# endif
+#endif
          !
          !
          !
@@ -148,10 +148,15 @@ CONTAINS
       !$acc enter data copyin( sx1md_t, sy1md_t, sxx1md_t, syy1md_t, sxy1md_t )
       !$acc enter data copyin( sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f )
       !
-      ALLOCATE( sa2d(jpi,jpj),    STAT = ierr(2) )
-      sa2d(:,:) = 0._wp
-      !$acc enter data copyin( sa2d )
-
+      IF( .NOT. ALLOCATED(sa2d) ) THEN
+         ALLOCATE( sa2d(jpi,jpj),    STAT = ierr(2) )
+         sa2d(:,:) = 0._wp
+#if defined _OPENACC || defined _OPENMP
+         PRINT *, ' * info GPU: adv_pra_d_init() => adding array to memory'
+         PRINT *, '            => sa2d'
+         !$acc enter data copyin( sa2d )
+#endif
+      ENDIF
 
       ! If Prather is not used to advect generic fields, then we must allocate the following arrays
       !! => because `adv_pra_init` is not doing it...
@@ -162,12 +167,12 @@ CONTAINS
          zfld(:,:) = 0._wp; zf0(:,:) = 0._wp; zbet(:,:) = 0._wp; zfm(:,:) = 0._wp; zfx(:,:) = 0._wp; zfy(:,:) = 0._wp
          zfxx(:,:) = 0._wp; zfyy(:,:) = 0._wp; zfxy(:,:) = 0._wp; zpm(:,:) = 0._wp; zpx(:,:) = 0._wp; zpy(:,:) = 0._wp
          zpxx(:,:) = 0._wp; zpyy(:,:) = 0._wp; zpxy(:,:) = 0._wp; zalg(:,:) = 0._wp; zalg1(:,:) = 0._wp; zalg1q(:,:) = 0._wp
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          PRINT *, ' * info GPU: adv_pra_d_init() => adding Prather advection workspace arrays to memory'
          PRINT *, '            => zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy'
          PRINT *, '            => zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q'
          !$acc enter data copyin( zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
-# endif
+#endif
       ENDIF
 
 
@@ -199,7 +204,7 @@ CONTAINS
          !                                   !==========================!
          !
          IF( ln_rstart ) THEN
-            id1 = iom_varid( numrir, 'sx1md_t', ldstop = .FALSE. )    ! file exist: id1>0
+            id1 = iom_varid( 'adv_pra_d_rst', numrir, 'sx1md_t', ldstop = .FALSE. )    ! file exist: id1>0
          ELSE
             id1 = 0                                                  ! no restart: id1=0
          ENDIF
@@ -207,17 +212,17 @@ CONTAINS
          IF( id1 > 0 ) THEN                     !**  Read the restart file  **!
             !
             !                                                        ! ice damage !#bbm
-            CALL iom_get( numrir, jpdom_auto, 'sx1md_t' ,  sx1md_t ,  psgn = -1._wp )
-            CALL iom_get( numrir, jpdom_auto, 'sy1md_t' ,  sy1md_t ,  psgn = -1._wp )
-            CALL iom_get( numrir, jpdom_auto, 'sxx1md_t', sxx1md_t )
-            CALL iom_get( numrir, jpdom_auto, 'syy1md_t', syy1md_t )
-            CALL iom_get( numrir, jpdom_auto, 'sxy1md_t', sxy1md_t )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sx1md_t' ,  sx1md_t ,  psgn = -1._wp )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sy1md_t' ,  sy1md_t ,  psgn = -1._wp )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sxx1md_t', sxx1md_t )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'syy1md_t', syy1md_t )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sxy1md_t', sxy1md_t )
             !
-            CALL iom_get( numrir, jpdom_auto, 'sx1md_f' ,  sx1md_f ,  psgn = -1._wp )
-            CALL iom_get( numrir, jpdom_auto, 'sy1md_f' ,  sy1md_f ,  psgn = -1._wp )
-            CALL iom_get( numrir, jpdom_auto, 'sxx1md_f', sxx1md_f )
-            CALL iom_get( numrir, jpdom_auto, 'syy1md_f', syy1md_f )
-            CALL iom_get( numrir, jpdom_auto, 'sxy1md_f', sxy1md_f )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sx1md_f' ,  sx1md_f ,  psgn = -1._wp )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sy1md_f' ,  sy1md_f ,  psgn = -1._wp )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sxx1md_f', sxx1md_f )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'syy1md_f', syy1md_f )
+            CALL iom_get( 'adv_pra_d_rst', numrir, jpdom_auto, 'sxy1md_f', sxy1md_f )
             !
          ELSE                                   !**  start rheology from rest  **!
             !
@@ -255,7 +260,6 @@ CONTAINS
       ENDIF
       !
    END SUBROUTINE adv_pra_d_rst
-
 
    !!======================================================================
 END MODULE icedyn_adv_pra_d

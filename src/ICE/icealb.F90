@@ -37,12 +37,12 @@ MODULE icealb
    REAL(wp), PUBLIC, SAVE ::   rn_alb_dpnd      ! ponded ice albedo
    REAL(wp), PUBLIC, SAVE ::   rn_alb_hpiv      ! pivotal ice thickness in meters (above which albedo is constant)
    !$acc declare create( rn_alb_sdry, rn_alb_smlt, rn_alb_idry, rn_alb_imlt, rn_alb_dpnd, rn_alb_hpiv )
-   
+
    !! * Substitutions
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icealb.F90 15549 2021-11-28 20:00:36Z clem $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -171,7 +171,7 @@ CONTAINS
       END DO
       !$acc end parallel loop
       !
-      !$acc end data      
+      !$acc end data
       IF( ln_timing )   CALL timing_stop('ice_alb_pnd')
       !
    END SUBROUTINE ice_alb_pnd
@@ -221,10 +221,10 @@ CONTAINS
       !!                Brandt et al. 2005, J. Climate, vol 18
       !!                Grenfell & Perovich 2004, JGR, vol 109
       !!----------------------------------------------------------------------
-      REAL(wp), INTENT(in   ), DIMENSION(:,:,:) ::   pt_su        !  ice surface temperature (Kelvin)
-      REAL(wp), INTENT(in   ), DIMENSION(:,:,:) ::   ph_ice       !  sea-ice thickness
-      REAL(wp), INTENT(in   ), DIMENSION(:,:,:) ::   ph_snw       !  snow depth
-      REAL(wp), INTENT(  out), DIMENSION(:,:,:) ::   palb_ice     !  albedo of ice
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj,jpl) ::   pt_su        !  ice surface temperature (Kelvin)
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj,jpl) ::   ph_ice       !  sea-ice thickness
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj,jpl) ::   ph_snw       !  snow depth
+      REAL(wp), INTENT(  out), DIMENSION(jpi,jpj,jpl) ::   palb_ice     !  albedo of ice
       !
       INTEGER  ::   ji, jj, jl                ! dummy loop indices
       REAL(wp) ::   zhs, z1_c1, z1_c2,z1_c3, z1_c4 ! local scalar
@@ -250,14 +250,14 @@ CONTAINS
                ! palb_ice used over the full domain in icesbc
                !
                zhs = ph_snw(ji,jj,jl)
-               !IF(ldbg) PRINT *, 'LOLO: zhs=',zhs
+               !IF(ldbg) PRXNT *, 'LOLO: zhs=',zhs
                !---------------------------------------------!
                !--- Specific snow, ice and pond fractions ---!
                !---------------------------------------------!
                CALL ice_var_snwfra_sclr( zhs, zafrac_snw )   ! calculate ice fraction covered by snow
-               !IF(ldbg) PRINT *, 'LOLO: zafrac_snw=',zafrac_snw
+               !IF(ldbg) PRXNT *, 'LOLO: zafrac_snw=',zafrac_snw
                zafrac_ice = MAX( 0._wp, 1._wp - zafrac_snw ) ! max for roundoff errors
-               !IF(ldbg) PRINT *, 'LOLO: zafrac_ice=',zafrac_ice
+               !IF(ldbg) PRXNT *, 'LOLO: zafrac_ice=',zafrac_ice
                !
                !---------------!
                !--- Albedos ---!
@@ -265,43 +265,43 @@ CONTAINS
                !                       !--- Bare ice albedo (for hi > 100cm)
                IF( zhs == 0._wp .AND. pt_su(ji,jj,jl) >= rt0 ) THEN
                   zalb_ice = rn_alb_imlt
-                  !IF(ldbg) PRINT *, 'LOLO: A0!'
+                  !IF(ldbg) PRXNT *, 'LOLO: A0!'
                ELSE
                   zalb_ice = rn_alb_idry
-                  !IF(ldbg) PRINT *, 'LOLO: B0!'
+                  !IF(ldbg) PRXNT *, 'LOLO: B0!'
                ENDIF
-               !IF(ldbg) PRINT *, 'LOLO: zalb_ice=',zalb_ice
+               !IF(ldbg) PRXNT *, 'LOLO: zalb_ice=',zalb_ice
                !                       !--- Bare ice albedo (for hi < 100cm)
                IF( 0.05 < ph_ice(ji,jj,jl) .AND. ph_ice(ji,jj,jl) <= rn_alb_hpiv ) THEN      ! 5cm < hi < 100cm
-                  !IF(ldbg) PRINT *, 'LOLO: A1!'
+                  !IF(ldbg) PRXNT *, 'LOLO: A1!'
                   zalb_ice = zalb_ice    + ( 0.18_wp - zalb_ice   ) * z1_c1 * ( LOG(rn_alb_hpiv) - LOG(ph_ice(ji,jj,jl)) )
                ELSEIF( ph_ice(ji,jj,jl) <= 0.05_wp ) THEN                                    ! 0cm < hi < 5cm
-                  !IF(ldbg) PRINT *, 'LOLO: B1!'
+                  !IF(ldbg) PRXNT *, 'LOLO: B1!'
                   zalb_ice = rn_alb_oce  + ( 0.18_wp - rn_alb_oce ) * z1_c2 * ph_ice(ji,jj,jl)
                ENDIF
-               !IF(ldbg) PRINT *, 'LOLO: zalb_ice=',zalb_ice
+               !IF(ldbg) PRXNT *, 'LOLO: zalb_ice=',zalb_ice
                !
                !                       !--- Snow-covered ice albedo (freezing, melting cases)
                IF( pt_su(ji,jj,jl) < rt0 ) THEN
-                  !IF(ldbg) PRINT *, 'LOLO: A2!'
+                  !IF(ldbg) PRXNT *, 'LOLO: A2!'
                   zalb_snw = rn_alb_sdry - ( rn_alb_sdry - zalb_ice ) * EXP( - zhs * z1_c3 )
                ELSE
-                  !IF(ldbg) PRINT *, 'LOLO: B2!'
+                  !IF(ldbg) PRXNT *, 'LOLO: B2!'
                   zalb_snw = rn_alb_smlt - ( rn_alb_smlt - zalb_ice ) * EXP( - zhs * z1_c4 )
                ENDIF
-               !IF(ldbg) PRINT *, 'LOLO: zalb_snw=',zalb_snw
+               !IF(ldbg) PRXNT *, 'LOLO: zalb_snw=',zalb_snw
                !                       !--- Surface albedo is weighted mean of snow, ponds and bare ice contributions
                zalb_os = ( zafrac_snw * zalb_snw + zafrac_ice * zalb_ice ) * xmskt(ji,jj)
-               !IF(ldbg) PRINT *, 'LOLO: zalb_os=',zalb_os
+               !IF(ldbg) PRXNT *, 'LOLO: zalb_os=',zalb_os
                !
                zalb_cs = zalb_os - ( - 0.1010_wp * zalb_os * zalb_os  &
                   &                  + 0.1933_wp * zalb_os - 0.0148_wp ) * xmskt(ji,jj)
-               !IF(ldbg) PRINT *, 'LOLO: zalb_cs=',zalb_cs
+               !IF(ldbg) PRXNT *, 'LOLO: zalb_cs=',zalb_cs
                !
                ! albedo depends on cloud fraction because of non-linear spectral effects
                palb_ice(ji,jj,jl) = ( 1._wp - rcloud_fra ) * zalb_cs + rcloud_fra * zalb_os
-               !IF(ldbg) PRINT *, 'LOLO: palb_ice(ji,jj,jl)=',palb_ice(ji,jj,jl)
-               !IF(ldbg) PRINT *, 'LOLO.'
+               !IF(ldbg) PRXNT *, 'LOLO: palb_ice(ji,jj,jl)=',palb_ice(ji,jj,jl)
+               !IF(ldbg) PRXNT *, 'LOLO.'
             END DO
          END DO
       END DO

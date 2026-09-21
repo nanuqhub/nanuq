@@ -65,8 +65,6 @@ MODULE par_oce
    INTEGER, PUBLIC ::   ntsj       !
    INTEGER, PUBLIC ::   ntei       !: end of internal part of tile domain
    INTEGER, PUBLIC ::   ntej       !
-   INTEGER, PUBLIC ::   nthl, nthr !: Modifier on DO loop macro bound offset (left, right)
-   INTEGER, PUBLIC ::   nthb, ntht !:              "         "               (bottom, top)
 
    !!---------------------------------------------------------------------
    !! Active tracer parameters
@@ -96,7 +94,7 @@ MODULE par_oce
    !$acc declare create( nn_hls, Nis0, Nie0, Njs0, Nje0 )
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: par_oce.F90 15119 2021-07-13 14:43:22Z jchanut $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!======================================================================

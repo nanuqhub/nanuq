@@ -13,11 +13,11 @@ MODULE icedyn_adv_wnx
    !USE icedyn_adv_util
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
-# else
+#else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-# endif
+#endif
    USE timing         ! Timing
 
    USE icedyn_adv_wnx_adv
@@ -32,13 +32,14 @@ MODULE icedyn_adv_wnx
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   sati1
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2025)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_dyn_adv_wnx( kt, pUu, pVv, pmlbc, ph_i, ph_s, ph_ip,  &
-      &                            pato_i, pv_i, pv_s, psv_i, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i )
+   !SUBROUTINE ice_dyn_adv_wnx( kt, pUu, pVv, pmlbc, ph_i, ph_s, ph_ip,  &
+   !   &                            pato_i, pv_i, pv_s, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i )
+   SUBROUTINE ice_dyn_adv_wnx( kt, pUu, pVv, pmlbc, ph_i, ph_s, pato_i, pv_i, pv_s, poa_i, pa_i, pe_s, pe_i, pszv_i, prdgc )
       !!----------------------------------------------------------------------
       !!                **  routine ice_dyn_adv_wnx  **
       !!
@@ -54,19 +55,19 @@ CONTAINS
       INTEGER(1), DIMENSION(jpi,jpj,nn_hls,4), INTENT(in   ) ::   pmlbc  ! masks for solid LBCs
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_i   ! ice thickness
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_s   ! snw thickness
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_ip  ! ice pond thickness
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(in   ) ::   ph_ip  ! ice pond thickness
       REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   pato_i ! open water area
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_i   ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_s   ! snw volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   psv_i  ! salt content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   poa_i  ! age content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_i   ! ice concentration
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_ip  ! melt pond concentration
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_ip  ! melt pond volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_il  ! melt pond lid volume
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_ip  ! melt pond concentration
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_ip  ! melt pond volume
+      !REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_il  ! melt pond lid volume
       REAL(wp), DIMENSION(jpi,jpj,nlay_s,jpl), INTENT(inout) ::   pe_s   ! snw heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pe_i   ! ice heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pszv_i ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   prdgc  ! ridged-ice fraction 
       !!----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk, jl          ! dummy loop indices
       REAL(wp) ::   zdt, zati2
@@ -77,7 +78,7 @@ CONTAINS
       REAL(wp), PARAMETER :: r1_scl_fct = 1.E6_wp
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start(crtnm)
-      !$acc data present( pUu, pVv, pmlbc, ph_i, ph_s, pato_i, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i, pszv_i, e1e2t, r1_e1e2t )
+      !$acc data present( pUu, pVv, pmlbc, ph_i, ph_s, pato_i, pv_i, pv_s, poa_i, pa_i, pe_s, pe_i, pszv_i, e1e2t, r1_e1e2t )
 
       IF( (kt == nit000) .AND. lwp )   WRITE(numout,*) '-- '//crtnm//': WenoX advection scheme'
 
@@ -102,7 +103,6 @@ CONTAINS
       !   ! diagnostics
       !   zdiag_adv_mass(:,:) =   SUM( pv_i (:,:,:) , dim=3 ) * rhoi + SUM( pv_s (:,:,:) , dim=3 ) * rhos &
       !      &                  + SUM( pv_ip(:,:,:) , dim=3 ) * rhow + SUM( pv_il(:,:,:) , dim=3 ) * rhow
-      !   zdiag_adv_salt(:,:) =   SUM( psv_i(:,:,:) , dim=3 ) * rhoi
       !   zdiag_adv_heat(:,:) = - SUM(SUM( pe_i(:,:,1:nlay_i,:) , dim=4 ), dim=3 ) &
       !      &                  - SUM(SUM( pe_s(:,:,1:nlay_s,:) , dim=4 ), dim=3 )
       !ENDIF
@@ -125,25 +125,21 @@ CONTAINS
          IF( ln_icethd ) THEN
 
             !== Ice age ==
-            CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, poa_i(:,:,jl) )
+            IF(ln_age) CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, poa_i(:,:,jl) )
 
             !== Salt content ==
-            IF( nn_icesal == 4 ) THEN
-               DO jk = 1, nlay_i
-                  CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, pszv_i(:,:,jk,jl),  lSmesh=.FALSE. )
-               END DO
-            ELSE
-               CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, psv_i(:,:,jl),  lSmesh=.FALSE. )
-            ENDIF
+            DO jk = 1, nlay_i
+               CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, pszv_i(:,:,jk,jl),  lSmesh=.FALSE. )
+            END DO
 
             !== Ice heat content ==
             DO jk = 1, nlay_i
-               CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, pe_i(:,:,jk,jl),  lSmesh=.FALSE. )
+               CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc,   pe_i(:,:,jk,jl),  lSmesh=.FALSE. )
             END DO
 
             !== Snow heat content ==
             DO jk = 1, nlay_s
-               CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, pe_s(:,:,jk,jl),  lSmesh=.FALSE. )
+               CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc,   pe_s(:,:,jk,jl),  lSmesh=.FALSE. )
             END DO
 
             !== melt ponds ==!
@@ -162,6 +158,9 @@ CONTAINS
 
       END DO !DO jl = 1, jpl
 
+      !== Ridged ice fraction ==
+      IF( ln_rdgtrc )  CALL wenoX_rk3( kt, cgt, zdt, e1e2t, r1_e1e2t, pUu, pVv, pmlbc, prdgc,  lSmesh=.FALSE. )         
+      
       !--- derive open water from ice concentration
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
@@ -178,19 +177,17 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       CALL lbc_lnk_gpu( crtnm,  pato_i )
-# else
+#else
       CALL lbc_lnk(     crtnm, pato_i,cgt,1._wp )
-# endif
+#endif
 
       !IF( ln_icediachk ) THEN
       !   ! --- diagnostics --- !
       !   diag_adv_mass(:,:) = diag_adv_mass(:,:) + (   SUM( pv_i (:,:,:) , dim=3 ) * rhoi + SUM( pv_s (:,:,:) , dim=3 ) * rhos &
       !      &                                        + SUM( pv_ip(:,:,:) , dim=3 ) * rhow + SUM( pv_il(:,:,:) , dim=3 ) * rhow &
       !      &                                        - zdiag_adv_mass(:,:) ) * z1_dt
-      !   diag_adv_salt(:,:) = diag_adv_salt(:,:) + (   SUM( psv_i(:,:,:) , dim=3 ) * rhoi &
-      !      &                                        - zdiag_adv_salt(:,:) ) * z1_dt
       !   diag_adv_heat(:,:) = diag_adv_heat(:,:) + ( - SUM(SUM( pe_i(:,:,1:nlay_i,:) , dim=4 ), dim=3 ) &
       !      &                                        - SUM(SUM( pe_s(:,:,1:nlay_s,:) , dim=4 ), dim=3 ) &
       !      &                                        - zdiag_adv_heat(:,:) ) * z1_dt
@@ -202,16 +199,13 @@ CONTAINS
          !     (because advected fields are not perfectly bounded and tiny negative values can occur, e.g. -1.e-20)
          IF( ln_icethd ) THEN
             !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-            !   CALL ice_var_zapneg( zdt, pv_i, pv_s, psv_i, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i )
+            !   CALL ice_var_zapneg( zdt, pv_i, pv_s, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i )
             !ELSE
-            IF( nn_icesal == 4 ) THEN
-               CALL ice_var_zapneg( zdt, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i,  pszv_i=pszv_i )
-            ELSE
-               CALL ice_var_zapneg( zdt, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i )
-            ENDIF
+            !CALL ice_var_zapneg( zdt, pv_i, pv_s, poa_i, pa_i, pe_s, pe_i, pszv_i )
+            CALL ice_var_zapneg( zdt, pv_i, pv_s,        poa_i, pa_i, pe_s, pe_i, pszv_i, prdgc )
             !ENDIF
          ELSE
-            CALL ice_var_zapneg( zdt, pv_i, pv_s,               pa_i )
+            CALL ice_var_zapneg( zdt, pv_i, pv_s,               pa_i,                     prdgc )
          ENDIF
 
       ENDIF !IF( .NOT. ln_pureADV2D )
@@ -281,14 +275,14 @@ CONTAINS
          CALL lbc_lnk('adv_wnx_init', weno_ow_t_x,'T',1._wp, weno_ow_t_y,'T',1._wp )
       ENDIF
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: adv_wnx_init() => adding linear and optimal weight arrays @T to memory!'
       !$acc enter data copyin( weno_lw_t_x, weno_ow_t_x, weno_lw_t_y, weno_ow_t_y )
       IF( ln_damage ) THEN
          PRINT *, ' * info GPU: adv_wnx_init() => adding linear and optimal weight arrays @F to memory!'
          !$acc enter data copyin( weno_lw_f_x, weno_ow_f_x, weno_lw_f_y, weno_ow_f_y )
       ENDIF
-# endif
+#endif
 
 
       IF(lwp) THEN
@@ -324,11 +318,11 @@ CONTAINS
       sati1(:,:) = 0._wp
       zfs1(:,:) = 0._wp; zfs2(:,:) = 0._wp; zfs3(:,:) = 0._wp; zfs4(:,:) = 0._wp
       ztrk1(:,:) = 0._wp; ztrk2(:,:) = 0._wp; zoper(:,:) = 0._wp
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: adv_wnx_init() => adding WENO advection workspace arrays to memory'
       PRINT *, '            => sati1, zfs1, zfs2, zfs3, zfs4, ztrk1, ztrk2, zoper'
       !$acc enter data copyin( sati1, zfs1, zfs2, zfs3, zfs4, ztrk1, ztrk2, zoper )
-# endif
+#endif
       
       k_alloc = MAXVAL( ierr(:) )
       CALL mpp_sum ( crtnm, k_alloc )

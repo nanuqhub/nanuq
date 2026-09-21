@@ -31,12 +31,12 @@ MODULE ossprs
    PUBLIC   oss_prs_rcv    ! called by sbc
    PUBLIC   oss_prs_slab   ! called by ice_stp
 
-   LOGICAL, PUBLIC    ::   ln_ssxread    ! Ice initialisation: =T read a file ; =F anaytical initilaistion
+   LOGICAL,  PUBLIC   ::   ln_ssxread    ! Ice initialisation: =T read a file ; =F anaytical initilaistion
    LOGICAL            ::   ln_3d_uve     ! specify whether input velocity data is 3D
    LOGICAL,  PUBLIC   ::   ln_read_e3t   ! specify whether we must read `e3t` or not
    LOGICAL,  PUBLIC   ::   ln_read_frq   ! specify whether we must read `frq` or not
    REAL(wp), PUBLIC   ::   rn_e3t_0, rn_frq_0
-   REAL(wp), PUBLIC   ::   rn_mld_0      ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT USED'`
+   REAL(wp), PUBLIC   ::   rn_mld_0      ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT_USED'`
    LOGICAL,  PUBLIC   ::   ln_ssv_T      ! prescribed sea surface velocities are provided on T grid points (default is U,V!)
    LOGICAL,  PUBLIC   ::   ln_ssv_Fgrid  ! also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )
    LOGICAL,  PUBLIC   ::   ln_slab_sst   ! For standalone mode only: if ln_slab_sst=T => correct the prescribed SST based on a slab model approach
@@ -72,7 +72,7 @@ MODULE ossprs
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -101,20 +101,20 @@ CONTAINS
          IF( nfld_3d > 0 ) CALL fld_read( kt, sf_ssm_3d )      !==   read data at kt time step   ==!
          IF( nfld_2d > 0 ) CALL fld_read( kt, sf_ssm_2d )      !==   read data at kt time step   ==!
          !
-         IF( TRIM(sf_ssm_2d(jf_usp)%clrootname)=='NOT USED' )  sf_ssm_2d(jf_usp)%fnow(:,:,1) = 0._wp
-         IF( TRIM(sf_ssm_2d(jf_vsp)%clrootname)=='NOT USED' )  sf_ssm_2d(jf_vsp)%fnow(:,:,1) = 0._wp
+         IF( TRIM(sf_ssm_2d(jf_usp)%clrootname)=='NOT_USED' )  sf_ssm_2d(jf_usp)%fnow(:,:,1) = 0._wp
+         IF( TRIM(sf_ssm_2d(jf_vsp)%clrootname)=='NOT_USED' )  sf_ssm_2d(jf_vsp)%fnow(:,:,1) = 0._wp
          ssu_m(:,:) = sf_ssm_2d(jf_usp)%fnow(:,:,1) * umask(:,:,1)    ! u-velocity
          ssv_m(:,:) = sf_ssm_2d(jf_vsp)%fnow(:,:,1) * vmask(:,:,1)    ! v-velocity
          !
-         IF( TRIM(sf_ssm_2d(jf_sal)%clrootname)=='NOT USED' )                 sf_ssm_2d(jf_sal)%fnow(:,:,1) = 35._wp
-         IF( TRIM(sf_ssm_2d(jf_tem)%clrootname)=='NOT USED' ) CALL eos10_fzp_2d(sf_ssm_2d(jf_sal)%fnow(:,:,1), sf_ssm_2d(jf_tem)%fnow(:,:,1))
-         IF( TRIM(sf_ssm_2d(jf_ssh)%clrootname)=='NOT USED' )                 sf_ssm_2d(jf_ssh)%fnow(:,:,1) = 0._wp
+         IF( TRIM(sf_ssm_2d(jf_sal)%clrootname)=='NOT_USED' )                   sf_ssm_2d(jf_sal)%fnow(:,:,1) = 35._wp
+         IF( TRIM(sf_ssm_2d(jf_tem)%clrootname)=='NOT_USED' ) CALL eos10_fzp_2d(sf_ssm_2d(jf_sal)%fnow(:,:,1), sf_ssm_2d(jf_tem)%fnow(:,:,1))
+         IF( TRIM(sf_ssm_2d(jf_ssh)%clrootname)=='NOT_USED' )                   sf_ssm_2d(jf_ssh)%fnow(:,:,1) = 0._wp
          sst_m(:,:) = sf_ssm_2d(jf_tem)%fnow(:,:,1) * xmskt(:,:)    ! temperature
          sss_m(:,:) = sf_ssm_2d(jf_sal)%fnow(:,:,1) * xmskt(:,:)    ! salinity
          ssh_m(:,:) = sf_ssm_2d(jf_ssh)%fnow(:,:,1) * xmskt(:,:)    ! sea surface height
          !
          IF(ln_slab_sst) THEN
-            IF( TRIM(sf_ssm_2d(jf_mld)%clrootname)=='NOT USED' )   sf_ssm_2d(jf_mld)%fnow(:,:,1) = rn_mld_0
+            IF( TRIM(sf_ssm_2d(jf_mld)%clrootname)=='NOT_USED' )   sf_ssm_2d(jf_mld)%fnow(:,:,1) = rn_mld_0
             IF( lk_read_mld ) THEN
                mld_m(:,:) = sf_ssm_2d(jf_mld)%fnow(:,:,1) * xmskt(:,:)    ! mixed layer depth
             ELSE
@@ -134,8 +134,8 @@ CONTAINS
          ENDIF
          !
          IF( ln_ssv_Fgrid ) THEN
-            IF( TRIM(sf_ssm_2d(jf_usf)%clrootname)=='NOT USED' )  sf_ssm_2d(jf_usf)%fnow(:,:,1) = 0._wp
-            IF( TRIM(sf_ssm_2d(jf_vsf)%clrootname)=='NOT USED' )  sf_ssm_2d(jf_vsf)%fnow(:,:,1) = 0._wp
+            IF( TRIM(sf_ssm_2d(jf_usf)%clrootname)=='NOT_USED' )  sf_ssm_2d(jf_usf)%fnow(:,:,1) = 0._wp
+            IF( TRIM(sf_ssm_2d(jf_vsf)%clrootname)=='NOT_USED' )  sf_ssm_2d(jf_vsf)%fnow(:,:,1) = 0._wp
             ssu_v_m(:,:) = sf_ssm_2d(jf_usf)%fnow(:,:,1) * vmask(:,:,1)    ! u-velocity
             ssv_u_m(:,:) = sf_ssm_2d(jf_vsf)%fnow(:,:,1) * umask(:,:,1)    ! v-velocity
          ENDIF
@@ -168,9 +168,6 @@ CONTAINS
       IF( ln_timing )   CALL timing_stop( 'oss_prs_rcv')
       !
    END SUBROUTINE oss_prs_rcv
-
-
-
 
 
 
@@ -211,6 +208,16 @@ CONTAINS
       ! A/ temperature increment for the whole mixed layer based on the flux received by the liquid
       !    ocean during the previous time step
 
+
+#if defined _TRDBG
+      !$acc update self( psst_m, psss_m, pmld_m, pqsr, pqns, pemp, psst_s, psss_s, pt_bo )
+      CALL TRDBG( 'oss_prs_slab:IN', 'psst_m, psss_m, pmld_m', psst_m, psss_m, pmld_m )
+      CALL TRDBG( 'oss_prs_slab:IN', 'pqsr, pqns, pemp',       pqsr, pqns, pemp )
+      CALL TRDBG( 'oss_prs_slab:IN', 'psst_s, psss_s, pt_bo',  psst_s, psss_s, pt_bo )
+#endif
+
+
+
       IF( ln_rstart ) THEN
          PRINT *, 'FIX `sst_s` & `sss_s` for restarts!!!'; STOP
       ENDIF
@@ -232,7 +239,7 @@ CONTAINS
             !   !PRINT *, '  * qns   = ', REAL(qns(ji,jj),4)
             !   PRINT *, ' *-emp_b        = ', REAL(-pemp(ji,jj),4)
             !   PRINT *, ' * qns_b        = ', REAL(pqns(ji,jj),4)
-            !   PRINT *, ' * qsr_b        = ', REAL(pqsr(ji,jj),4)            
+            !   PRINT *, ' * qsr_b        = ', REAL(pqsr(ji,jj),4)
             !   PRINT *, ' * mld_m        = ', REAL(pmld_m(ji,jj),4)
             !   PRINT *, ' * sss_m        = ', REAL(psss_m(ji,jj),4)
             !   PRINT *, ' * FPT ==> t_bo = ', REAL( pt_bo(ji,jj),4)
@@ -255,7 +262,7 @@ CONTAINS
             !   PRINT *, '  * zsss_n = ', REAL(zsss_n,4)
             !ENDIF
 
-            
+
             zQjoules = ( pqns(ji,jj) + pqsr(ji,jj) ) * pdt   ! Energy received/lost per surface area during `pdt` (J/m2) !#LOLOfixme: consider solar penetration for qsr !?
             zinc =  zQjoules * r1_rho0_rcp * z1_mld   !  rho0_rcp ~ J/K/m3 => rho0_rcp*mld ~ J/K/m2 => zinc = (J/m2) / (J/K/m2) ==> K !
             zsst_n  = psst_s(ji,jj) + zinc                    !  expected new temperature in the MLD...
@@ -304,6 +311,12 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+
+
+#if defined _TRDBG
+      !$acc update self( psst_s, psss_s, pt_bo )
+      CALL TRDBG( 'oss_prs_slab:OUT', 'psst_s, psss_s, pt_bo',  psst_s, psss_s, pt_bo )
+#endif
 
       !$acc end data
       IF( ln_timing )   CALL timing_stop( 'oss_prs_slab')
@@ -390,7 +403,7 @@ CONTAINS
          ENDIF
       ENDIF
 
-      lk_read_mld = ( ln_slab_sst .AND. (TRIM(sn_mld%clname)/='NOT USED') )
+      lk_read_mld = ( ln_slab_sst .AND. (TRIM(sn_mld%clname)/='NOT_USED') )
       IF(lwp) WRITE(numout,*) '           *      lk_read_mld =', lk_read_mld
 
       !! switch off stuff that isn't sensible with a standalone module
@@ -406,10 +419,10 @@ CONTAINS
             IF( ierr > 0 ) THEN
                CALL ctl_stop( 'oss_prs_init: unable to allocate `mld_m`' )   ;   RETURN
             ENDIF
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
             PRINT *, ' * info GPU: oss_prs_init() => adding `mld_m` array to memory!'
             !$acc enter data copyin( mld_m )
-# endif
+#endif
          ENDIF
          IF( ln_ssv_Fgrid ) THEN
             IF(lwp) WRITE(numout,*) '  *** Allocating `ssu_v_m` & `ssv_u_m` arrays !!!'
@@ -417,10 +430,10 @@ CONTAINS
             IF( ierr > 0 ) THEN
                CALL ctl_stop( 'oss_prs_init: unable to allocate `ssu_v_m` & `ssv_u_m`' )   ;   RETURN
             ENDIF
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
             PRINT *, ' * info GPU: oss_prs_init() => adding `ssu_v_m` & `ssv_u_m` arrays to memory!'
             !$acc enter data copyin( ssu_v_m, ssv_u_m )
-# endif
+#endif
          ENDIF
 
 

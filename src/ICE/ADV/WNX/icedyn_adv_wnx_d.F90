@@ -12,11 +12,11 @@ MODULE icedyn_adv_wnx_d
    !
    USE icedyn_adv_wnx_adv, ONLY : wenoX_rk3
    !
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
-# else
+#else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-# endif
+#endif
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -25,7 +25,7 @@ MODULE icedyn_adv_wnx_d
    PUBLIC   ice_dyn_adv_wnx_d   ! called by icedyn_adv
 
    !!----------------------------------------------------------------------
-   !! NANUQ_beta
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 
@@ -73,7 +73,7 @@ CONTAINS
       !LOLO: as oposed to `ice_dyn_adv_wnx`, here input arrays to advect seem to be `lbc_lnk`ed
       !      => so no `lbc_lnk`ing of `p1md` !!!
       ! ==> REALLY ???
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       CALL lbc_lnk_gpu( crtnm, p1md )
 #else
       CALL lbc_lnk(     crtnm, p1md,cgt,1._wp )

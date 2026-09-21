@@ -21,11 +21,11 @@ MODULE icedyn_rdgrft
    USE in_out_manager ! I/O manager
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu     ! lateral boundary conditions (or mpp links)
-# else
+#else
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-# endif
+#endif
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -69,7 +69,6 @@ MODULE icedyn_rdgrft
    !
    REAL(wp), PARAMETER ::   hrdg_hi_min = 1.1_wp    ! min ridge thickness multiplier: min(hrdg/hi)
    REAL(wp), PARAMETER ::   hi_hrft     = 0.5_wp    ! rafting multiplier: (hi/hraft)
-   !$acc declare create( np_strh79, np_strr75, np_strcst, hrdg_hi_min, hi_hrft )
    !
    ! ** namelist (namdyn_rdgrft) **
    LOGICAL  ::   ln_str_smooth    ! ice strength spatial smoothing
@@ -100,7 +99,7 @@ MODULE icedyn_rdgrft
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL licence     (./LICENSE)
    !!----------------------------------------------------------------------
@@ -125,12 +124,12 @@ CONTAINS
             &      hrmax (jpi,jpj,jpl)  , hrexp (jpi,jpj,jpl), hi_hrdg(jpi,jpj,jpl)  , araft(jpi,jpj,jpl) , &
             &      airdg1(jpi,jpj)      , airft1(jpi,jpj)    , airdg2(jpi,jpj)       , airft2(jpi,jpj)    , &
             &      STAT=ice_dyn_rdgrft_alloc )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          PRINT *, ' * info GPU: icedyn_rdgrft() => adding ridging/rafting arrays to memory!'
          PRINT *, '            => closing_net, opning, closing_gross, apartf, hrmin, hraft, aridge'
          PRINT *, '            => hrmax, hrexp, hi_hrdg, araft, airdg1, airft1, airdg2, airft2'
          !$acc enter data copyin( closing_net, opning, closing_gross, apartf, hrmin, hraft, aridge, hrmax, hrexp, hi_hrdg, araft, airdg1, airft1, airdg2, airft2 )
-# endif
+#endif
       ENDIF
 
       CALL mpp_sum ( 'icedyn_rdgrft', ice_dyn_rdgrft_alloc )
@@ -199,13 +198,12 @@ CONTAINS
          IF(lwp) WRITE(numout,*)'ice_dyn_rdgrft: ice ridging and rafting'
          IF(lwp) WRITE(numout,*)'~~~~~~~~~~~~~~'
       ENDIF
-      !PRINT *, ' *** LOLO entering `ice_dyn_rdgrft` kt =', kt, ' (ll_diag_rdg =',ll_diag_rdg,')'
 
       ! Initialise ridging diagnostics if required
       IF( ll_diag_rdg ) THEN
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'STOP',  'icedyn_rdgrft: `ll_diag_rdg=T` not supported yet on GPU!'  )
-# endif
+#endif
          opning_2d(:,:) = 0.0_wp
          dairdg1dt(:,:) = 0.0_wp ; dairft1dt(:,:) = 0.0_wp
          dairdg2dt(:,:) = 0.0_wp ; dairft2dt(:,:) = 0.0_wp
@@ -374,7 +372,7 @@ CONTAINS
          CALL iom_put( 'rft_gain',  dairft2dt(:,:) * zmsk(:,:) )  ! New rafted ice area gain rate
       ENDIF
 
-      ! clem: those fields must be updated on the halos: ato_i, a_i, v_i, v_s, sv_i, oa_i, a_ip, v_ip, v_il, e_i, e_s, szv_i
+      ! clem: those fields must be updated on the halos: ato_i, a_i, v_i, v_s, oa_i, a_ip, v_ip, v_il, e_i, e_s, szv_i
 
       ! clem: I think we can comment this line but I am not sure it does not change results
 
@@ -385,7 +383,6 @@ CONTAINS
       !IF( ln_icediachk )   CALL ice_cons2D  (1, 'icedyn_rdgrft',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft) ! conservation
 
       !$acc end data
-      !PRINT *, ' *** LOLO exiting `ice_dyn_rdgrft` kt =', kt ;      PRINT *, ''
       IF( ln_timing    )   CALL timing_stop ('icedyn_rdgrft')                                                             ! timing
       !
    END SUBROUTINE ice_dyn_rdgrft
@@ -787,16 +784,11 @@ CONTAINS
                         zeirft(jk) = e_i(ji,jj,jk,jl1) * afrft
                      END DO
 
-                     IF( nn_icesal == 4 ) THEN
-                        !$acc loop seq
-                        DO jk=1, nlay_i
-                           zsirdg(jk) = szv_i(ji,jj,jk,jl1) * afrdg + vsw * psss(ji,jj) * r1_nlay_i
-                           zsirft(jk) = szv_i(ji,jj,jk,jl1) * afrft
-                        END DO
-                     ELSE
-                        zsirdg(1) = sv_i(ji, jj, jl1) * afrdg + vsw * psss(ji,jj)
-                        zsirft(1) = sv_i(ji, jj, jl1) * afrft
-                     ENDIF
+                     !$acc loop seq
+                     DO jk=1, nlay_i
+                        zsirdg(jk) = szv_i(ji,jj,jk,jl1) * afrdg + vsw * psss(ji,jj) * r1_nlay_i
+                        zsirft(jk) = szv_i(ji,jj,jk,jl1) * afrft
+                     END DO
 
                      ! Ice-ocean exchanges associated with ice porosity
                      wfx_dyn(ji,jj) = wfx_dyn(ji,jj) - vsw * rhoi * r1_Dt_ice   ! increase in ice volume due to seawater frozen in voids
@@ -822,13 +814,6 @@ CONTAINS
                      !   ENDIF
                      !ENDIF
 
-                     ! virtual salt flux to keep salinity constant
-                     IF( nn_icesal == 1 .OR. nn_icesal == 3 )  THEN
-                        zsirdg(1)    = zsirdg(1)    - ( psss(ji,jj) - s_i(ji,jj,jl1) ) * vsw                      ! ridge salinity = s_i
-                        sfx_bri(ji,jj) = sfx_bri(ji,jj) + ( psss(ji,jj) - s_i(ji,jj,jl1) ) * vsw * rhoi * r1_Dt_ice   ! put back sss_s into the ocean
-                        !                                                                                          ! and get  s_i  from the ocean
-                     ENDIF
-
                      ! Remove area, volume of new ridge to each category jl1
                      !------------------------------------------------------
                      a_i (ji,jj,jl1) = a_i (ji,jj,jl1) - airdg1(ji,jj) - airft1(ji,jj)
@@ -849,14 +834,10 @@ CONTAINS
                         e_i(ji,jj,jk,jl1) = e_i(ji,jj,jk,jl1)   * ( 1._wp - afrdg - afrft )
                      END DO
                      !
-                     IF( nn_icesal == 4 ) THEN
-                        !$acc loop seq
-                        DO jk=1, nlay_i
-                           szv_i(ji,jj,jk,jl1) = szv_i(ji,jj,jk,jl1) * ( 1._wp - afrdg - afrft )
-                        END DO
-                     ELSE
-                        sv_i(ji,jj,jl1) = sv_i(ji,jj,jl1) * ( 1._wp - afrdg - afrft )
-                     ENDIF
+                     !$acc loop seq
+                     DO jk=1, nlay_i
+                        szv_i(ji,jj,jk,jl1) = szv_i(ji,jj,jk,jl1) * ( 1._wp - afrdg - afrft )
+                     END DO
 
                   ENDIF
 
@@ -955,14 +936,10 @@ CONTAINS
                         DO jk=1, nlay_i
                            e_i  (ji,jj,jk,jl2) = e_i  (ji,jj,jk,jl2) + ( zeirdg(jk)              * fvol + zeirft(jk)              * zswitch )
                         END DO
-                        IF( nn_icesal == 4 ) THEN
-                           !$acc loop seq
-                           DO jk=1, nlay_i
-                              szv_i(ji,jj,jk,jl2) = szv_i(ji,jj,jk,jl2) + ( zsirdg(jk) * fvol + zsirft(jk) * zswitch )
-                           END DO
-                        ELSE
-                           sv_i (ji,jj,  jl2) = sv_i (ji, jj, jl2) + ( zsirdg(1) * fvol + zsirft(1) * zswitch )
-                        ENDIF
+                        !$acc loop seq
+                        DO jk=1, nlay_i
+                           szv_i(ji,jj,jk,jl2) = szv_i(ji,jj,jk,jl2) + ( zsirdg(jk) * fvol + zsirft(jk) * zswitch )
+                        END DO
                         !
                      ENDIF
 
@@ -980,8 +957,7 @@ CONTAINS
       ! roundoff errors
       !----------------
       ! In case ridging/rafting lead to very small negative values (sometimes it happens)
-      !CALL ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i, a_ip, v_ip, v_il, e_s, e_i, szv_i, ll_ice_present)
-      CALL  ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i,                   e_s, e_i, szv_i, ll_ice_present)
+      CALL  ice_var_roundoff( a_i, v_i, v_s, oa_i,                   e_s, e_i, szv_i, ll_ice_present)
 
       !$acc end data
       IF( ln_timing )  CALL timing_stop('rdgrft_shift')
@@ -1020,7 +996,8 @@ CONTAINS
 
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_strength')
-      !$acc data present( strength, apartf, araft, aridge, hi_hrdg, hi_hrdg, hraft, hrmin, hrmax, hrexp ) create( ll_ice_present, zistr )
+      !LOLOgpu: fixme `za_i_cap` not needed by all options...
+      !$acc data present(strength,apartf,araft,aridge,hi_hrdg,hraft,hrmin,hrmax,hrexp) create(ll_ice_present,zistr,za_i_cap)
 
       !LOLOrm:
       ! The 2 following sanity tests should not belong here, it is a consequence of `ice_strength()` being always used by EVP, and using
@@ -1062,17 +1039,16 @@ CONTAINS
       SELECT CASE( nice_str )          !--- Set which ice strength is chosen
 
       CASE ( np_strr75 )           !== Rothrock(1975)'s method ==!
-         !$acc data present( apartf, araft, aridge, hi_hrdg, hi_hrdg, hraft, hrmin, hrmax, hrexp ) create( za_i_cap )
-
          ! this should be defined once for all at the 1st time step
          zcp = 0.5_wp * grav * (rho0-rhoi) * rhoi * r1_rho0   ! proport const for PE
          !
          ! Initialise local capped a_i to zero
          ! Note that if 0 < a_i < epsi10, can end up with zhi=0 but apartf>0 rdgrft_prep; za_i_cap avoids this here
-         !$acc parallel loop collapse(3)
-         DO jl = 1, jpl
-            DO jj=Njs0, Nje0
-               DO ji=Nis0, Nie0
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               !$acc loop seq
+               DO jl = 1, jpl
                   za_i_cap(ji,jj,jl) = 0._wp
                END DO
             END DO
@@ -1083,10 +1059,11 @@ CONTAINS
          IF( kice_p > 0 ) THEN
 
             ! Cap a_i to avoid zhi in rdgrft_prep going below minimum
-            !$acc parallel loop collapse(3)
-            DO jl = 1, jpl
-               DO jj=Njs0, Nje0
-                  DO ji=Nis0, Nie0
+            !$acc parallel loop collapse(2)
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  !$acc loop seq
+                  DO jl = 1, jpl
                      za_i_cap(ji,jj,jl) = a_i(ji,jj,jl)
                   END DO
                END DO
@@ -1164,14 +1141,12 @@ CONTAINS
 
          ENDIF !IF( kice_p > 0 )
          !
-# if  defined _OPENACC
+#if  defined _OPENACC || defined _OPENMP
          CALL lbc_lnk_gpu( 'icedyn_rdgrft', zistr )          ! this call could be removed if calculations were done on the full domain
-# else
+#else
          CALL lbc_lnk(     'icedyn_rdgrft', zistr, 'T', 1.0_wp ) ! this call could be removed if calculations were done on the full domain
          !                                                   ! but we decided it is more efficient this way
-# endif
-         !$acc end data
-
+#endif
 
       CASE ( np_strh79 )           !== Hibler(1979)'s method ==!
          !
@@ -1217,11 +1192,11 @@ CONTAINS
             END DO
          END DO
          !$acc end parallel loop
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL lbc_lnk_gpu( 'icedyn_rdgrft', strength )
-# else
+#else
          CALL lbc_lnk(     'icedyn_rdgrft', strength, 'T', 1._wp )
-# endif
+#endif
          !
       ELSE
          !$acc parallel loop collapse(2)
@@ -1364,13 +1339,13 @@ CONTAINS
          IF( ice_dyn_rdgrft_alloc() /= 0 )   CALL ctl_stop( 'STOP', 'ice_dyn_rdgrft_init: unable to allocate arrays' )
       ENDIF
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       ! Those declared into `par_ice.F90`:
       !$acc update device( rn_delta_ecc, ln_str_H79, rn_crhg, rn_pstar, ln_str_R75, rn_pe_rdg, ln_str_CST, rn_str )
       ! The rest:
       !$acc update device( nice_str, ln_str_smooth, ln_distf_lin, ln_distf_exp, rn_murdg, rn_csrdg, ln_partf_lin, rn_gstar, ln_partf_exp, rn_astar )
       !$acc update device( ln_ridging, rn_hstar, rn_porordg, rn_fsnwrdg, rn_fpndrdg, ln_rafting, rn_hraft, rn_craft, rn_fsnwrft, rn_fpndrft )
-# endif
+#endif
 
    END SUBROUTINE ice_dyn_rdgrft_init
 

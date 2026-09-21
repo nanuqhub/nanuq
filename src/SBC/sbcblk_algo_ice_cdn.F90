@@ -58,7 +58,7 @@ CONTAINS
       !!
       !!----------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj)                       ::   CdN10_f_LU12  ! neutral FORM drag coefficient contribution over sea-ice
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)           ::   pfrice ! ice concentration [fraction]  => at_i_b  ! NOT USED if pSc2, phf and pDi all provided...
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)           ::   pfrice ! ice concentration [fraction]  => at_i_b  ! Not used if pSc2, phf and pDi all provided...
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)           ::   pz0w   ! roughness length over water  [m]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in), OPTIONAL ::   pSc2   ! squared shletering function [0-1] (Sc->1 for large distance between floes, ->0 for small distances)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in), OPTIONAL ::   phf    ! mean freeboard of floes    [m]
@@ -115,7 +115,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj)             ::   CdN_f_LU12_eq36 ! neutral FORM drag coefficient contribution over sea-ice
       REAL(wp),                     INTENT(in) ::   pzu    ! reference height                       [m]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) ::   pfrice ! ice concentration [fraction]  => at_i_b  ! NOT USED if pSc2, phf and pDi all provided...
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) ::   pfrice ! ice concentration [fraction]  => at_i_b  ! Not used if pSc2, phf and pDi all provided...
       !!----------------------------------------------------------------------
       REAL(wp) :: ztmp, zrlog, zfri, zhf, zDi
       INTEGER  :: ji, jj
@@ -209,7 +209,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj)                       ::   CdN_f_LG15  ! neutral FORM drag coefficient contribution over sea-ice
       REAL(wp),                     INTENT(in )          ::   pzu    ! reference height                       [m]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)           ::   pfrice ! ice concentration [fraction]  => at_i_b  ! NOT USED if pSc2, phf and pDi all provided...
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)           ::   pfrice ! ice concentration [fraction]  => at_i_b  ! Not used if pSc2, phf and pDi all provided...
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)           ::   pz0i   ! roughness length over ICE  [m] (in LU12, it's over water ???)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in), OPTIONAL ::   pSc2   ! squared shletering function [0-1] (Sc->1 for large distance between floes, ->0 for small distances)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in), OPTIONAL ::   phf    ! mean freeboard of floes    [m]

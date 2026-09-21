@@ -41,7 +41,7 @@ CONTAINS
       &            pwndm, ptaui, ptauj, ptaum         &
       &          , ptm_su, pssu_ice, pssv_ice         &
       &          , pssq_ice, pcd_du_ice, psen_ice     &
-      &          , pevp_ice, pwndm_ice, pfrac_oce     &
+      &          , pevp_ice, pfrac_oce                &
       &          , ptaui_ice, ptauj_ice               &
       &      )
 
@@ -89,7 +89,6 @@ CONTAINS
       REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   pcd_du_ice ! Cd x Du over ice (T-point)
       REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   psen_ice   ! Ch x Du over ice (T-point)
       REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   pevp_ice   ! Ce x Du over ice (T-point)
-      REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   pwndm_ice  ! ||uwnd - uice||
       REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   pfrac_oce  ! ocean fraction
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)   ::   ptaui_ice  ! ice-surface taux stress (T-point)
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)   ::   ptauj_ice  ! ice-surface tauy stress (T-point)
@@ -121,8 +120,8 @@ CONTAINS
       !! pwndm contains | U10m - U_oce | (see blk_oce_1 in sbcblk)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
-            zzoce         = pCd_du    (ji,jj) * pwndm    (ji,jj)
-            zzice         = pCd_du_ice(ji,jj) * pwndm_ice(ji,jj)
+            zzoce         = pCd_du    (ji,jj) * pwndm(ji,jj)
+            zzice         = pCd_du_ice(ji,jj) * pwndm(ji,jj)
             ustar2(ji,jj) = zzoce * pfrac_oce(ji,jj) + (1._wp - pfrac_oce(ji,jj)) * zzice
             zsspt(ji,jj) = theta_exner( psst(ji,jj)+rt0, pslp_dta(ji,jj) )   ! potential SST [K]
             !
@@ -131,12 +130,23 @@ CONTAINS
       END DO
 
 
+#if defined _ABLDBG
+      IF(lwp) WRITE(numdbg,*) 'LOLO: abl_stp #1: nt_a =', nt_a
+      CALL TRDBG_3D( 'abl_stp #1: ',  'u_abl', u_abl(:,:,:,nt_a) )
+#endif
+
+
 
       !                            !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
       !                            !  1 *** Advance TKE to time n+1 and compute Avm_abl, Avt_abl, PBLh
       !                            !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
       CALL abl_zdf_tke( )
+
+
+#if defined _ABLDBG
+      CALL TRDBG_3D( 'abl_stp #2: ',  'u_abl', u_abl(:,:,:,nt_a) )
+#endif
 
 
       !                            !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -225,6 +235,11 @@ CONTAINS
       END DO             ! end outer loop
       !-------------
 
+#if defined _ABLDBG
+      CALL TRDBG_3D( 'abl_stp #3: ',  'u_abl', u_abl(:,:,:,nt_a) )
+#endif
+
+
       !                            !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
       !                            !  3 *** Compute Coriolis term with geostrophic guide
       !                            !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -304,6 +319,14 @@ CONTAINS
                zpgau(:,:,:) = 0._wp
                zpgav(:,:,:) = 0._wp
             ENDIF
+
+#if defined _ABLDBG
+            IF(lwp) WRITE(numdbg,*) 'LOLO abl_stp #4: rDt_abl =', rDt_abl
+            IF(lwp) WRITE(numdbg,*) 'LOLO abl_stp #4: e3t_abl =', e3t_abl
+            CALL TRDBG_3D( 'abl_stp #4: ',  'pgu_dta, zpgau', pgu_dta, zpgau )
+            CALL TRDBG_3D( 'abl_stp #4: ',  'u_abl', u_abl(:,:,:,nt_a) )
+#endif
+
 
 
             DO jj=Njs0, Nje0
@@ -665,8 +688,8 @@ CONTAINS
       CALL lbc_lnk( 'ablmod', ptaui_ice(:,:) , 'T', -1.0_wp, ptauj_ice(:,:) , 'T', -1.0_wp )
       !
       IF(sn_cfctl%l_prtctl) THEN
-         CALL prt_ctl( tab2d_1=ptaui_ice , clinfo1=' abl_stp: utau_ice : ', mask1=tmask,   &
-            &          tab2d_2=ptauj_ice , clinfo2='          vtau_ice : ', mask2=tmask )
+         CALL prt_ctl( tab2d_1=ptaui_ice , clinfo1=' abl_stp: taux_ai_t : ', mask1=tmask,   &
+            &          tab2d_2=ptauj_ice , clinfo2='          tauy_ai_t : ', mask2=tmask )
       ENDIF
       !                            !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
       !                            !  8 *** Swap time indices for the next timestep

@@ -16,7 +16,7 @@ MODULE icevar
    !!                        - t_s (jpi,jpj,jpl)
    !!                        - e_i (jpi,jpj,nlay_i,jpl)
    !!                        - e_s (jpi,jpj,nlay_s,jpl)
-   !!                        - sv_i(jpi,jpj,jpl)
+   !!                        - szv_i(jpi,jpj,nlay_i,jpl)
    !!                        - oa_i(jpi,jpj,jpl)
    !!                 VEQV : equivalent variables sometimes used in the model
    !!                        - h_i(jpi,jpj,jpl)
@@ -31,9 +31,6 @@ MODULE icevar
    !!                        - st_i(jpi,jpj)
    !!                        - et_s(jpi,jpj)  total snow heat content
    !!                        - et_i(jpi,jpj)  total ice thermal content
-   !!                        - sm_i(jpi,jpj)  mean ice salinity
-   !!                        - tm_i(jpi,jpj)  mean ice temperature
-   !!                        - tm_s(jpi,jpj)  mean snw temperature
    !!----------------------------------------------------------------------
    !!   ice_var_agg       : integrate variables over layers and categories
    !!   ice_var_glo2eqv   : transform from VGLO to VEQV
@@ -61,9 +58,9 @@ MODULE icevar
    USE remap_weno,    ONLY: rmpT2F_A_h_wn5s
 
    USE lbclnk
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
-# endif
+#endif
 
    USE timing
 
@@ -86,7 +83,7 @@ MODULE icevar
    PUBLIC   ice_var_zapsmall_dyn
    PUBLIC   ice_var_zapneg
    PUBLIC   ice_var_roundoff
-   PUBLIC   ice_var_brine
+   !PUBLIC   ice_var_brine
    !PUBLIC   ice_var_enthalpy ! ==> inlined where needed
    PUBLIC   ice_var_vremap
    !PUBLIC   snw_ent
@@ -98,11 +95,6 @@ MODULE icevar
    PUBLIC   ice_var_hpiling
    PUBLIC   ice_var_cap_at
 
-
-   PUBLIC   l_is_it_a_nan
-   PUBLIC   l_is_it_a_inf
-   PUBLIC   test4inf
-   PUBLIC   test4nan
 
    INTERFACE ice_var_zapneg
       MODULE PROCEDURE ice_var_zapneg_dyn_thd_pnd, ice_var_zapneg_dyn_thd, ice_var_zapneg_dyn
@@ -124,13 +116,8 @@ MODULE icevar
       MODULE PROCEDURE ice_var_snwblow_1d, ice_var_snwblow_2d
    END INTERFACE ice_var_snwblow
 
-   INTERFACE test4inf
-      MODULE PROCEDURE test4inf_2d, test4inf_3d
-   END INTERFACE test4inf
-
-
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2025)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -151,72 +138,57 @@ CONTAINS
       !!
       !!   => only used when `ln_dynADV2D==T` with `jpl==1` !!!
       !!-------------------------------------------------------------------
-      INTEGER  ::   ji, jj   ! dummy loop indices
-      REAL(wp) ::   z1_at_i
+      INTEGER  ::   ji, jj, jk
+      REAL(wp) ::   z1_at_i, zsum
       !!-------------------------------------------------------------------
-      !$acc data present( af_i, a_i, at_i, ato_i, hm_i, hm_i_f, hm_s, kmsk_ice_f, kmsk_ice_t, v_i, v_s, vt_i, vt_s )
-      !    au_i, av_i,  kmsk_ice_u, kmsk_ice_v, umask, vmask
-
+      !$acc data present( af_i, a_i, at_i, ato_i, xht, xhf, kmsk_ice_f, kmsk_ice_t, v_i, v_s, vt_i, vt_s )
+      !
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
             !
             vt_i(ji,jj)  =  v_i(ji,jj,1)
             vt_s(ji,jj)  =  v_s(ji,jj,1)
-            st_i(ji,jj)  = sv_i(ji,jj,1)
             at_i(ji,jj)  =  a_i(ji,jj,1)
             !
             ato_i(ji,jj) = 1._wp - at_i(ji,jj)         ! open water fraction
             !
-            z1_at_i = 0._wp
-            IF( at_i(ji,jj) > epsi20 ) z1_at_i = 1._wp / at_i(ji,jj)
-            hm_i(ji,jj) = vt_i(ji,jj) * z1_at_i
-            hm_s(ji,jj) = vt_s(ji,jj) * z1_at_i
+            z1_at_i = MERGE( 1._wp / MAX(at_i(ji,jj),epsi20)  ,  0._wp  ,  at_i(ji,jj) > epsi20 )
+            !
+            xht(ji,jj) = vt_i(ji,jj) * z1_at_i
+            !
+            zsum = 0._wp
+            !$acc loop seq
+            DO jk=1, nlay_i
+               zsum = zsum + szv_i(ji,jj,jk,1) !#LOLOfixme: why `jl==1` ?
+            END DO
+            st_i(ji,jj)  = zsum
             !
          END DO
       END DO
       !$acc end parallel loop
 
-# if defined _OPENACC
-      CALL lbc_lnk_gpu( 'ice_var_agg_adv2d_gpu',  at_i, hm_i )
-# else
-      CALL lbc_lnk(     'ice_var_agg_adv2d_gpu',  at_i,'T',1._wp, hm_i,'T',1._wp ) !LOLOfixme: `at_i` or/and `hm_i` LBC_LNKed!
+#if defined _OPENACC || defined _OPENMP
+      CALL lbc_lnk_gpu( 'ice_var_agg_adv2d_gpu',  at_i, xht )
+#else
+      CALL lbc_lnk(     'ice_var_agg_adv2d_gpu',  at_i,'T',1._wp, xht,'T',1._wp ) !LOLOfixme: `at_i` or/and `xht` LBC_LNKed!
       !                                                                        ! => shows up when `ln_use_weno_rmp` !
       !                                                                        ! => scary, so doing it here...
-# endif
+#endif
 
       !! Ice concentration and thickness @F,U,V:
       IF( ln_use_weno_rmp ) THEN
-         CALL rmpT2F_A_h_wn5s( at_i, hm_i, af_i, hm_i_f )
+         CALL rmpT2F_A_h_wn5s( at_i, xht, af_i, xhf )
       ELSE
-         CALL do_rmpT2F( at_i, af_i,    lconserv=.TRUE. )
-         CALL do_rmpT2F( hm_i, hm_i_f,  lconserv=.TRUE. )
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               af_i(ji,jj)   = MIN( MAX(   af_i(ji,jj), 0._wp ), rn_amax )
-               hm_i_f(ji,jj) =      MAX( hm_i_f(ji,jj), 0._wp )
-            END DO
-         END DO
-         !$acc end parallel loop
+         CALL do_rmpT2F( at_i, af_i,  vmin=0._wp, vmax=rn_amax, lconserv=.TRUE. )
+         CALL do_rmpT2F(  xht,  xhf,  vmin=0._wp,               lconserv=.TRUE. )
       ENDIF
-      !
-      !CALL do_rmpT2U( at_i, au_i,  lconserv=.TRUE. )
-      !CALL do_rmpT2V( at_i, av_i,  lconserv=.TRUE. )
-!!$acc parallel loop collapse(2)
-      !DO jj=Njs0-nn_hls, Nje0+nn_hls
-      !   DO ji=Nis0-nn_hls, Nie0+nn_hls
-      !      au_i(ji,jj) = MIN( MAX( au_i(ji,jj) , 0._wp ) , rn_amax )
-      !      av_i(ji,jj) = MIN( MAX( av_i(ji,jj) , 0._wp ) , rn_amax )
-      !   END DO
-      !END DO
-!!$acc end parallel loop
 
-# if defined _OPENACC
-      CALL lbc_lnk_gpu( 'ice_var_agg_adv2d_gpu',  af_i,  hm_i_f )
-# else
-      CALL lbc_lnk(     'ice_var_agg_adv2d_gpu',  af_i,'F',1._wp,  hm_i_f,'F',1._wp )
-# endif
+#if defined _OPENACC || defined _OPENMP
+      CALL lbc_lnk_gpu( 'ice_var_agg_adv2d_gpu',  af_i,  xhf )
+#else
+      CALL lbc_lnk(     'ice_var_agg_adv2d_gpu',  af_i,'F',1._wp,  xhf,'F',1._wp )
+#endif
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -237,7 +209,6 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
       !$acc end data
       !
    END SUBROUTINE ice_var_agg_adv2d_gpu
@@ -252,114 +223,37 @@ CONTAINS
 # include "icevar_salprof_gpu.h90"
 
 
-   SUBROUTINE ice_var_zapsmall
+   SUBROUTINE ice_var_zapsmall( l_do_h )
       !!-------------------------------------------------------------------
       !!                   ***  ROUTINE ice_var_zapsmall ***
       !!
       !! ** Purpose :   Remove too small sea ice areas and correct fluxes
       !!-------------------------------------------------------------------
-      INTEGER  ::   ji, jj, jl, jk   ! dummy loop indices
-      REAL(wp) ::   zsmall
+      LOGICAL, OPTIONAL, INTENT(in) :: l_do_h
       !!-------------------------------------------------------------------
-      !$acc data present( a_i, at_i, e_i, e_s, hfx_res, h_i, h_s, oa_i, sfx_res, sv_i, t_i, t_s, t_su, v_i, v_s, vt_i, wfx_pnd, wfx_res, sz_i, szv_i )
-      !
-      !$acc parallel loop collapse(3)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            DO jl = 1, jpl
-               IF( a_i(ji,jj,jl) > epsi10 ) THEN
-                  h_i(ji,jj,jl) = v_i(ji,jj,jl) / a_i(ji,jj,jl)
-               ELSE
-                  h_i(ji,jj,jl) = 0._wp
-               ENDIF
-            END DO
-         END DO
-      END DO
-      !$acc end parallel loop
-      !
-      !-----------------------------------------------------------------
-      ! Zap ice volume, add salt to ocean
-      !-----------------------------------------------------------------
-      IF( nn_icesal == 4 ) THEN
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
-               !$acc loop seq
-               DO jl = 1, jpl
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     zsmall = MIN( a_i(ji,jj,jl), v_i(ji,jj,jl),  h_i(ji,jj,jl) )
-                     IF( zsmall < epsi10 ) THEN
-                        ! update exchanges with ocean
-                        sfx_res(ji,jj)  = sfx_res(ji,jj) + szv_i(ji,jj,jk,jl) * rhoi * r1_Dt_ice
-                        szv_i(ji,jj,jk,jl) = 0._wp
-                        sz_i (ji,jj,jk,jl) = rn_simin
-                     ENDIF
-                  END DO
-               END DO
-               !
-            END DO
-         ENDDO
-         !$acc end parallel loop
-      ELSE
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
-               !$acc loop seq
-               DO jl = 1, jpl
-                  zsmall = MIN( a_i(ji,jj,jl), v_i(ji,jj,jl),  h_i(ji,jj,jl) )
-                  IF( zsmall < epsi10 ) THEN
-                     ! update exchanges with ocean
-                     sfx_res(ji,jj)  = sfx_res(ji,jj) + sv_i(ji,jj,jl)   * rhoi * r1_Dt_ice
-                     sv_i(ji,jj,jl) = 0._wp
-                  ENDIF
-               END DO
-            END DO
-         END DO
-         !$acc end parallel loop
-      ENDIF
+      INTEGER  ::   ji, jj, jl, jk   ! dummy loop indices
+      REAL(wp) ::   zsmall, zA
+      LOGICAL  :: ldo_h
+      !!-------------------------------------------------------------------
+      !$acc data present(a_i,at_i,e_i,e_s,hfx_res,h_i,h_s,oa_i,sfx_res,t_i,t_s,t_su,v_i,v_s,vt_i,wfx_pnd,wfx_res,sz_i,szv_i)
+      IF( PRESENT(l_do_h) )  ldo_h = l_do_h
 
-      !-----------------------------------------------------------------
-      ! Zap ice energy and use ocean heat to melt ice
-      !-----------------------------------------------------------------
+      IF( ldo_h ) THEN
+         !! Because not required when called from `ice_cor()` !
+#include  "cmpt_h_from_v.h90"
+      ENDIF
+      !
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
          DO ji=Nis0-1, Nie0+1
+            !
             !$acc loop seq
             DO jl = 1, jpl
                zsmall = MIN( a_i(ji,jj,jl), v_i(ji,jj,jl),  h_i(ji,jj,jl) )
                IF( zsmall < epsi10 ) THEN
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     ! update exchanges with ocean
-                     hfx_res(ji,jj)   = hfx_res(ji,jj) - e_i(ji,jj,jk,jl) * r1_Dt_ice ! W.m-2 <0
-                     e_i(ji,jj,jk,jl) = 0._wp
-                     t_i(ji,jj,jk,jl) = rt0
-                  END DO
-                  !$acc loop seq
-                  DO jk=1, nlay_s
-                     ! update exchanges with ocean
-                     hfx_res(ji,jj)   = hfx_res(ji,jj) - e_s(ji,jj,jk,jl) * r1_Dt_ice ! W.m-2 <0
-                     e_s(ji,jj,jk,jl) = 0._wp
-                     t_s(ji,jj,jk,jl) = rt0
-                  END DO
-               ENDIF
-            END DO !DO jl = 1, jpl
-            !
-         END DO
-      ENDDO
-      !$acc end parallel loop
-      !
-      !-----------------------------------------------------------------
-      ! zap ice and snow volume, add water to ocean
-      !-----------------------------------------------------------------
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            !$acc loop seq
-            DO jl = 1, jpl               !
-               zsmall = MIN( a_i(ji,jj,jl), v_i(ji,jj,jl),  h_i(ji,jj,jl) )
-               IF( zsmall < epsi10 ) THEN
+                  !-----------------------------------------------------------------
+                  ! zap ice and snow volume, add water to ocean
+                  !-----------------------------------------------------------------
                   ! update exchanges with ocean
                   wfx_res(ji,jj)  = wfx_res(ji,jj) + v_i (ji,jj,jl)   * rhoi * r1_Dt_ice
                   wfx_res(ji,jj)  = wfx_res(ji,jj) + v_s (ji,jj,jl)   * rhos * r1_Dt_ice
@@ -379,16 +273,43 @@ CONTAINS
                   !v_il (ji,jj,jl) = 0._wp
                   !h_ip (ji,jj,jl) = 0._wp
                   !h_il (ji,jj,jl) = 0._wp
-               ENDIF
+                  !
+                  !$acc loop seq
+                  DO jk=1, nlay_i
+                     !-----------------------------------------------------------------
+                     ! Zap ice volume, add salt to ocean
+                     !-----------------------------------------------------------------
+                     sfx_res(ji,jj)     = sfx_res(ji,jj) + szv_i(ji,jj,jk,jl) * rhoi * r1_Dt_ice
+                     szv_i(ji,jj,jk,jl) = 0._wp
+                     sz_i(ji,jj,jk,jl)  = rn_simin
+                     !-----------------------------------------------------------------
+                     ! Zap ice energy and use ocean heat to melt ice
+                     !-----------------------------------------------------------------
+                     hfx_res(ji,jj)   = hfx_res(ji,jj) - e_i(ji,jj,jk,jl) * r1_Dt_ice ! W.m-2 <0
+                     e_i(ji,jj,jk,jl) = 0._wp
+                     t_i(ji,jj,jk,jl) = rt0
+                  END DO
+                  !$acc loop seq
+                  DO jk=1, nlay_s
+                     !-----------------------------------------------------------------
+                     ! Zap ice energy and use ocean heat to melt ice
+                     !-----------------------------------------------------------------
+                     hfx_res(ji,jj)   = hfx_res(ji,jj) - e_s(ji,jj,jk,jl) * r1_Dt_ice ! W.m-2 <0
+                     e_s(ji,jj,jk,jl) = 0._wp
+                     t_s(ji,jj,jk,jl) = rt0
+                  END DO
+
+               ENDIF !IF( zsmall < epsi10 )
             END DO
-         END DO
-      END DO
+
+         END DO !DO ji=Nis0-1, Nie0+1
+      ENDDO !DO jj=Njs0-1, Nje0+1
       !$acc end parallel loop
 
-      ! to be sure that at_i is the sum of a_i(jl)
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
+            ! to be sure that at_i is the sum of a_i(jl)
             at_i(ji,jj) = 0._wp
             vt_i(ji,jj) = 0._wp
             !$acc loop seq
@@ -396,17 +317,12 @@ CONTAINS
                at_i(ji,jj) = at_i(ji,jj) + a_i(ji,jj,jl)
                vt_i(ji,jj) = vt_i(ji,jj) + v_i(ji,jj,jl)
             END DO
-         END DO
-      END DO
-      !$acc end parallel loop
+            !
+            ato_i(ji,jj) = MERGE( ato_i(ji,jj)  ,  1._wp  ,  at_i(ji,jj) == 0._wp )
 
-      ! open water = 1 if at_i=0
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            IF( at_i(ji,jj) == 0._wp )   ato_i(ji,jj) = 1._wp
-         END DO
-      END DO
+
+         END DO !DO ji=Nis0-1, Nie0+1
+      ENDDO !DO jj=Njs0-1, Nje0+1
       !$acc end parallel loop
 
       !$acc end data
@@ -419,24 +335,11 @@ CONTAINS
       !! ** Purpose :   Remove too small sea ice areas and correct fluxes
       !!-------------------------------------------------------------------
       INTEGER  ::   ji, jj, jl, jk   ! dummy loop indices
-      REAL(wp) ::   zsmall
+      REAL(wp) ::   zsmall, zA
       !!-------------------------------------------------------------------
       !$acc data present( a_i, at_i, h_i, h_s, oa_i, v_i, v_s, vt_i )
-      !
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            !$acc loop seq
-            DO jl = 1, jpl
-               IF( a_i(ji,jj,jl) > epsi10 ) THEN
-                  h_i(ji,jj,jl) = v_i(ji,jj,jl) / a_i(ji,jj,jl)
-               ELSE
-                  h_i(ji,jj,jl) = 0._wp
-               ENDIF
-            END DO
-         END DO
-      END DO
-      !$acc end parallel loop
+
+#include  "cmpt_h_from_v.h90"
 
       !-----------------------------------------------------------------
       ! zap ice and snow volume, add water to ocean
@@ -483,12 +386,11 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
       !$acc end data
    END SUBROUTINE ice_var_zapsmall_dyn
 
 
-   SUBROUTINE ice_var_zapneg_dyn_thd_pnd( pdt, pv_i, pv_s, psv_i, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i ) !, pszv_i )
+   SUBROUTINE ice_var_zapneg_dyn_thd_pnd( pdt, pv_i, pv_s, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i )
       !!-------------------------------------------------------------------
       !!                   ***  ROUTINE ice_var_zapneg_dyn_thd_pnd ***
       !!
@@ -497,7 +399,6 @@ CONTAINS
       REAL(wp)                    , INTENT(in   ) ::   pdt        ! tracer time-step
       REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   pv_i       ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   pv_s       ! snw volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   psv_i      ! salt content
       REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   poa_i      ! age content
       REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   pa_i       ! ice concentration
       REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   pa_ip      ! melt pond fraction
@@ -505,13 +406,13 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl)  , INTENT(inout) ::   pv_il      ! melt pond lid volume
       REAL(wp), DIMENSION(jpi,jpj,nlay_s,jpl), INTENT(inout) ::   pe_s  ! snw heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pe_i  ! ice heat content
-      !REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pszv_i     ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pszv_i     ! ice salt content
       !
       INTEGER  ::   ji, jj, jl, jk   ! dummy loop indices
       REAL(wp) ::   z1_dt
       REAL(wp), DIMENSION(jpi,jpj) ::   zwfx_res, zhfx_res, zsfx_res ! needed since loop is not (0,0,0,0)
       !!-------------------------------------------------------------------
-      !%acc data present( pv_i, pv_s, psv_i, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, hfx_res, sfx_res, wfx_res, wfx_pnd )
+      !%acc data present( pv_i, pv_s, poa_i, pa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, hfx_res, sfx_res, wfx_res, wfx_pnd )
       !! --> , pszv_i
       !
       !%acc parallel loop collapse(2)
@@ -532,33 +433,18 @@ CONTAINS
       !--------------------------------------
       ! zap ice salt and send it to the ocean
       !--------------------------------------
-      IF( nn_icesal == 4 ) THEN
-         PRINT *, 'STOP! ice_var_zapneg_dyn_thd_pnd@icevar.F90 ==> re-add the `nn_icesal == 4` !!!'
-         STOP
-         !DO jl = 1, jpl
-         !   DO jj=Njs0-1, Nje0+1
-         !      DO ji=Nis0-1, Nie0+1
-         !         DO jk=1, nlay_i
-         !            IF( pszv_i(ji,jj,jk,jl) < 0._wp .OR. pa_i(ji,jj,jl) <= 0._wp .OR. pv_i(ji,jj,jl) <= 0._wp ) THEN
-         !               zsfx_res(ji,jj)     = zsfx_res(ji,jj) + pszv_i(ji,jj,jk,jl) * rhoi * z1_dt
-         !               pszv_i(ji,jj,jk,jl) = 0._wp
-         !            ENDIF
-         !         END DO
-         !      END DO
-         !   END DO
-         !ENDDO
-      ELSE
-         DO jl = 1, jpl
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  IF( psv_i(ji,jj,jl) < 0._wp .OR. pa_i(ji,jj,jl) <= 0._wp .OR. pv_i(ji,jj,jl) <= 0._wp ) THEN
-                     zsfx_res(ji,jj)    = zsfx_res(ji,jj) + psv_i(ji,jj,jl) * rhoi * z1_dt
-                     psv_i   (ji,jj,jl) = 0._wp
+      DO jl = 1, jpl
+         DO jj=Njs0-1, Nje0+1
+            DO ji=Nis0-1, Nie0+1
+               DO jk=1, nlay_i
+                  IF( pszv_i(ji,jj,jk,jl) < 0._wp .OR. pa_i(ji,jj,jl) <= 0._wp .OR. pv_i(ji,jj,jl) <= 0._wp ) THEN
+                     zsfx_res(ji,jj)     = zsfx_res(ji,jj) + pszv_i(ji,jj,jk,jl) * rhoi * z1_dt
+                     pszv_i(ji,jj,jk,jl) = 0._wp
                   ENDIF
                END DO
             END DO
          END DO
-      ENDIF
+      ENDDO
       !
       !----------------------------------------
       ! zap ice energy and send it to the ocean
@@ -630,7 +516,7 @@ CONTAINS
       !%acc end data
    END SUBROUTINE ice_var_zapneg_dyn_thd_pnd
 
-   SUBROUTINE ice_var_zapneg_dyn_thd( pdt, pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i,  pszv_i )
+   SUBROUTINE ice_var_zapneg_dyn_thd( pdt, pv_i, pv_s, poa_i, pa_i, pe_s, pe_i, pszv_i, prdgc )
       !!-------------------------------------------------------------------
       !!                   ***  ROUTINE ice_var_zapneg_dyn_thd ***
       !!
@@ -639,21 +525,18 @@ CONTAINS
       REAL(wp)                               , INTENT(in   ) ::   pdt        ! tracer time-step
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_i       ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_s       ! snw volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   psv_i      ! salt content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   poa_i      ! age content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_i       ! ice concentration
       REAL(wp), DIMENSION(jpi,jpj,nlay_s,jpl), INTENT(inout) ::   pe_s       ! snw heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pe_i       ! ice heat content
-      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), OPTIONAL, INTENT(inout) ::   pszv_i     ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) :: pszv_i       ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   prdgc      ! ridged ice fraction
       !!-------------------------------------------------------------------
       INTEGER  ::   ji, jj, jl, jk   ! dummy loop indices
       REAL(wp) ::   z1_dt
       REAL(wp) ::   zwfx_res, zhfx_res, zsfx_res ! needed since loop is not (0,0,0,0)
-      LOGICAL  ::   l_do_szv_i
       !!-------------------------------------------------------------------
-      !$acc data present( pv_i, pv_s, psv_i, poa_i, pa_i, pe_s, pe_i, hfx_res, sfx_res, wfx_res )
-      !
-      l_do_szv_i = PRESENT( pszv_i )
+      !$acc data present( pv_i,pv_s,poa_i,pa_i,pe_s,pe_i,pszv_i,prdgc,hfx_res,sfx_res,wfx_res )
 
       z1_dt = 1._wp / pdt
 
@@ -674,22 +557,13 @@ CONTAINS
                !--------------------------------------
                ! zap ice salt and send it to the ocean
                !--------------------------------------
-               !IF( nn_icesal == 4 ) THEN
-               IF( l_do_szv_i ) THEN
-                  !!  ==> it obviously implies that `nn_icesal == 4` !
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     IF( pszv_i(ji,jj,jk,jl) < 0._wp .OR. pa_i(ji,jj,jl) <= 0._wp .OR. pv_i(ji,jj,jl) <= 0._wp ) THEN
-                        zsfx_res     = zsfx_res + pszv_i(ji,jj,jk,jl) * rhoi * z1_dt
-                        pszv_i(ji,jj,jk,jl) = 0._wp
-                     ENDIF
-                  END DO
-               ELSE
-                  IF( psv_i(ji,jj,jl) < 0._wp .OR. pa_i(ji,jj,jl) <= 0._wp .OR. pv_i(ji,jj,jl) <= 0._wp ) THEN
-                     zsfx_res    = zsfx_res + psv_i(ji,jj,jl) * rhoi * z1_dt
-                     psv_i   (ji,jj,jl) = 0._wp
+               !$acc loop seq
+               DO jk=1, nlay_i
+                  IF( pszv_i(ji,jj,jk,jl) < 0._wp .OR. pa_i(ji,jj,jl) <= 0._wp .OR. pv_i(ji,jj,jl) <= 0._wp ) THEN
+                     zsfx_res     = zsfx_res + pszv_i(ji,jj,jk,jl) * rhoi * z1_dt
+                     pszv_i(ji,jj,jk,jl) = 0._wp
                   ENDIF
-               ENDIF
+               END DO
 
                !----------------------------------------
                ! zap ice energy and send it to the ocean
@@ -721,8 +595,9 @@ CONTAINS
                   pv_s    (ji,jj,jl) = 0._wp
                ENDIF
 
-               IF( poa_i (ji,jj,jl) < 0._wp )   poa_i (ji,jj,jl) = 0._wp
-               IF( pa_i  (ji,jj,jl) < 0._wp )   pa_i  (ji,jj,jl) = 0._wp
+
+               poa_i(ji,jj,jl) = MAX( poa_i(ji,jj,jl) , 0._wp )
+               pa_i (ji,jj,jl) = MAX( pa_i (ji,jj,jl) , 0._wp )
 
             END DO !DO jl=1, jpl
 
@@ -731,15 +606,16 @@ CONTAINS
             hfx_res(ji,jj) = hfx_res(ji,jj) + zhfx_res
             sfx_res(ji,jj) = sfx_res(ji,jj) + zsfx_res
 
+            prdgc(ji,jj) = MAX( prdgc(ji,jj) , 0._wp )
+
+
          END DO !DO ji=Nis0-1, Nie0+1
       END DO !DO jj=Njs0-1, Nje0+1
       !$acc end parallel loop
-
       !$acc end data
    END SUBROUTINE ice_var_zapneg_dyn_thd
 
-
-   SUBROUTINE ice_var_zapneg_dyn( pdt, pv_i, pv_s, pa_i )
+   SUBROUTINE ice_var_zapneg_dyn( pdt, pv_i, pv_s, pa_i, prdgc )
       !!-------------------------------------------------------------------
       !!                   ***  ROUTINE ice_var_zapneg_dyn ***
       !!
@@ -749,11 +625,12 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_i       ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_s       ! snw volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_i       ! ice concentration
+      REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   prdgc      ! ridged ice fraction
       !!-------------------------------------------------------------------
       INTEGER  ::   ji, jj, jl  ! dummy loop indices
       !!-------------------------------------------------------------------
       IF( ln_timing )  CALL timing_start('ice_var_zapneg_dyn')
-      !$acc data present( pv_i, pv_s, pa_i )
+      !$acc data present( pv_i, pv_s, pa_i, prdgc )
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
@@ -775,20 +652,21 @@ CONTAINS
                   pv_s(ji,jj,jl) = 0._wp
                ENDIF
 
-               IF( pa_i  (ji,jj,jl) < 0._wp )   pa_i  (ji,jj,jl) = 0._wp
+               pa_i (ji,jj,jl) = MAX( pa_i (ji,jj,jl) , 0._wp )
 
             END DO !DO jl=1, jpl
+
+            prdgc(ji,jj) = MAX( prdgc(ji,jj) , 0._wp )
 
          END DO !DO ji=Nis0-1, Nie0+1
       END DO !DO jj=Njs0-1, Nje0+1
       !$acc end parallel loop
-
       !$acc end data
       IF( ln_timing )  CALL timing_stop('ice_var_zapneg_dyn')
       !
    END SUBROUTINE ice_var_zapneg_dyn
 
-   SUBROUTINE ice_var_roundoff_dyn_thd_pnd( pa_i, pv_i, pv_s, psv_i, poa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i, ll_ice_present )
+   SUBROUTINE ice_var_roundoff_dyn_thd_pnd( pa_i, pv_i, pv_s, poa_i, pa_ip, pv_ip, pv_il, pe_s, pe_i, pszv_i, ll_ice_present )
       !!-------------------------------------------------------------------
       !!                   ***  ROUTINE ice_var_roundoff_dyn_thd_pnd ***
       !!
@@ -797,19 +675,18 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_i       ! ice concentration
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_i       ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_s       ! ice volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   psv_i      ! salt content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   poa_i      ! age content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_ip      ! melt pond fraction
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_ip      ! melt pond volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_il      ! melt pond lid volume
       REAL(wp), DIMENSION(jpi,jpj,nlay_s,jpl), INTENT(inout) ::   pe_s       ! snw heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pe_i       ! ice heat content
-      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pszv_i     ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) :: pszv_i     ! ice salt content
       LOGICAL,  DIMENSION(jpi,jpj),            INTENT(in)    :: ll_ice_present
       !!-------------------------------------------------------------------
       INTEGER :: ji, jj, jk, jl
       !!-------------------------------------------------------------------
-      !$acc data present( pa_i, pv_i, pv_s, psv_i, poa_i, pe_s, pe_i, pszv_i, pa_ip, pv_ip, pv_il, ll_ice_present )
+      !$acc data present(pa_i,pv_i,pv_s,poa_i,pe_s,pe_i,pszv_i,pa_ip,pv_ip,pv_il,ll_ice_present)
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
@@ -822,16 +699,19 @@ CONTAINS
                   pv_i (ji,jj,jl) = MAX( pv_i(ji,jj,jl), 0._wp)
                   pv_s (ji,jj,jl) = MAX( pv_s(ji,jj,jl), 0._wp)
                   poa_i(ji,jj,jl) = MAX(poa_i(ji,jj,jl), 0._wp)
-                  IF( nn_icesal /= 4 ) psv_i(ji,jj,jl) = MAX(psv_i(ji,jj,jl), 0._wp)
                   !$acc loop seq
                   DO jk=1, nlay_i
                      pe_i  (ji,jj,jk,jl) = MAX(  pe_i(ji,jj,jk,jl), 0._wp)
-                     IF( nn_icesal == 4 ) pszv_i(ji,jj,jk,jl) = MAX(pszv_i(ji,jj,jk,jl), 0._wp)
                   END DO
                   !$acc loop seq
                   DO jk=1, nlay_s
                      pe_s(ji,jj,jk,jl) = MAX(pe_s(ji,jj,jk,jl), 0._wp)
                   END DO
+                  !$acc loop seq
+                  DO jk=1, nlay_i
+                     pszv_i(ji,jj,jk,jl) = MAX(pszv_i(ji,jj,jk,jl), 0._wp)
+                  END DO
+
                END DO
                !
             ENDIF
@@ -868,11 +748,10 @@ CONTAINS
             !$acc end parallel loop
          ENDIF
       ENDIF
-
       !$acc end data
    END SUBROUTINE ice_var_roundoff_dyn_thd_pnd
 
-   SUBROUTINE ice_var_roundoff_dyn_thd( pa_i, pv_i, pv_s, psv_i, poa_i, pe_s, pe_i, pszv_i, ll_ice_present )
+   SUBROUTINE ice_var_roundoff_dyn_thd( pa_i, pv_i, pv_s, poa_i, pe_s, pe_i, pszv_i, ll_ice_present )
       !!-------------------------------------------------------------------
       !!                   ***  ROUTINE ice_var_roundoff_dyn_thd ***
       !!
@@ -881,16 +760,15 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pa_i       ! ice concentration
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_i       ! ice volume
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   pv_s       ! ice volume
-      REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   psv_i      ! salt content
       REAL(wp), DIMENSION(jpi,jpj,jpl)       , INTENT(inout) ::   poa_i      ! age content
       REAL(wp), DIMENSION(jpi,jpj,nlay_s,jpl), INTENT(inout) ::   pe_s       ! snw heat content
       REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pe_i       ! ice heat content
-      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) ::   pszv_i     ! ice salt content
+      REAL(wp), DIMENSION(jpi,jpj,nlay_i,jpl), INTENT(inout) :: pszv_i     ! ice salt content
       LOGICAL,  DIMENSION(jpi,jpj),            INTENT(in)    ::   ll_ice_present
       !!-------------------------------------------------------------------
       INTEGER :: ji, jj, jk, jl
       !!-------------------------------------------------------------------
-      !$acc data present( pa_i, pv_i, pv_s, psv_i, poa_i, pe_s, pe_i, pszv_i, ll_ice_present )
+      !$acc data present( pa_i, pv_i, pv_s, poa_i, pe_s, pe_i, pszv_i, ll_ice_present )
       !!
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
@@ -903,15 +781,17 @@ CONTAINS
                   pv_i (ji,jj,jl) = MAX( pv_i(ji,jj,jl), 0._wp)
                   pv_s (ji,jj,jl) = MAX( pv_s(ji,jj,jl), 0._wp)
                   poa_i(ji,jj,jl) = MAX(poa_i(ji,jj,jl), 0._wp)
-                  IF( nn_icesal /= 4 ) psv_i(ji,jj,jl) = MAX(psv_i(ji,jj,jl), 0._wp)
                   !$acc loop seq
                   DO jk=1, nlay_i
                      pe_i  (ji,jj,jk,jl) = MAX(  pe_i(ji,jj,jk,jl), 0._wp)
-                     IF( nn_icesal == 4 ) pszv_i(ji,jj,jk,jl) = MAX(pszv_i(ji,jj,jk,jl), 0._wp)
                   END DO
                   !$acc loop seq
                   DO jk=1, nlay_s
                      pe_s(ji,jj,jk,jl) = MAX(pe_s(ji,jj,jk,jl), 0._wp)
+                  END DO
+                  !$acc loop seq
+                  DO jk=1, nlay_i
+                     pszv_i(ji,jj,jk,jl) = MAX(pszv_i(ji,jj,jk,jl), 0._wp)
                   END DO
                END DO
                !
@@ -919,61 +799,60 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
       !$acc end data
    END SUBROUTINE ice_var_roundoff_dyn_thd
 
 
-   SUBROUTINE ice_var_brine
-      !!-------------------------------------------------------------------
-      !!                ***  ROUTINE ice_var_brine ***
-      !!
-      !! ** Purpose :   computes brine volume fraction (%)
-      !!                         and salinity of the brine in sea ice
-      !!
-      !! ** Method  : e = - 0.054 * S (ppt) / T (C)
-      !!
-      !! References : Vancoppenolle et al., JGR, 2007
-      !!-------------------------------------------------------------------
-      INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
-      REAL(wp) ::   zt1, zt2, zt3, zs_br
-      !!-------------------------------------------------------------------
-      !
-      v_ibr(:,:,:) = 0._wp
-      DO jl = 1, jpl
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               DO jk=1, nlay_i
-                  ! brine salinity
-                  zt1 = t_i(ji,jj,jk,jl) - rt0
-                  zt2 = zt1 * zt1
-                  zt3 = zt2 * zt1
-                  IF    ( nn_liquidus == 1 ) THEN
-                     zs_br = - zt1 / rTmlt                                      ! --- Linear liquidus
-                  ELSEIF( nn_liquidus == 2 ) THEN
-                     zs_br = -18.7_wp * zt1 - 0.519_wp * zt2 - 0.00535_wp * zt3 ! --- 3rd order liquidus, VC19
-                  ELSEIF( nn_liquidus == 3 ) THEN
-                     zs_br = -17.6_wp * zt1 - 0.389_wp * zt2 - 0.00362_wp * zt3 ! --- Weast 71 liquidus in RJW14
-                  ENDIF
-                  ! brine volume fraction
-                  IF( zt1 < - epsi10 )   v_ibr(ji,jj,jl) = v_ibr(ji,jj,jl) + r1_nlay_i * sz_i(ji,jj,jk,jl) / zs_br
-               END DO
-            END DO
-         END DO
-      ENDDO
-      !
-      ! mean brine volume fraction
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            IF( vt_i(ji,jj) > epsi20 ) THEN
-               vm_ibr(ji,jj) = SUM( v_ibr(ji,jj,:) * v_i(ji,jj,:) ) / vt_i(ji,jj)
-            ELSE
-               vm_ibr(ji,jj) = 0._wp
-            ENDIF
-         END DO
-      END DO
-      !
-   END SUBROUTINE ice_var_brine
+   !SUBROUTINE ice_var_brine
+   !   !!-------------------------------------------------------------------
+   !   !!                ***  ROUTINE ice_var_brine ***
+   !   !!
+   !   !! ** Purpose :   computes brine volume fraction (%)
+   !   !!                         and salinity of the brine in sea ice
+   !   !!
+   !   !! ** Method  : e = - 0.054 * S (ppt) / T (C)
+   !   !!
+   !   !! References : Vancoppenolle et al., JGR, 2007
+   !   !!-------------------------------------------------------------------
+   !   INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
+   !   REAL(wp) ::   zt1, zt2, zt3, zs_br
+   !   !!-------------------------------------------------------------------
+   !   !
+   !   v_ibr(:,:,:) = 0._wp
+   !   DO jl = 1, jpl
+   !      DO jj=Njs0, Nje0
+   !         DO ji=Nis0, Nie0
+   !            DO jk=1, nlay_i
+   !               ! brine salinity
+   !               zt1 = t_i(ji,jj,jk,jl) - rt0
+   !               zt2 = zt1 * zt1
+   !               zt3 = zt2 * zt1
+   !               IF    ( nn_liquidus == 1 ) THEN
+   !                  zs_br = - zt1 / rTmlt                                      ! --- Linear liquidus
+   !               ELSEIF( nn_liquidus == 2 ) THEN
+   !                  zs_br = -18.7_wp * zt1 - 0.519_wp * zt2 - 0.00535_wp * zt3 ! --- 3rd order liquidus, VC19
+   !               ELSEIF( nn_liquidus == 3 ) THEN
+   !                  zs_br = -17.6_wp * zt1 - 0.389_wp * zt2 - 0.00362_wp * zt3 ! --- Weast 71 liquidus in RJW14
+   !               ENDIF
+   !               ! brine volume fraction
+   !               IF( zt1 < - epsi10 )   v_ibr(ji,jj,jl) = v_ibr(ji,jj,jl) + r1_nlay_i * sz_i(ji,jj,jk,jl) / zs_br
+   !            END DO
+   !         END DO
+   !      END DO
+   !   ENDDO
+   !   !
+   !   ! mean brine volume fraction
+   !   DO jj=Njs0, Nje0
+   !      DO ji=Nis0, Nie0
+   !         IF( vt_i(ji,jj) > epsi20 ) THEN
+   !            vm_ibr(ji,jj) = SUM( v_ibr(ji,jj,:) * v_i(ji,jj,:) ) / vt_i(ji,jj)
+   !         ELSE
+   !            vm_ibr(ji,jj) = 0._wp
+   !         ENDIF
+   !      END DO
+   !   END DO
+   !   !
+   !END SUBROUTINE ice_var_brine
 
    SUBROUTINE ice_var_enthalpy(jl_cat, ll_ice_present)
       !!-------------------------------------------------------------------
@@ -1219,14 +1098,15 @@ CONTAINS
    !! ** Purpose :  converting N-cat ice to jpl ice categories
    !!-------------------------------------------------------------------
    SUBROUTINE ice_var_itd_1c1c( phti, phts, pati ,                             ph_i, ph_s, pa_i, &
-      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il )
+      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i )
+      !&                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il )
       !!-------------------------------------------------------------------
       !! ** Purpose :  converting 1-cat ice to 1 ice category
       !!-------------------------------------------------------------------
       REAL(wp), DIMENSION(:), INTENT(in)    ::   phti, phts, pati    ! input  ice/snow variables
       REAL(wp), DIMENSION(:), INTENT(inout) ::   ph_i, ph_s, pa_i    ! output ice/snow variables
       REAL(wp), DIMENSION(:), INTENT(in)    ::   ptmi, ptms, ptmsu, psmi, patip, phtip, phtil    ! input  ice/snow temp & sal & ponds
-      REAL(wp), DIMENSION(:), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
+      REAL(wp), DIMENSION(:), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i !, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
       !!-------------------------------------------------------------------
       ! == thickness and concentration == !
       ph_i(:) = phti(:)
@@ -1238,21 +1118,21 @@ CONTAINS
       pt_s (:) = ptms (:)
       pt_su(:) = ptmsu(:)
       ps_i (:) = psmi (:)
-      pa_ip(:) = patip(:)
-      ph_ip(:) = phtip(:)
-      ph_il(:) = phtil(:)
+      !pa_ip(:) = patip(:)
+      !ph_ip(:) = phtip(:)
+      !ph_il(:) = phtil(:)
 
    END SUBROUTINE ice_var_itd_1c1c
 
    SUBROUTINE ice_var_itd_Nc1c( phti, phts, pati ,                             ph_i, ph_s, pa_i, &
-      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il )
+      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i ) !, pa_ip, ph_ip, ph_il )
       !!-------------------------------------------------------------------
       !! ** Purpose :  converting N-cat ice to 1 ice category
       !!-------------------------------------------------------------------
       REAL(wp), DIMENSION(:,:), INTENT(in)    ::   phti, phts, pati    ! input  ice/snow variables
       REAL(wp), DIMENSION(:)  , INTENT(inout) ::   ph_i, ph_s, pa_i    ! output ice/snow variables
       REAL(wp), DIMENSION(:,:), INTENT(in)    ::   ptmi, ptms, ptmsu, psmi, patip, phtip, phtil    ! input  ice/snow temp & sal & ponds
-      REAL(wp), DIMENSION(:)  , INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
+      REAL(wp), DIMENSION(:)  , INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i !, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
       !
       REAL(wp), ALLOCATABLE, DIMENSION(:) ::   z1_ai, z1_vi, z1_vs
       !
@@ -1292,21 +1172,21 @@ CONTAINS
       ps_i (:) = SUM( psmi (:,:) * pati(:,:) * phti(:,:), dim=2 ) * z1_vi(:)
 
       ! == ponds == !
-      pa_ip(:) = SUM( patip(:,:), dim=2 )
-      WHERE( pa_ip(:) /= 0._wp )
-         ph_ip(:) = SUM( phtip(:,:) * patip(:,:), dim=2 ) / pa_ip(:)
-         ph_il(:) = SUM( phtil(:,:) * patip(:,:), dim=2 ) / pa_ip(:)
-      ELSEWHERE
-         ph_ip(:) = 0._wp
-         ph_il(:) = 0._wp
-      END WHERE
+      !pa_ip(:) = SUM( patip(:,:), dim=2 )
+      !WHERE( pa_ip(:) /= 0._wp )
+      !   ph_ip(:) = SUM( phtip(:,:) * patip(:,:), dim=2 ) / pa_ip(:)
+      !   ph_il(:) = SUM( phtil(:,:) * patip(:,:), dim=2 ) / pa_ip(:)
+      !ELSEWHERE
+      !   ph_ip(:) = 0._wp
+      !   ph_il(:) = 0._wp
+      !END WHERE
       !
       DEALLOCATE( z1_ai, z1_vi, z1_vs )
       !
    END SUBROUTINE ice_var_itd_Nc1c
 
    SUBROUTINE ice_var_itd_1cMc( phti, phts, pati ,                             ph_i, ph_s, pa_i, &
-      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il )
+      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i ) !, pa_ip, ph_ip, ph_il )
       !!-------------------------------------------------------------------
       !!
       !! ** Purpose :  converting 1-cat ice to jpl ice categories
@@ -1329,7 +1209,7 @@ CONTAINS
       REAL(wp), DIMENSION(:),   INTENT(in)    ::   phti, phts, pati    ! input  ice/snow variables
       REAL(wp), DIMENSION(:,:), INTENT(inout) ::   ph_i, ph_s, pa_i    ! output ice/snow variables
       REAL(wp), DIMENSION(:)  , INTENT(in)    ::   ptmi, ptms, ptmsu, psmi, patip, phtip, phtil    ! input  ice/snow temp & sal & ponds
-      REAL(wp), DIMENSION(:,:), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
+      REAL(wp), DIMENSION(:,:), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i !, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
       !
       REAL(wp), ALLOCATABLE, DIMENSION(:) ::   zfra, z1_hti
       INTEGER  ::   ji, jk, jl
@@ -1424,48 +1304,48 @@ CONTAINS
       END DO
       !
       ! == ponds == !
-      ALLOCATE( zfra(idim) )
+      !ALLOCATE( zfra(idim) )
       ! keep the same pond fraction atip/ati for each category
-      WHERE( pati(:) /= 0._wp )
-         zfra(:) = patip(:) / pati(:)
-      ELSEWHERE
-         zfra(:) = 0._wp
-      END WHERE
-      DO jl = 1, jpl
-         pa_ip(:,jl) = zfra(:) * pa_i(:,jl)
-      END DO
+      !WHERE( pati(:) /= 0._wp )
+      !   zfra(:) = patip(:) / pati(:)
+      !ELSEWHERE
+      !   zfra(:) = 0._wp
+      !END WHERE
+      !DO jl = 1, jpl
+      !   pa_ip(:,jl) = zfra(:) * pa_i(:,jl)
+      !END DO
       ! keep the same v_ip/v_i ratio for each category
-      WHERE( ( phti(:) * pati(:) ) /= 0._wp )
-         zfra(:) = ( phtip(:) * patip(:) ) / ( phti(:) * pati(:) )
-      ELSEWHERE
-         zfra(:) = 0._wp
-      END WHERE
-      DO jl = 1, jpl
-         WHERE( pa_ip(:,jl) /= 0._wp )
-            ph_ip(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
-         ELSEWHERE
-            ph_ip(:,jl) = 0._wp
-         END WHERE
-      END DO
+      !WHERE( ( phti(:) * pati(:) ) /= 0._wp )
+      !   zfra(:) = ( phtip(:) * patip(:) ) / ( phti(:) * pati(:) )
+      !ELSEWHERE
+      !   zfra(:) = 0._wp
+      !END WHERE
+      !DO jl = 1, jpl
+      !   WHERE( pa_ip(:,jl) /= 0._wp )
+      !      ph_ip(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
+      !   ELSEWHERE
+      !      ph_ip(:,jl) = 0._wp
+      !   END WHERE
+      !END DO
       ! keep the same v_il/v_i ratio for each category
-      WHERE( ( phti(:) * pati(:) ) /= 0._wp )
-         zfra(:) = ( phtil(:) * patip(:) ) / ( phti(:) * pati(:) )
-      ELSEWHERE
-         zfra(:) = 0._wp
-      END WHERE
-      DO jl = 1, jpl
-         WHERE( pa_ip(:,jl) /= 0._wp )
-            ph_il(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
-         ELSEWHERE
-            ph_il(:,jl) = 0._wp
-         END WHERE
-      END DO
-      DEALLOCATE( zfra )
+      !WHERE( ( phti(:) * pati(:) ) /= 0._wp )
+      !   zfra(:) = ( phtil(:) * patip(:) ) / ( phti(:) * pati(:) )
+      !ELSEWHERE
+      !   zfra(:) = 0._wp
+      !END WHERE
+      !DO jl = 1, jpl
+      !   WHERE( pa_ip(:,jl) /= 0._wp )
+      !      ph_il(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
+      !   ELSEWHERE
+      !      ph_il(:,jl) = 0._wp
+      !   END WHERE
+      !END DO
+      !DEALLOCATE( zfra )
       !
    END SUBROUTINE ice_var_itd_1cMc
 
    SUBROUTINE ice_var_itd_NcMc( phti, phts, pati ,                             ph_i, ph_s, pa_i, &
-      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il )
+      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i ) !, pa_ip, ph_ip, ph_il )
       !!-------------------------------------------------------------------
       !!
       !! ** Purpose :  converting N-cat ice to jpl ice categories
@@ -1497,7 +1377,7 @@ CONTAINS
       REAL(wp), DIMENSION(:,:), INTENT(in)    ::   phti, phts, pati    ! input  ice/snow variables
       REAL(wp), DIMENSION(:,:), INTENT(inout) ::   ph_i, ph_s, pa_i    ! output ice/snow variables
       REAL(wp), DIMENSION(:,:), INTENT(in)    ::   ptmi, ptms, ptmsu, psmi, patip, phtip, phtil    ! input  ice/snow temp & sal & ponds
-      REAL(wp), DIMENSION(:,:), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
+      REAL(wp), DIMENSION(:,:), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i !, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
       !
       INTEGER , ALLOCATABLE, DIMENSION(:,:) ::   jlfil, jlfil2
       INTEGER , ALLOCATABLE, DIMENSION(:)   ::   jlmax, jlmin
@@ -1524,23 +1404,23 @@ CONTAINS
          pt_s (:,:) = ptms (:,:)
          pt_su(:,:) = ptmsu(:,:)
          ps_i (:,:) = psmi (:,:)
-         pa_ip(:,:) = patip(:,:)
-         ph_ip(:,:) = phtip(:,:)
-         ph_il(:,:) = phtil(:,:)
+         !pa_ip(:,:) = patip(:,:)
+         !ph_ip(:,:) = phtip(:,:)
+         !ph_il(:,:) = phtil(:,:)
          !                              ! ---------------------- !
       ELSEIF( icat == 1 ) THEN          ! input cat = 1          !
          !                              ! ---------------------- !
          CALL  ice_var_itd_1cMc( phti(:,1), phts(:,1), pati (:,1), &
             &                    ph_i(:,:), ph_s(:,:), pa_i (:,:), &
             &                    ptmi(:,1), ptms(:,1), ptmsu(:,1), psmi(:,1), patip(:,1), phtip(:,1), phtil(:,1), &
-            &                    pt_i(:,:), pt_s(:,:), pt_su(:,:), ps_i(:,:), pa_ip(:,:), ph_ip(:,:), ph_il(:,:)  )
+            &                    pt_i(:,:), pt_s(:,:), pt_su(:,:), ps_i(:,:) ) !, pa_ip(:,:), ph_ip(:,:), ph_il(:,:)  )
          !                              ! ---------------------- !
       ELSEIF( jpl == 1 ) THEN           ! output cat = 1         !
          !                              ! ---------------------- !
          CALL  ice_var_itd_Nc1c( phti(:,:), phts(:,:), pati (:,:), &
             &                    ph_i(:,1), ph_s(:,1), pa_i (:,1), &
             &                    ptmi(:,:), ptms(:,:), ptmsu(:,:), psmi(:,:), patip(:,:), phtip(:,:), phtil(:,:), &
-            &                    pt_i(:,1), pt_s(:,1), pt_su(:,1), ps_i(:,1), pa_ip(:,1), ph_ip(:,1), ph_il(:,1)  )
+            &                    pt_i(:,1), pt_s(:,1), pt_su(:,1), ps_i(:,1) ) !, pa_ip(:,1), ph_ip(:,1), ph_il(:,1)  )
          !                              ! ----------------------- !
       ELSE                              ! input cat /= output cat !
          !                              ! ----------------------- !
@@ -1669,43 +1549,43 @@ CONTAINS
          DEALLOCATE( z1_ai, z1_vi, z1_vs, ztmp )
          !
          ! == ponds == !
-         ALLOCATE( zfra(idim) )
-         ! keep the same pond fraction atip/ati for each category
-         WHERE( SUM( pati(:,:), dim=2 ) /= 0._wp )
-            zfra(:) = SUM( patip(:,:), dim=2 ) / SUM( pati(:,:), dim=2 )
-         ELSEWHERE
-            zfra(:) = 0._wp
-         END WHERE
-         DO jl = 1, jpl
-            pa_ip(:,jl) = zfra(:) * pa_i(:,jl)
-         END DO
-         ! keep the same v_ip/v_i ratio for each category
-         WHERE( SUM( phti(:,:) * pati(:,:), dim=2 ) /= 0._wp )
-            zfra(:) = SUM( phtip(:,:) * patip(:,:), dim=2 ) / SUM( phti(:,:) * pati(:,:), dim=2 )
-         ELSEWHERE
-            zfra(:) = 0._wp
-         END WHERE
-         DO jl = 1, jpl
-            WHERE( pa_ip(:,jl) /= 0._wp )
-               ph_ip(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
-            ELSEWHERE
-               ph_ip(:,jl) = 0._wp
-            END WHERE
-         END DO
-         ! keep the same v_il/v_i ratio for each category
-         WHERE( SUM( phti(:,:) * pati(:,:), dim=2 ) /= 0._wp )
-            zfra(:) = SUM( phtil(:,:) * patip(:,:), dim=2 ) / SUM( phti(:,:) * pati(:,:), dim=2 )
-         ELSEWHERE
-            zfra(:) = 0._wp
-         END WHERE
-         DO jl = 1, jpl
-            WHERE( pa_ip(:,jl) /= 0._wp )
-               ph_il(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
-            ELSEWHERE
-               ph_il(:,jl) = 0._wp
-            END WHERE
-         END DO
-         DEALLOCATE( zfra )
+         !ALLOCATE( zfra(idim) )
+         !! keep the same pond fraction atip/ati for each category
+         !WHERE( SUM( pati(:,:), dim=2 ) /= 0._wp )
+         !   zfra(:) = SUM( patip(:,:), dim=2 ) / SUM( pati(:,:), dim=2 )
+         !ELSEWHERE
+         !   zfra(:) = 0._wp
+         !END WHERE
+         !DO jl = 1, jpl
+         !   pa_ip(:,jl) = zfra(:) * pa_i(:,jl)
+         !END DO
+         !! keep the same v_ip/v_i ratio for each category
+         !WHERE( SUM( phti(:,:) * pati(:,:), dim=2 ) /= 0._wp )
+         !   zfra(:) = SUM( phtip(:,:) * patip(:,:), dim=2 ) / SUM( phti(:,:) * pati(:,:), dim=2 )
+         !ELSEWHERE
+         !   zfra(:) = 0._wp
+         !END WHERE
+         !DO jl = 1, jpl
+         !   WHERE( pa_ip(:,jl) /= 0._wp )
+         !      ph_ip(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
+         !   ELSEWHERE
+         !      ph_ip(:,jl) = 0._wp
+         !   END WHERE
+         !END DO
+         !! keep the same v_il/v_i ratio for each category
+         !WHERE( SUM( phti(:,:) * pati(:,:), dim=2 ) /= 0._wp )
+         !   zfra(:) = SUM( phtil(:,:) * patip(:,:), dim=2 ) / SUM( phti(:,:) * pati(:,:), dim=2 )
+         !ELSEWHERE
+         !   zfra(:) = 0._wp
+         !END WHERE
+         !DO jl = 1, jpl
+         !   WHERE( pa_ip(:,jl) /= 0._wp )
+         !      ph_il(:,jl) = zfra(:) * ( ph_i(:,jl) * pa_i(:,jl) ) / pa_ip(:,jl)
+         !   ELSEWHERE
+         !      ph_il(:,jl) = 0._wp
+         !   END WHERE
+         !END DO
+         !DEALLOCATE( zfra )
          !
       ENDIF
       !
@@ -1713,7 +1593,7 @@ CONTAINS
 
 
    SUBROUTINE ice_var_itd_1cMc_2d( phti, phts, pati ,                             ph_i, ph_s, pa_i, &
-      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il )
+      &                         ptmi, ptms, ptmsu, psmi, patip, phtip, phtil,  pt_i, pt_s, pt_su, ps_i )!, pa_ip, ph_ip, ph_il )
       !!-------------------------------------------------------------------
       !!      ==> 2D version of `ice_var_itd_1cMc` for 2D thermo (with )
       !!
@@ -1737,7 +1617,7 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj),     INTENT(in)    ::   phti, phts, pati    ! input  ice/snow variables
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   ph_i, ph_s, pa_i    ! output ice/snow variables
       REAL(wp), DIMENSION(jpi,jpj)  ,   INTENT(in)    ::   ptmi, ptms, ptmsu, psmi, patip, phtip, phtil    ! input  ice/snow temp & sal & ponds
-      REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
+      REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   pt_i, pt_s, pt_su, ps_i !, pa_ip, ph_ip, ph_il    ! output ice/snow temp & sal & ponds
       !
       REAL(wp), DIMENSION(jpi,jpj) ::  z1_hti, zfra
       INTEGER  ::   ji, jj, jk, jl
@@ -1830,41 +1710,41 @@ CONTAINS
       END DO
       !
       ! == ponds == !
-      ! keep the same pond fraction atip/ati for each category
-      WHERE( pati(:,:) /= 0._wp )
-         zfra(:,:) = patip(:,:) / pati(:,:)
-      ELSEWHERE
-         zfra(:,:) = 0._wp
-      END WHERE
-      DO jl = 1, jpl
-         pa_ip(:,:,jl) = zfra(:,:) * pa_i(:,:,jl)
-      END DO
-      ! keep the same v_ip/v_i ratio for each category
-      WHERE( ( phti(:,:) * pati(:,:) ) /= 0._wp )
-         zfra(:,:) = ( phtip(:,:) * patip(:,:) ) / ( phti(:,:) * pati(:,:) )
-      ELSEWHERE
-         zfra(:,:) = 0._wp
-      END WHERE
-      DO jl = 1, jpl
-         WHERE( pa_ip(:,:,jl) /= 0._wp )
-            ph_ip(:,:,jl) = zfra(:,:) * ( ph_i(:,:,jl) * pa_i(:,:,jl) ) / pa_ip(:,:,jl)
-         ELSEWHERE
-            ph_ip(:,:,jl) = 0._wp
-         END WHERE
-      END DO
-      ! keep the same v_il/v_i ratio for each category
-      WHERE( ( phti(:,:) * pati(:,:) ) /= 0._wp )
-         zfra(:,:) = ( phtil(:,:) * patip(:,:) ) / ( phti(:,:) * pati(:,:) )
-      ELSEWHERE
-         zfra(:,:) = 0._wp
-      END WHERE
-      DO jl = 1, jpl
-         WHERE( pa_ip(:,:,jl) /= 0._wp )
-            ph_il(:,:,jl) = zfra(:,:) * ( ph_i(:,:,jl) * pa_i(:,:,jl) ) / pa_ip(:,:,jl)
-         ELSEWHERE
-            ph_il(:,:,jl) = 0._wp
-         END WHERE
-      END DO
+      !! keep the same pond fraction atip/ati for each category
+      !WHERE( pati(:,:) /= 0._wp )
+      !   zfra(:,:) = patip(:,:) / pati(:,:)
+      !ELSEWHERE
+      !   zfra(:,:) = 0._wp
+      !END WHERE
+      !DO jl = 1, jpl
+      !   pa_ip(:,:,jl) = zfra(:,:) * pa_i(:,:,jl)
+      !END DO
+      !! keep the same v_ip/v_i ratio for each category
+      !WHERE( ( phti(:,:) * pati(:,:) ) /= 0._wp )
+      !   zfra(:,:) = ( phtip(:,:) * patip(:,:) ) / ( phti(:,:) * pati(:,:) )
+      !ELSEWHERE
+      !   zfra(:,:) = 0._wp
+      !END WHERE
+      !DO jl = 1, jpl
+      !   WHERE( pa_ip(:,:,jl) /= 0._wp )
+      !      ph_ip(:,:,jl) = zfra(:,:) * ( ph_i(:,:,jl) * pa_i(:,:,jl) ) / pa_ip(:,:,jl)
+      !   ELSEWHERE
+      !      ph_ip(:,:,jl) = 0._wp
+      !   END WHERE
+      !END DO
+      !! keep the same v_il/v_i ratio for each category
+      !WHERE( ( phti(:,:) * pati(:,:) ) /= 0._wp )
+      !   zfra(:,:) = ( phtil(:,:) * patip(:,:) ) / ( phti(:,:) * pati(:,:) )
+      !ELSEWHERE
+      !   zfra(:,:) = 0._wp
+      !END WHERE
+      !DO jl = 1, jpl
+      !   WHERE( pa_ip(:,:,jl) /= 0._wp )
+      !      ph_il(:,:,jl) = zfra(:,:) * ( ph_i(:,:,jl) * pa_i(:,:,jl) ) / pa_ip(:,:,jl)
+      !   ELSEWHERE
+      !      ph_il(:,:,jl) = 0._wp
+      !   END WHERE
+      !END DO
       !
    END SUBROUTINE ice_var_itd_1cMc_2d
 
@@ -1965,33 +1845,37 @@ CONTAINS
       !!
       !! ** input   : a_i
       !!-------------------------------------------------------------------
-      INTEGER ::   ji, jj, jl         ! dummy loop indices
+      INTEGER  ::   ji, jj, jl
+      REAL(wp) ::   zA
       !!-------------------------------------------------------------------
-      IF( ln_timing )  CALL timing_start('ice_var_hpiling')
+      !$acc data present(at_i,a_i)
+      !IF( ln_timing )  CALL timing_start('ice_var_hpiling')
 
-      !$acc parallel loop collapse(2) present( at_i, a_i )
+      !$acc parallel loop collapse(2)
       DO jj = Njs0-nn_hls, Nje0+nn_hls
          DO ji = Nis0-nn_hls, Nie0+nn_hls
             !
-            at_i(ji,jj) = 0._wp
+            zA = 0._wp
             !$acc loop seq
             DO jl = 1, jpl
-               at_i(ji,jj) = at_i(ji,jj) + a_i(ji,jj,jl)
+               zA = zA + a_i(ji,jj,jl)
             END DO
             !$acc loop seq
             DO jl = 1, jpl
-               IF( at_i(ji,jj) > epsi20 ) THEN
-                  a_i(ji,jj,jl) = a_i(ji,jj,jl) * (  1._wp + MIN( rn_amax - at_i(ji,jj) , 0._wp ) / at_i(ji,jj)  )
-               ENDIF
+               a_i(ji,jj,jl) = a_i(ji,jj,jl) * ( 1._wp + MERGE( MIN(rn_amax-zA , 0._wp) / MAX(zA,epsi20)  ,  0._wp  ,  zA > epsi20 ) )
             END DO
+            !
+            at_i(ji,jj) = zA
             !
          END DO
       END DO
       !$acc end parallel loop
 
-      IF( ln_timing )  CALL timing_stop('ice_var_hpiling')
+      !$acc end data
+      !IF( ln_timing )  CALL timing_stop('ice_var_hpiling')
       !
    END SUBROUTINE ice_var_hpiling
+
 
    SUBROUTINE ice_var_cap_at
       !!-------------------------------------------------------------------
@@ -2003,7 +1887,8 @@ CONTAINS
       !!-------------------------------------------------------------------
       INTEGER ::   ji, jj, jl         ! dummy loop indices
       !!-------------------------------------------------------------------
-      !$acc parallel loop collapse(2) present( at_i, a_i )
+      !$acc data present(at_i,a_i)
+      !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
             at_i(ji,jj) = 0._wp
@@ -2018,109 +1903,8 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE ice_var_cap_at
-
-
-   SUBROUTINE test4inf_2d( cstr, px )
-      !!-------------------------------------------------------------------
-      CHARACTER(len=22),            INTENT(in) :: cstr
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: px
-      !!-------------------------------------------------------------------
-      INTEGER ::   ji, jj, icpt!, jl         ! dummy loop indices
-      !!-------------------------------------------------------------------
-      !$acc data present( px )
-      icpt = 0
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            IF( px(ji,jj) > HUGE(px(ji,jj)) ) THEN
-               !PRINT *, ' *** Infinite value for at ji,jj=',ji,jj, cstr
-               icpt = icpt + 1
-            ENDIF
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      IF( icpt > 0 ) THEN
-         PRINT *, ' *** Infinite value for: ', cstr, icpt
-         STOP
-      ENDIF
-      !$acc end data
-   END SUBROUTINE test4inf_2d
-
-   SUBROUTINE test4inf_3d( cstr, px )
-      !!-------------------------------------------------------------------
-      CHARACTER(len=22),                INTENT(in) :: cstr
-      REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(in) :: px
-      !!-------------------------------------------------------------------
-      INTEGER ::   ji, jj, jl, icpt         ! dummy loop indices
-      !!-------------------------------------------------------------------
-      !$acc data present( px )
-      icpt = 0
-      !$acc parallel loop collapse(3)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            DO jl=1, jpl
-               IF( px(ji,jj,jl) > HUGE(px(ji,jj,jl)) ) THEN
-                  !PRINT *, ' *** Infinite value for at ji,jj=',ji,jj, cstr
-                  icpt = icpt + 1
-               ENDIF
-            END DO
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      IF( icpt > 0 ) THEN
-         PRINT *, ' *** Infinite value for: ', cstr, icpt
-         STOP
-      ENDIF
-      !$acc end data
-   END SUBROUTINE test4inf_3d
-
-   SUBROUTINE test4nan( cstr, px )
-      !!-------------------------------------------------------------------
-      CHARACTER(len=22),            INTENT(in) :: cstr
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: px
-      !!-------------------------------------------------------------------
-      INTEGER ::   ji, jj, icpt!, jl         ! dummy loop indices
-      !!-------------------------------------------------------------------
-      !$acc data present( px )
-      icpt = 0
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            IF( px(ji,jj) /= px(ji,jj) ) THEN
-               !PRINT *, ' *** Infinite value for at ji,jj=',ji,jj, cstr
-               icpt = icpt + 1
-            ENDIF
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      IF( icpt > 0 ) THEN
-         PRINT *, ' *** NaN value for: ', cstr, icpt
-         STOP
-      ENDIF
-      !$acc end data
-   END SUBROUTINE test4nan
-
-
-   FUNCTION l_is_it_a_nan( px )
-      !!-------------------------------------------------------------------
-      LOGICAL              :: l_is_it_a_nan
-      REAL(wp), INTENT(in) :: px
-      !!-------------------------------------------------------------------
-      l_is_it_a_nan = ( px /= px )
-   END FUNCTION l_is_it_a_nan
-
-
-   FUNCTION l_is_it_a_inf( px )
-      !!-------------------------------------------------------------------
-      LOGICAL              :: l_is_it_a_inf
-      REAL(wp), INTENT(in) :: px
-      !!-------------------------------------------------------------------
-      l_is_it_a_inf = ( px > HUGE(px) )
-   END FUNCTION l_is_it_a_inf
 
    !!======================================================================
 END MODULE icevar

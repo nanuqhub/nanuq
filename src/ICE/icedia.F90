@@ -22,7 +22,7 @@ MODULE icedia
    USE in_out_manager ! I/O manager
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
-   USE lib_fortran    ! fortran utilities (glob_sum + no signed zero)
+   USE lib_fortran    ! fortran utilities (glob_2Dsum + no signed zero)
    USE timing         ! Timing
 
    IMPLICIT NONE
@@ -39,7 +39,7 @@ MODULE icedia
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icedia.F90 15048 2021-06-23 16:02:14Z clem $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -77,7 +77,7 @@ CONTAINS
       ENDIF
 
       IF( kt == nit000 ) THEN
-         r1_area = 1._wp / glob_sum( 'icedia', e1e2t(:,:) )
+         r1_area = 1._wp / glob_2Dsum( 'icedia', e1e2t(:,:) )
       ENDIF
 
       ztmp(:,:,:) = 0._wp ! should be better coded
@@ -101,8 +101,8 @@ CONTAINS
       IF( iom_use('ibgsalt_tot') )   ztmp(:,:,9 ) = st_i (:,:) * e1e2t(:,:) ! salt content
       IF( iom_use('ibghea_tot_tot') )   ztmp(:,:,10) = et_i (:,:) * e1e2t(:,:) ! heat content
       IF( iom_use('sbghea_tot_tot') )   ztmp(:,:,11) = et_s (:,:) * e1e2t(:,:) ! heat content
-      IF( iom_use('ipbgvol_tot') )   ztmp(:,:,12) = vt_ip(:,:) * e1e2t(:,:) ! ice pond volume
-      IF( iom_use('ilbgvol_tot') )   ztmp(:,:,13) = vt_il(:,:) * e1e2t(:,:) ! ice pond lid volume
+      !IF( iom_use('ipbgvol_tot') )   ztmp(:,:,12) = vt_ip(:,:) * e1e2t(:,:) ! ice pond volume
+      !IF( iom_use('ilbgvol_tot') )   ztmp(:,:,13) = vt_il(:,:) * e1e2t(:,:) ! ice pond lid volume
 
       ! ---------------------------------- !
       ! 3 -  Content variations and drifts !
@@ -113,7 +113,7 @@ CONTAINS
          &                       ztmp(:,:,16) = ( et_i(:,:) + et_s(:,:)           - tem_loc_ini(:,:) ) * e1e2t(:,:) ! heat content trend
 
       ! global sum
-      zbg(1:16) = glob_sum_vec( 'icedia', ztmp(:,:,1:16) )
+      zbg(1:16) = glob_2Dsum( 'icedia', ztmp(:,:,1:16), cdelay = 'icebg' )
 
       ! change units for trends
       zbg(1) = zbg(1) * r1_rho0 * 1.e-9  * rDt_ice ! freshwater flux ice/snow-ocean (km3)
@@ -239,18 +239,18 @@ CONTAINS
       IF( TRIM(cdrw) == 'READ' ) THEN        ! Read/initialise
          IF( ln_rstart ) THEN                   !* Read the restart file
             !
-            CALL iom_get( numrir, 'kt_ice' , ziter )
+            CALL iom_get( 'ice_dia_rst', numrir, 'kt_ice' , ziter )
             IF(lwp) WRITE(numout,*)
             IF(lwp) WRITE(numout,*) 'ice_dia_rst read at time step = ', ziter
             IF(lwp) WRITE(numout,*) '~~~~~~~~~~'
-            CALL iom_get( numrir, 'frc_voltop' , frc_voltop  )
-            CALL iom_get( numrir, 'frc_volbot' , frc_volbot  )
-            CALL iom_get( numrir, 'frc_temtop' , frc_temtop  )
-            CALL iom_get( numrir, 'frc_tembot' , frc_tembot  )
-            CALL iom_get( numrir, 'frc_sal'    , frc_sal     )
-            CALL iom_get( numrir, jpdom_auto, 'vol_loc_ini', vol_loc_ini )
-            CALL iom_get( numrir, jpdom_auto, 'tem_loc_ini', tem_loc_ini )
-            CALL iom_get( numrir, jpdom_auto, 'sal_loc_ini', sal_loc_ini )
+            CALL iom_get( 'ice_dia_rst', numrir, 'frc_voltop' , frc_voltop  )
+            CALL iom_get( 'ice_dia_rst', numrir, 'frc_volbot' , frc_volbot  )
+            CALL iom_get( 'ice_dia_rst', numrir, 'frc_temtop' , frc_temtop  )
+            CALL iom_get( 'ice_dia_rst', numrir, 'frc_tembot' , frc_tembot  )
+            CALL iom_get( 'ice_dia_rst', numrir, 'frc_sal'    , frc_sal     )
+            CALL iom_get( 'ice_dia_rst', numrir, jpdom_auto, 'vol_loc_ini', vol_loc_ini )
+            CALL iom_get( 'ice_dia_rst', numrir, jpdom_auto, 'tem_loc_ini', tem_loc_ini )
+            CALL iom_get( 'ice_dia_rst', numrir, jpdom_auto, 'sal_loc_ini', sal_loc_ini )
          ELSE
             IF(lwp) WRITE(numout,*)
             IF(lwp) WRITE(numout,*) ' ice_dia at initial state '

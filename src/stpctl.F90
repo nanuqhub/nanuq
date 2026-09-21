@@ -16,21 +16,20 @@ MODULE stpctl
    !!----------------------------------------------------------------------
    !!   stp_ctl      : Control the run
    !!----------------------------------------------------------------------
-   !USE oce             ! ocean dynamics and tracers variables
-   USE dom_oce         ! ocean space and time domain variables 
-   USE ice      , ONLY : vt_i, u_ice, tm_i
-   USE phycst   , ONLY : rt0
-   USE oss_nnq  , ONLY : lk_oasis_oce
+   USE dom_oce         ! ocean space and time domain variables
+   USE ice         , ONLY : vt_i, u_ice, xtmp, t_i, v_i
+   USE phycst      , ONLY : rt0
+   USE par_ice     , ONLY : ln_icethd, jpl, nlay_i, nlay_s, r1_nlay_i, epsi20, ln_dynadv2d
    !
    USE diawri          ! Standard run outputs       (dia_wri_state routine)
    USE in_out_manager  ! I/O manager
    USE lbclnk          ! ocean lateral boundary conditions (or mpp link)
    USE lib_mpp         ! distributed memory computing
+   USE timing          ! timing
    !
    USE netcdf          ! NetCDF library
-   !
-   USE ieee_arithmetic
-   
+   USE, INTRINSIC :: ieee_arithmetic, ONLY : ieee_is_nan
+
    IMPLICIT NONE
    PRIVATE
 
@@ -39,9 +38,10 @@ MODULE stpctl
    INTEGER, PARAMETER         ::   jpvar = 3
    INTEGER                    ::   nrunid   ! netcdf file id
    INTEGER, DIMENSION(jpvar)  ::   nvarid   ! netcdf variable id
+
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: stpctl.F90 14433 2021-02-11 08:06:49Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/SAS 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -55,7 +55,7 @@ CONTAINS
       !! ** Method  : - Save the time step in numstp
       !!              - Stop the run IF problem encountered by setting nstop > 0
       !!                Problems checked: ice thickness maximum > 100 m
-      !!                                  ice velocity  maximum > 10 m/s 
+      !!                                  ice velocity  maximum > 10 m/s
       !!                                  min ice temperature   < -100 degC
       !!
       !! ** Actions :   "nanuq.step" file = last ocean time-step
@@ -63,13 +63,13 @@ CONTAINS
       !!                 nstop indicator sheared among all local domain
       !!----------------------------------------------------------------------
       INTEGER, INTENT(in   ) ::   kt       ! ocean time-step index
-      !!
+      !!----------------------------------------------------------------------
+      INTEGER                         ::   ji, jj, jk, jl
       INTEGER, PARAMETER              ::   jptst = 3
-      INTEGER                         ::   ji                                    ! dummy loop indices
       INTEGER                         ::   idtime, istatus
       INTEGER , DIMENSION(jptst)      ::   iareasum, iareamin, iareamax
       INTEGER , DIMENSION(3,jptst)    ::   iloc                                  ! min/max loc indices
-      REAL(wp)                        ::   zzz                                   ! local real 
+      REAL(wp)                        ::   zzz                                   ! local real
       REAL(wp), DIMENSION(jpvar+1)    ::   zmax
       REAL(wp), DIMENSION(jptst)      ::   zmaxlocal
       LOGICAL                         ::   ll_wrtstp, ll_colruns, ll_wrtruns, ll_0oce
@@ -78,9 +78,11 @@ CONTAINS
       !!----------------------------------------------------------------------
       IF( nstop > 0 .AND. ngrdstop > -1 )   RETURN   !   stpctl was already called by a child grid
       !
+      IF( ln_timing )   CALL timing_start( 'stp_ctl' )
+      !
       ll_wrtstp  = ( MOD( kt-nit000, sn_cfctl%ptimincr ) == 0 ) .OR. ( kt == nitend )
-      ll_colruns = ll_wrtstp .AND. sn_cfctl%l_runstat .AND. jpnij > 1
-      ll_wrtruns = ( ll_colruns .OR. jpnij == 1 ) .AND. lwm
+      ll_colruns = sn_cfctl%l_runstat .AND. ll_wrtstp .AND. jpnij > 1
+      ll_wrtruns = sn_cfctl%l_runstat .AND. ll_wrtstp .AND. lwm
       !
       IF( kt == nit000 ) THEN
          !
@@ -91,7 +93,6 @@ CONTAINS
          ENDIF
          !                                ! open nanuq.step    ascii file, done only by 1st subdomain
          clname = 'nanuq.step'
-         !
          IF( lwm )   CALL ctl_opn( numstp, clname, 'REPLACE', 'FORMATTED', 'SEQUENTIAL', -1, numout, lwp, narea )
          !
          IF( ll_wrtruns ) THEN
@@ -117,8 +118,34 @@ CONTAINS
          WRITE ( numstp, '(1x, i8)' )   kt
          REWIND( numstp )
       ENDIF
-      !                                   !==            test of local extrema           ==!
-      !                                   !==  done by all processes at every time step  ==!
+
+
+      ! Since array `tm_i` is gone, we need to compute it and store it into `xtmp`
+      IF( ln_dynADV2D .OR. .NOT. ln_icethd ) THEN
+         xtmp(:,:) = 271._wp   ! prevents the controls to blow up in ADV2D test-case...
+      ELSE
+         ! Construct the mean ice temperature:
+         !$acc data present( xtmp, t_i, v_i, vt_i )
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               xtmp(ji,jj) = 0._wp
+               !$acc loop seq
+               DO jl = 1, jpl
+                  !$acc loop seq
+                  DO jk=1, nlay_i
+                     xtmp(ji,jj) = MERGE( xtmp(ji,jj) + r1_nlay_i * t_i(ji,jj,jk,jl) * v_i(ji,jj,jl) / MAX(vt_i(ji,jj),epsi20)  ,  rt0  ,  vt_i(ji,jj) > epsi20 )
+                  END DO
+               END DO
+            END DO
+         END DO
+         !$acc end parallel loop
+         !$acc update self( xtmp )
+         !$acc end data
+      ENDIF
+
+      !                                !==            test of local extrema           ==!
+      !                                !==  done by all processes at every time step  ==!
       !
       llmsk(     1:nn_hls,:) = .FALSE.                                          ! exclude halos from the checked region
       llmsk(Nie0+1:   jpi,:) = .FALSE.
@@ -131,7 +158,7 @@ CONTAINS
       !
       zmax(1) = MAXVAL(      vt_i (:,:)      , mask = llmsk )                   ! max ice thickness
       zmax(2) = MAXVAL( ABS( u_ice(:,:) )    , mask = llmsk )                   ! max ice velocity (zonal only)
-      zmax(3) = MAXVAL(     -tm_i (:,:) + rt0, mask = llmsk )                   ! min ice temperature (in degC)
+      zmax(3) = MAXVAL(     -xtmp (:,:) + rt0, mask = llmsk )                   ! min ice temperature (in degC)
       zmax(jpvar+1) = REAL( nstop, wp )                                         ! stop indicator
       !
       !                                   !==               get global extrema             ==!
@@ -156,24 +183,24 @@ CONTAINS
             istatus = NF90_PUT_VAR( nrunid, nvarid(ji), (/zmax(ji)/), (/kt/), (/1/) )
          END DO
          IF( kt == nitend )   istatus = NF90_CLOSE(nrunid)
-      END IF
+      ENDIF
       !                                   !==               error handling               ==!
       !                                   !==  done by all processes at every time step  ==!
       !
-      IF(   zmax(1) >  100._wp .OR.   &                       ! too large ice thickness maximum ( > 100 m)
-         &  zmax(2) >   10._wp .OR.   &                       ! too large ice velocity ( > 10 m/s)
-         &  zmax(3) < -101._wp .OR.   &                       ! too cold ice temperature ( < -100 degC)
-         & IEEE_IS_NAN( SUM(zmax(1:jptst)) ) .OR.   &               ! NaN encounter in the tests
-         & ABS(         SUM(zmax(1:jptst)) ) > HUGE(1._wp) ) THEN   ! Infinity encounter in the tests
+      IF(   zmax(1) >  100._wp .OR.                 &         ! too large ice thickness maximum ( > 100 m)
+         &  zmax(2) >   10._wp .OR.                 &         ! too large ice velocity ( > 10 m/s)
+         &  zmax(3) < -101._wp .OR.                 &         ! too cold ice temperature ( < -100 degC)
+         & ieee_is_nan( SUM(zmax(1:jptst)) ) .OR.   &         ! NaN encounter in the tests
+         & ABS(   SUM(zmax(1:jptst)) ) > HUGE(1._wp) ) THEN   ! Infinity encounter in the tests
          !
          iloc(:,:) = 0
          IF( ll_colruns ) THEN   ! zmax is global, so it is the same on all subdomains -> no dead lock with mpp_maxloc
             ! first: close the netcdf file, so we can read it
             IF( lwm .AND. kt /= nitend )   istatus = NF90_CLOSE(nrunid)
             ! get global loc on the min/max
-            CALL mpp_maxloc( 'stpctl',      vt_i(:,:)      , llmsk, zzz, iloc(1:2,1) )   ! mpp_maxloc ok if mask = F 
+            CALL mpp_maxloc( 'stpctl',      vt_i(:,:)      , llmsk, zzz, iloc(1:2,1) )   ! mpp_maxloc ok if mask = F
             CALL mpp_maxloc( 'stpctl',ABS( u_ice(:,:) )    , llmsk, zzz, iloc(1:2,2) )
-            CALL mpp_minloc( 'stpctl',      tm_i(:,:) - rt0, llmsk, zzz, iloc(1:2,3) )
+            CALL mpp_minloc( 'stpctl',      xtmp(:,:) - rt0, llmsk, zzz, iloc(1:2,3) )
             ! find which subdomain has the max.
             iareamin(:) = jpnij+1   ;   iareamax(:) = 0   ;   iareasum(:) = 0
             DO ji = 1, jptst
@@ -188,9 +215,9 @@ CONTAINS
             ! if we are here, this means that the subdomain contains some oce points -> no need to test the mask used in maxloc
             iloc(1:2,1) = MAXLOC(       vt_i(:,:)      , mask = llmsk )
             iloc(1:2,2) = MAXLOC( ABS( u_ice(:,:) )    , mask = llmsk )
-            iloc(1:2,3) = MINLOC(       tm_i(:,:) - rt0, mask = llmsk )
+            iloc(1:2,3) = MINLOC(       xtmp(:,:) - rt0, mask = llmsk )
             DO ji = 1, jptst   ! local domain indices ==> global domain indices, excluding halos
-               iloc(1:2,ji) = (/ mig0(iloc(1,ji)), mjg0(iloc(2,ji)) /)
+               iloc(1:2,ji) = (/ mig(iloc(1,ji),0), mjg(iloc(2,ji),0) /)
             END DO
             iareamin(:) = narea   ;   iareamax(:) = narea   ;   iareasum(:) = 1         ! this is local information
          ENDIF
@@ -199,25 +226,22 @@ CONTAINS
          CALL wrt_line( ctmp2, kt, 'ice_thick max', zmax(1), iloc(:,1), iareasum(1), iareamin(1), iareamax(1) )
          CALL wrt_line( ctmp3, kt, '|ice_vel| max', zmax(2), iloc(:,2), iareasum(2), iareamin(2), iareamax(2) )
          CALL wrt_line( ctmp4, kt, 'ice_temp  min', zmax(3), iloc(:,3), iareasum(3), iareamin(3), iareamax(3) )
-         IF( Agrif_Root() ) THEN
-            WRITE(ctmp6,*) '      ===> output of last computed fields in output.abort* files'
-         ELSE
-            WRITE(ctmp6,*) '      ===> output of last computed fields in '//TRIM(Agrif_CFixed())//'_output.abort* files'
-         ENDIF
+         WRITE(ctmp6,*) '      ===> output of last computed fields in nanuq_output.abort* files'
          !
-         CALL dia_wri_state( 1, 'output.abort' )     ! create an output.abort file !LOLO: Kmm-> 1
+         CALL dia_wri_state( 1, 'nanuq_output.abort' )     ! create an nanuq_output.abort file !LOLO: Kmm-> 1
          !
          IF( ll_colruns .OR. jpnij == 1 ) THEN   ! all processes synchronized -> use lwp to print in opened nanuq.output files
             IF(lwp) THEN
-               CALL ctl_stop( ctmp1, ' ', ctmp2, ctmp3, ctmp4, ctmp5, ' ', ctmp6 )
+               CALL ctl_stop( ctmp1, ' ', ctmp2, ctmp3, ctmp4, ' ', ctmp6 )
             ELSE
-               nstop = MAX(1, nstop)   ! make sure nstop > 0 (automatically done when calling ctl_stop)
+               nstop = MAX(1, nstop) ! make sure nstop > 0 (automatically done when calling ctl_stop)
             ENDIF
          ELSE                                    ! only mpi subdomains with errors are here -> STOP now
-            CALL ctl_stop( 'STOP', ctmp1, ' ', ctmp2, ctmp3, ctmp4, ctmp5, ' ', ctmp6 )
+            CALL ctl_stop( 'STOP', ctmp1, ' ', ctmp2, ctmp3, ctmp4, ' ', ctmp6 )
          ENDIF
          !
       ENDIF
+
       !
       IF( nstop > 0 ) THEN                                                  ! an error was detected and we did not abort yet...
          ngrdstop = Agrif_Fixed()                                           ! store which grid got this error
@@ -225,6 +249,8 @@ CONTAINS
       ENDIF
       !
 9500  FORMAT(' it :', i8, '    vt_i_max: ', D23.16, ' |u|_max: ', D23.16,' tm_i_min: ', D23.16)
+      !
+      IF( ln_timing )   CALL timing_stop( 'stp_ctl' )
       !
    END SUBROUTINE stp_ctl
 
@@ -252,19 +278,21 @@ CONTAINS
       WRITE(clkt , '(i9)') kt
 
       WRITE(clfmt, '(i1)') INT(LOG10(REAL(jpnij  ,wp))) + 1     ! how many digits to we need to write ? (we decide max = 9)
-      !!! WRITE(clsum, '(i'//clfmt//')') ksum                   ! this is creating a compilation error with AGRIF
+!!! WRITE(clsum, '(i'//clfmt//')') ksum                   ! this is creating a compilation error with AGRIF
       cl4 = '(i'//clfmt//')'   ;   WRITE(clsum, cl4) ksum
       WRITE(clfmt, '(i1)') INT(LOG10(REAL(MAX(1,jpnij-1),wp))) + 1    ! how many digits to we need to write ? (we decide max = 9)
       cl4 = '(i'//clfmt//')'   ;   WRITE(clmin, cl4) kmin-1
-                                   WRITE(clmax, cl4) kmax-1
+      WRITE(clmax, cl4) kmax-1
       !
       WRITE(clfmt, '(i1)') INT(LOG10(REAL(jpiglo,wp))) + 1      ! how many digits to we need to write jpiglo? (we decide max = 9)
       cl4 = '(i'//clfmt//')'   ;   WRITE(cli, cl4) kloc(1)      ! this is ok with AGRIF
       WRITE(clfmt, '(i1)') INT(LOG10(REAL(jpjglo,wp))) + 1      ! how many digits to we need to write jpjglo? (we decide max = 9)
       cl4 = '(i'//clfmt//')'   ;   WRITE(clj, cl4) kloc(2)      ! this is ok with AGRIF
       !
-      IF( ksum == 1 ) THEN   ;   WRITE(clsuff,9100) TRIM(clmin)
-      ELSE                   ;   WRITE(clsuff,9200) TRIM(clsum), TRIM(clmin), TRIM(clmax)
+      IF( ksum == 1 ) THEN
+         WRITE(clsuff,9100) TRIM(clmin)
+      ELSE
+         WRITE(clsuff,9200) TRIM(clsum), TRIM(clmin), TRIM(clmax)
       ENDIF
       IF(kloc(3) == 0) THEN
          ifmtk = INT(LOG10(REAL(jpk,wp))) + 1                   ! how many digits to we need to write jpk? (we decide max = 9)
@@ -272,7 +300,7 @@ CONTAINS
          WRITE(cdline,9300) TRIM(ADJUSTL(clkt)), TRIM(ADJUSTL(cdprefix)), pval, TRIM(cli), TRIM(clj), clk(1:ifmtk), TRIM(clsuff)
       ELSE
          WRITE(clfmt, '(i1)') INT(LOG10(REAL(jpk,wp))) + 1      ! how many digits to we need to write jpk? (we decide max = 9)
-         !!! WRITE(clk, '(i'//clfmt//')') kloc(3)               ! this is creating a compilation error with AGRIF
+!!! WRITE(clk, '(i'//clfmt//')') kloc(3)               ! this is creating a compilation error with AGRIF
          cl4 = '(i'//clfmt//')'   ;   WRITE(clk, cl4) kloc(3)   ! this is ok with AGRIF
          WRITE(cdline,9400) TRIM(ADJUSTL(clkt)), TRIM(ADJUSTL(cdprefix)), pval, TRIM(cli), TRIM(clj),    TRIM(clk), TRIM(clsuff)
       ENDIF

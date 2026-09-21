@@ -1,0 +1,30 @@
+
+            !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            ! F-points
+            !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            z1md = p1mdf(ji,jj)
+            zs11 = psgmf(ji,jj,1)
+            zs22 = psgmf(ji,jj,2)
+            zs12 = psgmt(ji,jj,3)
+            !
+            zrr   = pScHf(ji,jj)    ! this is `SQRT( rn_l_ref/dx ) * h_f`
+            zCohe = rn_c_ref * zrr
+            !
+            zTd    = TimeDamagePropag( res_grd_loc_f(ji,jj), z1md, pxpCf(ji,jj) )
+            !
+            zsigI  = 0.5_wp * (zs11 + zs22)
+            zrr    = 0.5_wp * (zs11 - zs22)
+            zsigII = SQRT( zrr*zrr + zs12*zs12 )        ! sigII: shearing stress aka second invariant
+            !
+            zinc = mc_incrmt( zsigI, zsigII, zCohe, zTd )
+            zinc = zinc * pdt
+            !
+            p1mdf(ji,jj) = MIN( MAX( z1md - z1md * zinc , r_dmd_min ) , 1._wp )
+            zs11         =           zs11 - zs11 * zinc
+            zs22         =           zs22 - zs22 * zinc
+            zs12         =           zs12 - zs12 * zinc
+            !
+            psgmf(ji,jj,1) = zs11
+            psgmf(ji,jj,2) = zs22
+            psgmt(ji,jj,3) = zs12
+            !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

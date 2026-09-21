@@ -133,7 +133,7 @@ MODULE fldread
    !! * Substitutions
    !!#  include "domzgr_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0, Brodeau (2026)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -166,6 +166,7 @@ CONTAINS
       REAL(wp) ::   ztinta       ! ratio applied to after  records when doing time interpolation
       REAL(wp) ::   ztintb       ! ratio applied to before records when doing time interpolation
       CHARACTER(LEN=1000) ::   clfmt  ! write format
+      INTEGER, PARAMETER  :: kn_fsbc = 1
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('fld_read')
 
@@ -174,11 +175,12 @@ CONTAINS
 
       !#LOLOfixme:
       !IF( nn_components == jp_iam_sas ) THEN
-      !   zt_offset = 1._wp
+      zt_offset = 1._wp
       !ELSE
-      zt_offset = 0._wp
+      !zt_offset = 0._wp
       !ENDIF
-      IF( ln_cpl_atm .OR. ln_cpl_oce ) zt_offset = 1._wp  !#lolo?
+      !IF( ln_cpl_atm .OR. ln_cpl_oce ) zt_offset = 1._wp  !#lolo?
+      !#LOLOfixme.
 
       IF( PRESENT(pt_offset) )   zt_offset = pt_offset
 
@@ -187,21 +189,26 @@ CONTAINS
          isecsbc = nsec_year + nsec1jan000 + NINT( (     REAL(      kit,wp) + zt_offset ) * rn_Dt / REAL(nn_e,wp) )
       ELSE                      ! middle of sbc time step
          ! note: we use kn_fsbc-1 because nsec_year is defined at the middle of the current time step
-         isecsbc = nsec_year + nsec1jan000 + NINT( zt_offset * rn_Dt )
+         isecsbc = nsec_year + nsec1jan000 + NINT( ( 0.5*REAL(kn_fsbc-1,wp) + zt_offset ) * rn_Dt )
       ENDIF
       imf = SIZE( sd )
       !
       IF( ll_firstcall ) THEN                      ! initialization
          DO jf = 1, imf
-            IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
+            IF( TRIM(sd(jf)%clrootname) == 'NOT_USED' )   CYCLE
             CALL fld_init( isecsbc, sd(jf) )       ! read each before field (put them in after as they will be swapped)
          END DO
          IF( lwp ) CALL wgt_print()                ! control print
       ENDIF
+
+
+      ! ================================= !
+      ! update field at current time-step !
+      ! ================================= !
       !
       DO jf = 1, imf                            ! ---   loop over field   --- !
          !
-         IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
+         IF( TRIM(sd(jf)%clrootname) == 'NOT_USED' )   CYCLE
          CALL fld_update( isecsbc, sd(jf), Kmm )
          !
       END DO                                    ! --- end loop over field --- !
@@ -210,7 +217,7 @@ CONTAINS
 
       DO jf = 1, imf                            ! ---   loop over field   --- !
          !
-         IF( TRIM(sd(jf)%clrootname) == 'NOT USED' )   CYCLE
+         IF( TRIM(sd(jf)%clrootname) == 'NOT_USED' )   CYCLE
          !
          ibb = sd(jf)%nbb   ;   iaa = sd(jf)%naa
          !
@@ -243,7 +250,6 @@ CONTAINS
       !
    END SUBROUTINE fld_read
 
-
    SUBROUTINE fld_init( ksecsbc, sdjf )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_init  ***
@@ -264,7 +270,6 @@ CONTAINS
       sdjf%nrec(:,sdjf%naa) = (/ 1, nflag /)  ! default definition to force flp_update to read the file.
       !
    END SUBROUTINE fld_init
-
 
    SUBROUTINE fld_update( ksecsbc, sdjf, Kmm )
       !!---------------------------------------------------------------------
@@ -345,7 +350,6 @@ CONTAINS
       !
    END SUBROUTINE fld_update
 
-
    SUBROUTINE fld_get( sdjf, Kmm )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_get  ***
@@ -389,14 +393,14 @@ CONTAINS
          CALL fld_interp( sdjf%num, sdjf%clvar, iw, ipk, dta_alias(:,:,:), sdjf%nrec(1,iaa), sdjf%lsmname, sdjf%vdefault )
          CALL lbc_lnk( 'fldread', dta_alias(:,:,:), sdjf%cltype, zsgn, kfillmode = jpfillcopy )
       ELSE                                          ! default case
-         idvar  = iom_varid( sdjf%num, sdjf%clvar )
+         idvar  = iom_varid( 'fld_get',  sdjf%num, sdjf%clvar )
          idmspc = iom_file ( sdjf%num )%ndims( idvar )
          IF( iom_file( sdjf%num )%luld( idvar ) )   idmspc = idmspc - 1   ! id of the last spatial dimension
          IF( ipi /= 1 .AND. ipj /= 1 ) THEN
-            CALL iom_get( sdjf%num,  jpdom_global, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
+            CALL iom_get( 'fld_get', sdjf%num,  jpdom_global, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
                &          sdjf%cltype, zsgn, kfill = jpfillcopy )
          ELSE
-            CALL iom_get( sdjf%num,  jpdom_unknown, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
+            CALL iom_get( 'fld_get', sdjf%num,  jpdom_unknown, sdjf%clvar, dta_alias(:,:,:), sdjf%nrec(1,iaa),   &
                &          sdjf%cltype, zsgn, kfill = jpfillcopy )
          ENDIF
       ENDIF
@@ -404,7 +408,6 @@ CONTAINS
       sdjf%rotn(iaa) = .false.   ! vector not yet rotated
       !
    END SUBROUTINE fld_get
-
 
    SUBROUTINE fld_map( knum, cdvar, pdta, krec, kmap, kgrd, kbdy, ldtotvel, ldzint, Kmm )
       !!---------------------------------------------------------------------
@@ -451,7 +454,7 @@ CONTAINS
       llzint = .FALSE.
       IF( PRESENT(ldzint) )   llzint = ldzint
       !
-      idvar = iom_varid( knum, cdvar, kndims = indims, kdimsz = idimsz, lduld = lluld  )
+      idvar = iom_varid( 'fld_map',  knum, cdvar, kndims = indims, kdimsz = idimsz, lduld = lluld  )
       IF( indims == 4 .OR. ( indims == 3 .AND. .NOT. lluld ) ) THEN
          ipkb = idimsz(3)   ! xy(zl)t or xy(zl)
       ELSE
@@ -463,7 +466,7 @@ CONTAINS
       IF( ipk == 1 ) THEN
 
          IF( ipkb /= 1 ) CALL ctl_stop( 'fld_map : we must have ipkb = 1 to read surface data' )
-         CALL iom_get ( knum, jpdom_unknown, cdvar, zz_read(:,:,1), krec )   ! call iom_get with a 2D file
+         CALL iom_get( 'fld_map', knum, jpdom_unknown, cdvar, zz_read(:,:,1), krec )   ! call iom_get with a 2D file
          CALL fld_map_core( zz_read, kmap, pdta )
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -475,7 +478,7 @@ CONTAINS
 
       ELSE
          !
-         CALL iom_get ( knum, jpdom_unknown, cdvar, zz_read(:,:,:), krec )   ! call iom_get with a 3D file
+         CALL iom_get( 'fld_map', knum, jpdom_unknown, cdvar, zz_read(:,:,:), krec )   ! call iom_get with a 3D file
          !
          !IF( ipkb /= ipk .OR. llzint ) THEN   ! boundary data not on model vertical grid : vertical interpolation
          !   !
@@ -484,9 +487,9 @@ CONTAINS
          !      ALLOCATE( zdta_read(ipi,ipj,ipkb), zdta_read_z(ipi,ipj,ipkb), zdta_read_dz(ipi,ipj,ipkb) )
          !
          !      CALL fld_map_core( zz_read, kmap, zdta_read )
-         !      CALL iom_get ( knum, jpdom_unknown, 'gdep'//cltype(kgrd), zz_read )   ! read only once? Potential temporal evolution?
+         !      CALL iom_get( 'fld_map', knum, jpdom_unknown, 'gdep'//cltype(kgrd), zz_read )   ! read only once? Potential temporal evolution?
          !      CALL fld_map_core( zz_read, kmap, zdta_read_z )
-         !      CALL iom_get ( knum, jpdom_unknown,   'e3'//cltype(kgrd), zz_read )   ! read only once? Potential temporal evolution?
+         !      CALL iom_get( 'fld_map', knum, jpdom_unknown,   'e3'//cltype(kgrd), zz_read )   ! read only once? Potential temporal evolution?
          !      CALL fld_map_core( zz_read, kmap, zdta_read_dz )
          !
          !      CALL iom_getatt(knum, '_FillValue', zfv, cdvar=cdvar )
@@ -511,7 +514,6 @@ CONTAINS
       DEALLOCATE( zz_read )
 
    END SUBROUTINE fld_map
-
 
    SUBROUTINE fld_map_core( pdta_read, kmap, pdta_bdy )
       !!---------------------------------------------------------------------
@@ -554,7 +556,6 @@ CONTAINS
 
    END SUBROUTINE fld_map_core
 
-
    SUBROUTINE fld_rot( kt, sd )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_rot  ***
@@ -578,7 +579,7 @@ CONTAINS
       !
       imf = SIZE( sd )
       DO ju = 1, imf
-         IF( TRIM(sd(ju)%clrootname) == 'NOT USED' )   CYCLE
+         IF( TRIM(sd(ju)%clrootname) == 'NOT_USED' )   CYCLE
          ill = LEN_TRIM( sd(ju)%vcomp )
          DO jn = 2-COUNT((/sd(ju)%ln_tint/)), 2
             IF( ill > 0 .AND. .NOT. sd(ju)%rotn(jn) ) THEN   ! find vector rotations required
@@ -587,7 +588,7 @@ CONTAINS
                   clcomp = 'V' // sd(ju)%vcomp(2:ill)   ! works even if ill == 1
                   iv = -1
                   DO jv = 1, imf
-                     IF( TRIM(sd(jv)%clrootname) == 'NOT USED' )   CYCLE
+                     IF( TRIM(sd(jv)%clrootname) == 'NOT_USED' )   CYCLE
                      IF( TRIM(sd(jv)%vcomp) == TRIM(clcomp) )   iv = jv
                   END DO
                   IF( iv > 0 ) THEN   ! fields ju and iv are two components which need to be rotated together
@@ -616,7 +617,6 @@ CONTAINS
       END DO
       !
    END SUBROUTINE fld_rot
-
 
    SUBROUTINE fld_def( sdjf, ldprev, ldnext )
       !!---------------------------------------------------------------------
@@ -797,7 +797,6 @@ CONTAINS
       !
    END SUBROUTINE fld_def
 
-
    SUBROUTINE fld_clopn( sdjf )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_clopn  ***
@@ -844,7 +843,6 @@ CONTAINS
       !
    END SUBROUTINE fld_clopn
 
-
    SUBROUTINE fld_fill( sdf, sdf_n, cdir, cdcaller, cdtitle, cdnam, knoprint, pdefault )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE fld_fill  ***
@@ -866,7 +864,7 @@ CONTAINS
       !
       DO jf = 1, SIZE(sdf)
          sdf(jf)%clrootname = sdf_n(jf)%clname
-         IF( TRIM(sdf_n(jf)%clname) /= 'NOT USED' )   sdf(jf)%clrootname = TRIM( cdir )//sdf(jf)%clrootname
+         IF( TRIM(sdf_n(jf)%clname) /= 'NOT_USED' )   sdf(jf)%clrootname = TRIM( cdir )//sdf(jf)%clrootname
          sdf(jf)%clname     = "not yet defined"
          sdf(jf)%freqh      = sdf_n(jf)%freqh
          sdf(jf)%clvar      = sdf_n(jf)%clvar
@@ -938,7 +936,6 @@ CONTAINS
       !
    END SUBROUTINE fld_fill
 
-
    SUBROUTINE wgt_list( sd, kwgt )
       !!---------------------------------------------------------------------
       !!                    ***  ROUTINE wgt_list  ***
@@ -961,8 +958,7 @@ CONTAINS
       !! nest number explicitly
       nestid = Agrif_Fixed()
       DO kw = 1, nxt_wgt-1
-         IF( ref_wgts(kw)%wgtname == sd%wgtname .AND. &
-            ref_wgts(kw)%nestid  == nestid) THEN
+         IF( ref_wgts(kw)%wgtname == sd%wgtname .AND. ref_wgts(kw)%nestid  == nestid) THEN
             kwgt = kw
             RETURN
          ENDIF
@@ -971,7 +967,6 @@ CONTAINS
       CALL fld_weight( sd )
       !
    END SUBROUTINE wgt_list
-
 
    SUBROUTINE wgt_print( )
       !!---------------------------------------------------------------------
@@ -1000,7 +995,6 @@ CONTAINS
       END DO
       !
    END SUBROUTINE wgt_print
-
 
    SUBROUTINE fld_weight( sd )
       !!---------------------------------------------------------------------
@@ -1033,7 +1027,7 @@ CONTAINS
       !! current weights file
 
       !! get data grid dimensions
-      id = iom_varid( sd%num, sd%clvar, ddims )
+      id = iom_varid( 'fld_weight',  sd%num, sd%clvar, ddims )
 
       !! now open the weights file
       CALL iom_open ( sd%wgtname, inum )   ! interpolation weights
@@ -1065,13 +1059,13 @@ CONTAINS
          ref_wgts(nxt_wgt)%numnei = 0
          DO jn = 1,8   ! try up to a max of 8 neighbours, e.g. for distance weighted average remapping, could be less or more than 8
             WRITE(clname,'(a3,i2.2)') 'src', jn
-            id = iom_varid(inum, clname, ldstop=.FALSE.)
+            id = iom_varid( 'fld_weight', inum, clname, ldstop=.FALSE.)
             IF( id <= 0 ) EXIT
             ref_wgts(nxt_wgt)%numnei = ref_wgts(nxt_wgt)%numnei + 1
          END DO
 
          ! do we do bicubic interpolation ?
-         id = iom_varid(inum, 'wgt16', ldstop=.FALSE.)
+         id = iom_varid( 'fld_weight', inum, 'wgt16', ldstop=.FALSE.)
          IF( id > 0 ) THEN
             ref_wgts(nxt_wgt)%numnei = 4   ! bicubic uses only 4 neighbours (even if duplicated neighbours are defined in the file)
             ref_wgts(nxt_wgt)%numwgt = 16
@@ -1091,7 +1085,7 @@ CONTAINS
 
          DO jn = 1,ref_wgts(nxt_wgt)%numnei
             WRITE(clname,'(a3,i2.2)') 'src', jn
-            CALL iom_get ( inum, jpdom_global, clname, data_tmp(:,:), cd_type = 'Z' )   !  no call to lbc_lnk
+            CALL iom_get( 'fld_weight', inum, jpdom_global, clname, data_tmp(:,:), cd_type = 'Z' )   !  no call to lbc_lnk
             !#LOLObug:
             ! Yes... And it turns out to be a horrible mistake not to lbc_lnk !!!
             CALL lbc_lnk( 'fldread', data_tmp(:,:),sd%cltype,sd%zsgn, kfillmode = jpfillcopy )
@@ -1107,7 +1101,7 @@ CONTAINS
 
          DO jn = 1, ref_wgts(nxt_wgt)%numwgt
             WRITE(clname,'(a3,i2.2)') 'wgt',jn
-            CALL iom_get ( inum, jpdom_global, clname, data_tmp(:,:), cd_type = 'Z' )   !  no call to lbc_lnk
+            CALL iom_get( 'fld_weight', inum, jpdom_global, clname, data_tmp(:,:), cd_type = 'Z' )   !  no call to lbc_lnk
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
                   ref_wgts(nxt_wgt)%data_wgt(ji,jj,jn) = data_tmp(ji,jj)
@@ -1164,7 +1158,6 @@ CONTAINS
       !
    END SUBROUTINE fld_weight
 
-
    SUBROUTINE apply_seaoverland( clmaskfile, zfieldo, jpi1_lsm, jpi2_lsm, jpj1_lsm,   &
       &                          jpj2_lsm, itmpi, itmpj, itmpz, rec1_lsm, recn_lsm )
       !!---------------------------------------------------------------------
@@ -1193,10 +1186,10 @@ CONTAINS
       CALL iom_open( clmaskfile, inum )
       SELECT CASE( SIZE(zfieldo(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),3) )
       CASE(1)
-         CALL iom_get( inum, jpdom_unknown, 'LSM', zslmec1(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,1),   &
+         CALL iom_get( 'apply_seaoverland', inum, jpdom_unknown, 'LSM', zslmec1(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,1),   &
             &          1, kstart = rec1_lsm, kcount = recn_lsm)
       CASE DEFAULT
-         CALL iom_get( inum, jpdom_unknown, 'LSM', zslmec1(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),   &
+         CALL iom_get( 'apply_seaoverland', inum, jpdom_unknown, 'LSM', zslmec1(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),   &
             &          1, kstart = rec1_lsm, kcount = recn_lsm)
       END SELECT
       CALL iom_close( inum )
@@ -1231,7 +1224,6 @@ CONTAINS
       DEALLOCATE ( zslmec1, zfieldn, zfield )
       !
    END SUBROUTINE apply_seaoverland
-
 
    SUBROUTINE seaoverland( zfieldn, ileni, ilenj, zfield )
       !!---------------------------------------------------------------------
@@ -1268,7 +1260,6 @@ CONTAINS
       zfield = MERGE( zfieldn, zlsm2d, ll_msknan2d )
       !
    END SUBROUTINE seaoverland
-
 
    SUBROUTINE fld_interp( num, clvar, kw, kk, dta, nrec, lsmfile, pdefault )
       !!---------------------------------------------------------------------
@@ -1364,10 +1355,10 @@ CONTAINS
          ztmp_fly_dta(:,:,:) = 0.0
          SELECT CASE( SIZE(ztmp_fly_dta(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),3) )
          CASE(1)
-            CALL iom_get( num, jpdom_unknown, clvar, ztmp_fly_dta(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,1),   &
+            CALL iom_get( 'fld_interp', num, jpdom_unknown, clvar, ztmp_fly_dta(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,1),   &
                &          nrec, kstart = rec1_lsm, kcount = recn_lsm)
          CASE DEFAULT
-            CALL iom_get( num, jpdom_unknown, clvar, ztmp_fly_dta(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),   &
+            CALL iom_get( 'fld_interp', num, jpdom_unknown, clvar, ztmp_fly_dta(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),   &
                &          nrec, kstart = rec1_lsm, kcount = recn_lsm)
          END SELECT
          CALL apply_seaoverland(lsmfile,ztmp_fly_dta(jpi1_lsm:jpi2_lsm,jpj1_lsm:jpj2_lsm,:),                  &
@@ -1388,7 +1379,7 @@ CONTAINS
       ELSE
 
          ref_wgts(kw)%fly_dta(:,:,:) = 0.0
-         CALL iom_get( num, jpdom_unknown, clvar, ref_wgts(kw)%fly_dta(jpi1:jpi2,jpj1:jpj2,:), nrec, kstart = rec1, kcount = recn)
+         CALL iom_get( 'fld_interp', num, jpdom_unknown, clvar, ref_wgts(kw)%fly_dta(jpi1:jpi2,jpj1:jpj2,:), nrec, kstart = rec1, kcount = recn)
       ENDIF
 
 
@@ -1436,12 +1427,12 @@ CONTAINS
             jpj2 = jpj1 + recn(2) - 1
             IF( jpi1 == 2 ) THEN
                rec1(1) = ref_wgts(kw)%ddims(1) - ref_wgts(kw)%overlap
-               CALL iom_get( num, jpdom_unknown, clvar, ref_wgts(kw)%col(:,jpj1:jpj2,:), nrec, kstart = rec1, kcount = recn)
+               CALL iom_get( 'fld_interp', num, jpdom_unknown, clvar, ref_wgts(kw)%col(:,jpj1:jpj2,:), nrec, kstart = rec1, kcount = recn)
                ref_wgts(kw)%fly_dta(jpi1-1,jpj1:jpj2,:) = ref_wgts(kw)%col(1,jpj1:jpj2,:)
             ENDIF
             IF( jpi2 + jpimin - 1 == ref_wgts(kw)%ddims(1)+1 ) THEN
                rec1(1) = 1 + ref_wgts(kw)%overlap
-               CALL iom_get( num, jpdom_unknown, clvar, ref_wgts(kw)%col(:,jpj1:jpj2,:), nrec, kstart = rec1, kcount = recn)
+               CALL iom_get( 'fld_interp', num, jpdom_unknown, clvar, ref_wgts(kw)%col(:,jpj1:jpj2,:), nrec, kstart = rec1, kcount = recn)
                ref_wgts(kw)%fly_dta(jpi2+1,jpj1:jpj2,:) = ref_wgts(kw)%col(1,jpj1:jpj2,:)
             ENDIF
          ENDIF
@@ -1506,7 +1497,6 @@ CONTAINS
       ENDIF
       !
    END SUBROUTINE fld_interp
-
 
    FUNCTION fld_filename( sdjf, kday, kmonth, kyear )
       !!---------------------------------------------------------------------

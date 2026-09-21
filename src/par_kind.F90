@@ -20,11 +20,11 @@ MODULE par_kind
    !                                                                !!** Floating point **
    INTEGER, PUBLIC, PARAMETER ::   sp = SELECTED_REAL_KIND( 6, 37)   !: single precision (real 4)
    INTEGER, PUBLIC, PARAMETER ::   dp = SELECTED_REAL_KIND(12,307)   !: double precision (real 8)
-# if defined key_single
+#if defined key_single
    INTEGER, PUBLIC, PARAMETER ::   wp = sp                              !: working precision
-# else
+#else
    INTEGER, PUBLIC, PARAMETER ::   wp = dp                              !: working precision
-# endif
+#endif
 
    !                                                                !!** Integer **
    INTEGER, PUBLIC, PARAMETER ::   i4 = SELECTED_INT_KIND( 9)        !: single precision (integer 4)
@@ -35,7 +35,7 @@ MODULE par_kind
    INTEGER, PUBLIC, PARAMETER ::   lca = 400                          !: Lenght of Character arrays
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: par_kind.F90 14433 2021-02-11 08:06:49Z smasson $ 
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------

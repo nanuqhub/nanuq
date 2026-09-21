@@ -3,16 +3,16 @@ MODULE lbcnfd
    !!                       ***  MODULE  lbcnfd  ***
    !! Ocean        : north fold  boundary conditions
    !!======================================================================
-   !! History :  3.2  ! 2009-03  (R. Benshila)  Original code 
+   !! History :  3.2  ! 2009-03  (R. Benshila)  Original code
    !!            3.5  ! 2013-07  (I. Epicoco, S. Mocavero - CMCC) MPP optimization
    !!            4.0  ! 2017-04  (G. Madec) automatique allocation of array argument (use any 3rd dimension)
    !!----------------------------------------------------------------------
 
    !!----------------------------------------------------------------------
-   !!   lbc_nfd       : generic interface for lbc_nfd_sp and lbc_nfd_dp routines that is doing the north fold in a non-mpi case 
+   !!   lbc_nfd       : generic interface for lbc_nfd_sp and lbc_nfd_dp routines that is doing the north fold in a non-mpi case
    !!   mpp_nfd       : generic interface for mpp_nfd_sp and mpp_nfd_dp routines that will use lbc_nfd directly or indirectly
    !!----------------------------------------------------------------------
-   USE dom_oce        ! ocean space and time domain 
+   USE dom_oce        ! ocean space and time domain
    USE in_out_manager ! I/O manager
    USE lib_mpp        ! MPP library
 #if ! defined key_mpi_off
@@ -23,25 +23,25 @@ MODULE lbcnfd
    PRIVATE
 
    INTERFACE lbc_nfd            ! called by mpp_nfd, lbc_lnk_pt2pt or lbc_lnk_neicoll
-      MODULE PROCEDURE   lbc_nfd_sp, lbc_nfd_ext_sp
-      MODULE PROCEDURE   lbc_nfd_dp, lbc_nfd_ext_dp
-   END INTERFACE
+      MODULE PROCEDURE   lbc_nfd_sp, lbc_nfd_dp
+   END INTERFACE lbc_nfd
 
    INTERFACE mpp_nfd            ! called by lbc_lnk_pt2pt or lbc_lnk_neicoll
       MODULE PROCEDURE   mpp_nfd_sp, mpp_nfd_dp
-   END INTERFACE
-   
+   END INTERFACE mpp_nfd
+
    PUBLIC   mpp_nfd            ! mpi north fold conditions
    PUBLIC   lbc_nfd            ! north fold conditions
 
-   INTEGER, PUBLIC                               :: nfd_nbnei
-   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION (:  ) :: nfd_rknei
-   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION (:,:) :: nfd_rksnd
-   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION (:,:) :: nfd_jisnd
-   
+   INTEGER, PUBLIC                                 :: nfd_nbnei
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION (:    ) :: nfd_rknei
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION (:,:,:) :: nfd_rksnd
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION (:,:,:) :: nfd_jisnd
+   LOGICAL, PUBLIC, ALLOCATABLE, DIMENSION (:,:  ) :: lnfd_same
+
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: lbcnfd.F90 15267 2021-09-17 09:04:34Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -51,10 +51,10 @@ CONTAINS
    !!                   ***  routine lbc_nfd_ext_[sd]p  ***
    !!----------------------------------------------------------------------
    !!
-   !! ** Purpose :   lateral boundary condition 
-   !!                North fold treatment without processor exchanges. 
+   !! ** Purpose :   lateral boundary condition
+   !!                North fold treatment without processor exchanges.
    !!
-   !! ** Method  :   
+   !! ** Method  :
    !!
    !! ** Action  :   ptab with updated values along the north fold
    !!----------------------------------------------------------------------

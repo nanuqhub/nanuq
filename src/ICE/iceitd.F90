@@ -9,7 +9,7 @@ MODULE iceitd
    !!----------------------------------------------------------------------
    !!   ice_itd_rem   : redistribute ice thicknesses after thermo growth and melt
    !!   itd_glinear   : build g(h) satisfying area and volume constraints
-   !!   itd_shiftice  : shift ice across category boundaries, conserving everything
+   !!   itd_shiftice_1d.h90  : shift ice across category boundaries, conserving everything
    !!   ice_itd_reb   : rebin ice thicknesses into bounded categories
    !!   ice_itd_init  : read ice thicknesses mean and min from namelist
    !!----------------------------------------------------------------------
@@ -31,15 +31,15 @@ MODULE iceitd
    PUBLIC   ice_itd_reb   ! called in icecor
 
    INTEGER            ::   nice_catbnd     ! choice of the type of ice category function
+   !$acc declare create(nice_catbnd)
    !                                       ! associated indices:
    INTEGER, PARAMETER ::   np_cathfn = 1   ! categories defined by a function
    INTEGER, PARAMETER ::   np_catusr = 2   ! categories defined by the user
-   !$acc declare create( nice_catbnd, np_cathfn, np_catusr )
    !
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -64,7 +64,7 @@ CONTAINS
       REAL(wp) ::   zx3
       REAL(wp) ::   zslope          ! used to compute local thermodynamic "speeds"
       !
-      LOGICAL ::   lptidx
+      LOGICAL ::   lptidx, lDo
       INTEGER , DIMENSION(jpl-1) ::   jdonor          ! donor category index
       REAL(wp), DIMENSION(jpl)   ::   zdhice          ! ice thickness increment
       REAL(wp), DIMENSION(jpl)   ::   zg0, zg1          ! coefficients for fitting the line of the ITD
@@ -75,14 +75,14 @@ CONTAINS
       REAL(wp) :: zAt  ! mean sea-ice concentration
       !
       !
-      INTEGER  ::   jk, jl2, jl1           ! local integers
-      REAL(wp) ::   zworka, zworkv, ztrans ! ice/snow transferred
-      REAL(wp) ::   ztmp, za1, za2             ! workspace
-      REAL(wp), DIMENSION(jpl) ::   zaTsfn           !  -    -
+      INTEGER  ::   jk, jc, jc1, jc2           ! local integers
+      REAL(wp) ::   zworka, zworkv, ztrans     ! ice/snow transferred
+      REAL(wp) ::   ztmp, za1, za2, zdum       ! workspace
+      REAL(wp), DIMENSION(jpl) :: zaTsfn       !  -    -
       !
       !!------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('iceitd_rem')
-      !$acc data present( a_i,a_i_b,e_i,e_s,h_i,h_i_b,oa_i,sv_i,szv_i,t_su,v_i,v_s,hi_max,hi_mean ) create( jdonor,zdhice,zg0,zg1,zhL,zhR,zdaice,zdvice,zhbnew,zaTsfn )
+      !$acc data present( a_i,a_i_b,e_i,e_s,h_i,h_i_b,oa_i,szv_i,t_su,v_i,v_s,hi_max,hi_mean ) create( jdonor,zdhice,zg0,zg1,zhL,zhR,zdaice,zdvice,zhbnew,zaTsfn )
 
       IF( kt == nit000 .AND. lwp )   WRITE(numout,*) '-- ice_itd_rem: remapping ice thickness distribution'
 
@@ -267,174 +267,7 @@ CONTAINS
                ! 5) Shift ice between categories
                !----------------------------------------------------------------------------------------------
 
-               ! Inlining of `itd_shiftice_gpu`:
-               !#################################
-               !
-               !----------------------------------------------------------------------------------------------
-               ! 5.1) Define a variable equal to a_i*T_su
-               !----------------------------------------------------------------------------------------------
-               !$acc loop seq
-               DO jl = 1, jpl
-                  zaTsfn(jl) = a_i(ji,jj,jl) * t_su(ji,jj,jl)
-               END DO
-               !-------------------------------------------------------------------------------
-               ! 5.2) Transfer volume and energy between categories
-               !-------------------------------------------------------------------------------
-               !$acc loop seq
-               DO jl = 1, jpl - 1
-                  jl1 = jdonor(jl)
-                  IF( jl1 > 0 ) THEN
-                     IF ( jl1 == jl  ) THEN
-                        jl2 = jl1+1
-                     ELSE
-                        jl2 = jl
-                     ENDIF
-                     IF( v_i(ji,jj,jl1) >= epsi10 ) THEN
-                        zworkv = zdvice(jl) / v_i(ji,jj,jl1)
-                     ELSE
-                        zworkv = 0._wp
-                     ENDIF
-                     IF( a_i(ji,jj,jl1) >= epsi10 ) THEN
-                        zworka = zdaice(jl) / a_i(ji,jj,jl1)
-                     ELSE
-                        zworka = 0._wp
-                     ENDIF
-                     !
-                     a_i(ji,jj,jl1) = a_i(ji,jj,jl1) - zdaice(jl)       ! Ice areas
-                     a_i(ji,jj,jl2) = a_i(ji,jj,jl2) + zdaice(jl)
-                     !
-                     v_i(ji,jj,jl1) = v_i(ji,jj,jl1) - zdvice(jl)       ! Ice volumes
-                     v_i(ji,jj,jl2) = v_i(ji,jj,jl2) + zdvice(jl)
-                     !
-                     ztrans         = v_s(ji,jj,jl1) * zworkv              ! Snow volumes
-                     v_s(ji,jj,jl1) = v_s(ji,jj,jl1) - ztrans
-                     v_s(ji,jj,jl2) = v_s(ji,jj,jl2) + ztrans
-                     !
-                     ztrans          = oa_i(ji,jj,jl1) * zworka            ! Ice age
-                     oa_i(ji,jj,jl1) = oa_i(ji,jj,jl1) - ztrans
-                     oa_i(ji,jj,jl2) = oa_i(ji,jj,jl2) + ztrans
-                     !
-                     ztrans          = zaTsfn(jl1) * zworka             ! Surface temperature
-                     zaTsfn(jl1)  = zaTsfn(jl1) - ztrans
-                     zaTsfn(jl2)  = zaTsfn(jl2) + ztrans
-                     !
-                     ! Screws up ACC if uncommented (because not declared on GPU):
-                     !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-                     !   ztrans          = a_ip(ji,jj,jl1) * zworka         ! Pond fraction
-                     !   a_ip(ji,jj,jl1) = a_ip(ji,jj,jl1) - ztrans
-                     !   a_ip(ji,jj,jl2) = a_ip(ji,jj,jl2) + ztrans
-                     !   !
-                     !   ztrans          = v_ip(ji,jj,jl1) * zworkv         ! Pond volume
-                     !   v_ip(ji,jj,jl1) = v_ip(ji,jj,jl1) - ztrans
-                     !   v_ip(ji,jj,jl2) = v_ip(ji,jj,jl2) + ztrans
-                     !   !
-                     !   IF ( ln_pnd_lids ) THEN                            ! Pond lid volume
-                     !      ztrans          = v_il(ji,jj,jl1) * zworkv
-                     !      v_il(ji,jj,jl1) = v_il(ji,jj,jl1) - ztrans
-                     !      v_il(ji,jj,jl2) = v_il(ji,jj,jl2) + ztrans
-                     !   ENDIF
-                     !ENDIF
-                     !
-                     !$acc loop seq
-                     DO jk = 1, nlay_s                                     ! Snow heat content
-                        ztrans            = e_s(ji,jj,jk,jl1) * zworkv
-                        e_s(ji,jj,jk,jl1) = e_s(ji,jj,jk,jl1) - ztrans
-                        e_s(ji,jj,jk,jl2) = e_s(ji,jj,jk,jl2) + ztrans
-                     END DO
-                     !$acc loop seq
-                     DO jk = 1, nlay_i                                     ! Ice heat content
-                        ztrans            = e_i(ji,jj,jk,jl1) * zworkv
-                        e_i(ji,jj,jk,jl1) = e_i(ji,jj,jk,jl1) - ztrans
-                        e_i(ji,jj,jk,jl2) = e_i(ji,jj,jk,jl2) + ztrans
-                     END DO
-                     !                                                     ! Ice salinity
-                     IF( nn_icesal == 4 ) THEN
-                        !$acc loop seq
-                        DO jk = 1, nlay_i
-                           ztrans              = szv_i(ji,jj,jk,jl1) * zworkv
-                           szv_i(ji,jj,jk,jl1) = szv_i(ji,jj,jk,jl1) - ztrans
-                           szv_i(ji,jj,jk,jl2) = szv_i(ji,jj,jk,jl2) + ztrans
-                        END DO
-                     ELSE
-                        ztrans          = sv_i(ji,jj,jl1) * zworkv
-                        sv_i(ji,jj,jl1) = sv_i(ji,jj,jl1) - ztrans
-                        sv_i(ji,jj,jl2) = sv_i(ji,jj,jl2) + ztrans
-                     ENDIF
-                     !
-                  ENDIF !IF( jl1 > 0 )
-                  !
-               END DO !DO jl = 1, jpl - 1
-
-               !-------------------
-               ! 5.3) roundoff errors
-               !-------------------
-               !$acc loop seq
-               DO jl = 1, jpl
-                  ! clem: The transfer between one category to another can lead to very small negative values (-1.e-20)
-                  !       because of truncation error ( i.e. 1. - 1. /= 0 )
-                  a_i(ji,jj,jl) = MAX(a_i(ji,jj,jl), 0._wp)
-                  v_i(ji,jj,jl) = MAX(v_i(ji,jj,jl), 0._wp)
-                  v_s(ji,jj,jl) = MAX(v_s(ji,jj,jl), 0._wp)
-                  oa_i(ji,jj,jl) = MAX(oa_i(ji,jj,jl), 0._wp)
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     e_i(ji,jj,jk,jl) = MAX(e_i(ji,jj,jk,jl), 0._wp)
-                  END DO
-                  !$acc loop seq
-                  DO jk=1, nlay_s
-                     e_s(ji,jj,jk,jl) = MAX(e_s(ji,jj,jk,jl), 0._wp)
-                  END DO
-                  !
-                  ! Screws up ACC if uncommented (because not declared on GPU):
-                  !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-                  !   a_ip(ji,jj,jl) = MAX(a_ip(ji,jj,jl), 0._wp)
-                  !   v_ip(ji,jj,jl) = MAX(v_ip(ji,jj,jl), 0._wp)
-                  !   IF( ln_pnd_lids ) THEN
-                  !      v_il(ji,jj,jl) = MAX(v_il(ji,jj,jl), 0._wp)
-                  !   ENDIF
-                  !ENDIF
-                  !
-                  IF( nn_icesal == 4 ) THEN
-                     !$acc loop seq
-                     DO jk=1, nlay_i
-                        szv_i(ji,jj,jk,jl) = MAX(szv_i(ji,jj,jk,jl), 0._wp)
-                     END DO
-                  ELSE
-                     sv_i(ji,jj,jl) = MAX(sv_i(ji,jj,jl), 0._wp)
-                  ENDIF
-               END DO
-
-               ! at_i must be <= rn_amax
-               ztmp = 0._wp
-               !$acc loop seq
-               DO jl = 1, jpl
-                  ztmp = ztmp + a_i(ji,jj,jl)
-               END DO
-
-               IF ( ztmp > rn_amax ) THEN
-                  !$acc loop seq
-                  DO jl = 1, jpl
-                     a_i(ji,jj,jl) = a_i(ji,jj,jl) * rn_amax / ztmp
-                  END DO
-               ENDIF
-
-               !-------------------------------------------------------------------------------
-               ! 5.4) Update ice thickness and temperature
-               !-------------------------------------------------------------------------------
-               !$acc loop seq
-               DO jl = 1, jpl
-                  IF ( a_i(ji,jj,jl) >= epsi20 ) THEN
-                     h_i (ji,jj,jl)  =  v_i(ji,jj,jl) / a_i(ji,jj,jl)
-                     t_su(ji,jj,jl)  =  zaTsfn(jl) / a_i(ji,jj,jl)
-                  ELSE
-                     h_i (ji,jj,jl)  = 0._wp
-                     t_su(ji,jj,jl)  = rt0
-                  ENDIF
-               END DO !DO jl = 1, jpl
-
-               ! #### end inlining of `itd_shiftice_gpu` ######
-
-
+#include       "iceitd_itd_shiftice_1d.h90"
 
             ENDIF !IF( lptidx )
 
@@ -443,7 +276,7 @@ CONTAINS
       !$acc end parallel loop
 
       ! the following fields need to be updated in the halos (done afterwards):
-      ! a_i, v_i, v_s, sv_i, oa_i, h_i, a_ip, v_ip, v_il, t_su, e_i, e_s
+      ! a_i, v_i, v_s, oa_i, h_i, a_ip, v_ip, v_il, t_su, e_i, e_s
       !
       !IF( ln_icediachk )   CALL ice_cons_hsm(1, 'iceitd_rem', rdiag_v, rdiag_s, rdiag_t, rdiag_fv, rdiag_fs, rdiag_ft)
       !IF( ln_icediachk )   CALL ice_cons2D  (1, 'iceitd_rem',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft)
@@ -594,410 +427,6 @@ CONTAINS
    END SUBROUTINE itd_glinear_sclr
 
 
-
-
-   SUBROUTINE itd_shiftice( lptidx, kdonor, pdaice, pdvice )
-      !!------------------------------------------------------------------
-      !!                ***  ROUTINE itd_shiftice ***
-      !!
-      !! ** Purpose :   shift ice across category boundaries, conserving everything
-      !!              ( area, volume, energy, age*vol, and mass of salt )
-      !!------------------------------------------------------------------
-      LOGICAL , DIMENSION(jpi,jpj),       INTENT(in) ::   lptidx   !
-      INTEGER , DIMENSION(jpi,jpj,jpl-1), INTENT(in) ::   kdonor   ! donor category index
-      REAL(wp), DIMENSION(jpi,jpj,jpl-1), INTENT(in) ::   pdaice   ! ice area transferred across boundary
-      REAL(wp), DIMENSION(jpi,jpj,jpl-1), INTENT(in) ::   pdvice   ! ice volume transferred across boundary
-      !
-      INTEGER  ::   ji, jj, jl, jk         ! dummy loop indices
-      INTEGER  ::   jl2, jl1           ! local integers
-      REAL(wp) ::   zworka, zworkv, ztrans, zAt ! ice/snow transferred
-      REAL(wp), DIMENSION(jpi,jpj,jpl) ::   zaTsfn           !  -    -
-      !!------------------------------------------------------------------
-      !$acc data create( zaTsfn ) present( lptidx, kdonor, pdaice, pdvice, a_i, t_su, a_i, v_i, oa_i, v_s, e_s, e_i, szv_i )
-
-      !----------------------------------------------------------------------------------------------
-      ! 1) Define a variable equal to a_i*T_su
-      !----------------------------------------------------------------------------------------------
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            IF( lptidx(ji,jj) ) THEN
-               !$acc loop seq
-               DO jl = 1, jpl
-                  zaTsfn(ji,jj,jl) = a_i(ji,jj,jl) * t_su(ji,jj,jl)
-               END DO
-            ENDIF
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      !-------------------------------------------------------------------------------
-      ! 2) Transfer volume and energy between categories
-      !-------------------------------------------------------------------------------
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            IF( lptidx(ji,jj) ) THEN
-
-               !$acc loop seq
-               DO jl = 1, jpl - 1
-                  !
-                  jl1 = kdonor(ji,jj,jl)
-                  !
-                  IF( jl1 > 0 ) THEN
-                     !
-                     IF ( jl1 == jl  ) THEN
-                        jl2 = jl1+1
-                     ELSE
-                        jl2 = jl
-                     ENDIF
-                     !
-                     IF( v_i(ji,jj,jl1) >= epsi10 ) THEN
-                        zworkv = pdvice(ji,jj,jl) / v_i(ji,jj,jl1)
-                     ELSE
-                        zworkv = 0._wp
-                     ENDIF
-                     IF( a_i(ji,jj,jl1) >= epsi10 ) THEN
-                        zworka = pdaice(ji,jj,jl) / a_i(ji,jj,jl1)
-                     ELSE
-                        zworka = 0._wp
-                     ENDIF
-                     !
-                     a_i(ji,jj,jl1) = a_i(ji,jj,jl1) - pdaice(ji,jj,jl)       ! Ice areas
-                     a_i(ji,jj,jl2) = a_i(ji,jj,jl2) + pdaice(ji,jj,jl)
-                     !
-                     v_i(ji,jj,jl1) = v_i(ji,jj,jl1) - pdvice(ji,jj,jl)       ! Ice volumes
-                     v_i(ji,jj,jl2) = v_i(ji,jj,jl2) + pdvice(ji,jj,jl)
-                     !
-                     ztrans         = v_s(ji,jj,jl1) * zworkv              ! Snow volumes
-                     v_s(ji,jj,jl1) = v_s(ji,jj,jl1) - ztrans
-                     v_s(ji,jj,jl2) = v_s(ji,jj,jl2) + ztrans
-                     !
-                     ztrans          = oa_i(ji,jj,jl1) * zworka            ! Ice age
-                     oa_i(ji,jj,jl1) = oa_i(ji,jj,jl1) - ztrans
-                     oa_i(ji,jj,jl2) = oa_i(ji,jj,jl2) + ztrans
-                     !
-                     ztrans          = zaTsfn(ji,jj,jl1) * zworka             ! Surface temperature
-                     zaTsfn(ji,jj,jl1)  = zaTsfn(ji,jj,jl1) - ztrans
-                     zaTsfn(ji,jj,jl2)  = zaTsfn(ji,jj,jl2) + ztrans
-                     !
-                     !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-                     !   ztrans          = a_ip(ji,jj,jl1) * zworka         ! Pond fraction
-                     !   a_ip(ji,jj,jl1) = a_ip(ji,jj,jl1) - ztrans
-                     !   a_ip(ji,jj,jl2) = a_ip(ji,jj,jl2) + ztrans
-                     !   !
-                     !   ztrans          = v_ip(ji,jj,jl1) * zworkv         ! Pond volume
-                     !   v_ip(ji,jj,jl1) = v_ip(ji,jj,jl1) - ztrans
-                     !   v_ip(ji,jj,jl2) = v_ip(ji,jj,jl2) + ztrans
-                     !   !
-                     !   IF ( ln_pnd_lids ) THEN                            ! Pond lid volume
-                     !      ztrans          = v_il(ji,jj,jl1) * zworkv
-                     !      v_il(ji,jj,jl1) = v_il(ji,jj,jl1) - ztrans
-                     !      v_il(ji,jj,jl2) = v_il(ji,jj,jl2) + ztrans
-                     !   ENDIF
-                     !ENDIF
-                     !
-                     !$acc loop seq
-                     DO jk = 1, nlay_s                                     ! Snow heat content
-                        ztrans            = e_s(ji,jj,jk,jl1) * zworkv
-                        e_s(ji,jj,jk,jl1) = e_s(ji,jj,jk,jl1) - ztrans
-                        e_s(ji,jj,jk,jl2) = e_s(ji,jj,jk,jl2) + ztrans
-                     END DO
-                     !$acc loop seq
-                     DO jk = 1, nlay_i                                     ! Ice heat content
-                        ztrans            = e_i(ji,jj,jk,jl1) * zworkv
-                        e_i(ji,jj,jk,jl1) = e_i(ji,jj,jk,jl1) - ztrans
-                        e_i(ji,jj,jk,jl2) = e_i(ji,jj,jk,jl2) + ztrans
-                     END DO
-                     !                                                     ! Ice salinity
-                     IF( nn_icesal == 4 ) THEN
-                        !$acc loop seq
-                        DO jk = 1, nlay_i
-                           ztrans              = szv_i(ji,jj,jk,jl1) * zworkv
-                           szv_i(ji,jj,jk,jl1) = szv_i(ji,jj,jk,jl1) - ztrans
-                           szv_i(ji,jj,jk,jl2) = szv_i(ji,jj,jk,jl2) + ztrans
-                        END DO
-                     ELSE
-                        ztrans          = sv_i(ji,jj,jl1) * zworkv
-                        sv_i(ji,jj,jl1) = sv_i(ji,jj,jl1) - ztrans
-                        sv_i(ji,jj,jl2) = sv_i(ji,jj,jl2) + ztrans
-                     ENDIF
-                     !
-                  ENDIF   ! jl1 >0
-                  !
-               END DO !DO jl = 1, jpl - 1
-
-            ENDIF ! lptidx true
-         END DO !DO ji=Nis0-1, Nie0+1
-      END DO !DO jj=Njs0-1, Nje0+1
-      !$acc end parallel loop
-
-      !-------------------
-      ! 3) roundoff errors
-      !-------------------
-      ! clem: The transfer between one category to another can lead to very small negative values (-1.e-20)
-      !       because of truncation error ( i.e. 1. - 1. /= 0 )
-
-      !CALL ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i, a_ip, v_ip, v_il, e_s, e_i, szv_i, lptidx )
-      CALL  ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i,                   e_s, e_i, szv_i, lptidx )
-
-      ! at_i must be <= rn_amax
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            IF( lptidx(ji,jj) ) THEN
-               !
-               zAt = 0._wp
-               !$acc loop seq
-               DO jl = 1, jpl
-                  zAt = zAt + a_i(ji,jj,jl)
-               END DO
-
-               IF ( zAt > rn_amax ) THEN
-                  !$acc loop seq
-                  DO jl  = 1, jpl
-                     a_i(ji,jj,jl) = a_i(ji,jj,jl) * rn_amax / zAt
-                  END DO
-               ENDIF
-
-            ENDIF
-         END DO
-      END DO
-      !$acc end parallel loop
-
-      !-------------------------------------------------------------------------------
-      ! 4) Update ice thickness and temperature
-      !-------------------------------------------------------------------------------
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            IF( lptidx(ji,jj) ) THEN
-               !$acc loop seq
-               DO jl = 1, jpl
-                  IF ( a_i(ji,jj,jl) >= epsi20 ) THEN
-                     h_i (ji,jj,jl)  =  v_i(ji,jj,jl) / a_i(ji,jj,jl)
-                     t_su(ji,jj,jl)  =  zaTsfn(ji,jj,jl) / a_i(ji,jj,jl)
-                  ELSE
-                     h_i (ji,jj,jl)  = 0._wp
-                     t_su(ji,jj,jl)  = rt0
-                  ENDIF
-               END DO
-            ENDIF
-         END DO
-      END DO
-      !$acc end parallel loop
-      !
-      !$acc end data
-      !
-   END SUBROUTINE itd_shiftice
-
-
-   SUBROUTINE itd_shiftice_gpu( lptidx, kdonor, pdaice, pdvice )
-      !!------------------------------------------------------------------
-      !!                ***  ROUTINE itd_shiftice_gpu ***
-      !!
-      !! ** Purpose :   shift ice across category boundaries, conserving everything
-      !!              ( area, volume, energy, age*vol, and mass of salt )
-      !!------------------------------------------------------------------
-      LOGICAL , DIMENSION(jpi,jpj),       INTENT(in) ::   lptidx   !
-      INTEGER , DIMENSION(jpi,jpj,jpl-1), INTENT(in) ::   kdonor   ! donor category index
-      REAL(wp), DIMENSION(jpi,jpj,jpl-1), INTENT(in) ::   pdaice   ! ice area transferred across boundary
-      REAL(wp), DIMENSION(jpi,jpj,jpl-1), INTENT(in) ::   pdvice   ! ice volume transferred across boundary
-      !
-      INTEGER  ::   ji, jj, jl, jk         ! dummy loop indices
-      INTEGER  ::   jl2, jl1           ! local integers
-      REAL(wp) ::   zworka, zworkv, ztrans, zAt ! ice/snow transferred
-      REAL(wp), DIMENSION(jpl) ::   zaTsfn           !  -    -
-      !!------------------------------------------------------------------
-      !$acc data present( lptidx, kdonor, pdaice, pdvice, a_i, t_su, a_i, v_i, oa_i, v_s, e_s, e_i, szv_i ) create( zaTsfn )
-
-      !$acc parallel loop collapse(2) private( zaTsfn )
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            IF( lptidx(ji,jj) ) THEN
-
-               !----------------------------------------------------------------------------------------------
-               ! 1) Define a variable equal to a_i*T_su
-               !----------------------------------------------------------------------------------------------
-
-               !$acc loop seq
-               DO jl = 1, jpl
-                  zaTsfn(jl) = a_i(ji,jj,jl) * t_su(ji,jj,jl)
-               END DO
-
-               !-------------------------------------------------------------------------------
-               ! 2) Transfer volume and energy between categories
-               !-------------------------------------------------------------------------------
-               !$acc loop seq
-               DO jl = 1, jpl - 1
-                  !
-                  jl1 = kdonor(ji,jj,jl)
-                  !
-                  IF( jl1 > 0 ) THEN
-                     !
-                     IF ( jl1 == jl  ) THEN
-                        jl2 = jl1+1
-                     ELSE
-                        jl2 = jl
-                     ENDIF
-                     !
-                     IF( v_i(ji,jj,jl1) >= epsi10 ) THEN
-                        zworkv = pdvice(ji,jj,jl) / v_i(ji,jj,jl1)
-                     ELSE
-                        zworkv = 0._wp
-                     ENDIF
-                     IF( a_i(ji,jj,jl1) >= epsi10 ) THEN
-                        zworka = pdaice(ji,jj,jl) / a_i(ji,jj,jl1)
-                     ELSE
-                        zworka = 0._wp
-                     ENDIF
-                     !
-                     a_i(ji,jj,jl1) = a_i(ji,jj,jl1) - pdaice(ji,jj,jl)       ! Ice areas
-                     a_i(ji,jj,jl2) = a_i(ji,jj,jl2) + pdaice(ji,jj,jl)
-                     !
-                     v_i(ji,jj,jl1) = v_i(ji,jj,jl1) - pdvice(ji,jj,jl)       ! Ice volumes
-                     v_i(ji,jj,jl2) = v_i(ji,jj,jl2) + pdvice(ji,jj,jl)
-                     !
-                     ztrans         = v_s(ji,jj,jl1) * zworkv              ! Snow volumes
-                     v_s(ji,jj,jl1) = v_s(ji,jj,jl1) - ztrans
-                     v_s(ji,jj,jl2) = v_s(ji,jj,jl2) + ztrans
-                     !
-                     ztrans          = oa_i(ji,jj,jl1) * zworka            ! Ice age
-                     oa_i(ji,jj,jl1) = oa_i(ji,jj,jl1) - ztrans
-                     oa_i(ji,jj,jl2) = oa_i(ji,jj,jl2) + ztrans
-                     !
-                     ztrans             = zaTsfn(jl1) * zworka             ! Surface temperature
-                     zaTsfn(jl1)  = zaTsfn(jl1) - ztrans
-                     zaTsfn(jl2)  = zaTsfn(jl2) + ztrans
-                     !
-                     !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-                     !   ztrans          = a_ip(ji,jj,jl1) * zworka         ! Pond fraction
-                     !   a_ip(ji,jj,jl1) = a_ip(ji,jj,jl1) - ztrans
-                     !   a_ip(ji,jj,jl2) = a_ip(ji,jj,jl2) + ztrans
-                     !   !
-                     !   ztrans          = v_ip(ji,jj,jl1) * zworkv         ! Pond volume
-                     !   v_ip(ji,jj,jl1) = v_ip(ji,jj,jl1) - ztrans
-                     !   v_ip(ji,jj,jl2) = v_ip(ji,jj,jl2) + ztrans
-                     !   !
-                     !   IF ( ln_pnd_lids ) THEN                            ! Pond lid volume
-                     !      ztrans          = v_il(ji,jj,jl1) * zworkv
-                     !      v_il(ji,jj,jl1) = v_il(ji,jj,jl1) - ztrans
-                     !      v_il(ji,jj,jl2) = v_il(ji,jj,jl2) + ztrans
-                     !   ENDIF
-                     !ENDIF
-                     !
-                     !$acc loop seq
-                     DO jk = 1, nlay_s                                     ! Snow heat content
-                        ztrans            = e_s(ji,jj,jk,jl1) * zworkv
-                        e_s(ji,jj,jk,jl1) = e_s(ji,jj,jk,jl1) - ztrans
-                        e_s(ji,jj,jk,jl2) = e_s(ji,jj,jk,jl2) + ztrans
-                     END DO
-                     !$acc loop seq
-                     DO jk = 1, nlay_i                                     ! Ice heat content
-                        ztrans            = e_i(ji,jj,jk,jl1) * zworkv
-                        e_i(ji,jj,jk,jl1) = e_i(ji,jj,jk,jl1) - ztrans
-                        e_i(ji,jj,jk,jl2) = e_i(ji,jj,jk,jl2) + ztrans
-                     END DO
-                     !                                                     ! Ice salinity
-                     IF( nn_icesal == 4 ) THEN
-                        !$acc loop seq
-                        DO jk = 1, nlay_i
-                           ztrans              = szv_i(ji,jj,jk,jl1) * zworkv
-                           szv_i(ji,jj,jk,jl1) = szv_i(ji,jj,jk,jl1) - ztrans
-                           szv_i(ji,jj,jk,jl2) = szv_i(ji,jj,jk,jl2) + ztrans
-                        END DO
-                     ELSE
-                        ztrans          = sv_i(ji,jj,jl1) * zworkv
-                        sv_i(ji,jj,jl1) = sv_i(ji,jj,jl1) - ztrans
-                        sv_i(ji,jj,jl2) = sv_i(ji,jj,jl2) + ztrans
-                     ENDIF
-                     !
-                  ENDIF !IF( jl1 > 0 )
-                  !
-               END DO !DO jl = 1, jpl - 1
-
-               !-------------------
-               ! 3) roundoff errors
-               !-------------------
-               ! ==> inlining of `ice_var_roundoff`
-               !$acc loop seq
-               DO jl = 1, jpl
-                  ! clem: The transfer between one category to another can lead to very small negative values (-1.e-20)
-                  !       because of truncation error ( i.e. 1. - 1. /= 0 )
-                  !CALL ice_var_roundoff( a_i, v_i, v_s, sv_i, oa_i, a_ip, v_ip, v_il, e_s, e_i, szv_i, lptidx )
-                  a_i(ji,jj,jl) = MAX(a_i(ji,jj,jl), 0._wp)
-                  v_i(ji,jj,jl) = MAX(v_i(ji,jj,jl), 0._wp)
-                  v_s(ji,jj,jl) = MAX(v_s(ji,jj,jl), 0._wp)
-                  oa_i(ji,jj,jl) = MAX(oa_i(ji,jj,jl), 0._wp)
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     e_i(ji,jj,jk,jl) = MAX(e_i(ji,jj,jk,jl), 0._wp)
-                  END DO
-                  !$acc loop seq
-                  DO jk=1, nlay_s
-                     e_s(ji,jj,jk,jl) = MAX(e_s(ji,jj,jk,jl), 0._wp)
-                  END DO
-                  !
-                  !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-                  !   a_ip(ji,jj,jl) = MAX(a_ip(ji,jj,jl), 0._wp)
-                  !   v_ip(ji,jj,jl) = MAX(v_ip(ji,jj,jl), 0._wp)
-                  !   IF( ln_pnd_lids ) THEN
-                  !      v_il(ji,jj,jl) = MAX(v_il(ji,jj,jl), 0._wp)
-                  !   ENDIF
-                  !ENDIF
-                  !
-                  IF( nn_icesal == 4 ) THEN
-                     !$acc loop seq
-                     DO jk=1, nlay_i
-                        szv_i(ji,jj,jk,jl) = MAX(szv_i(ji,jj,jk,jl), 0._wp)
-                     END DO
-                  ELSE
-                     sv_i(ji,jj,jl) = MAX(sv_i(ji,jj,jl), 0._wp)
-                  ENDIF
-               END DO
-               !! ----- END roundoff error ------
-
-               ! at_i must be <= rn_amax
-               !
-               zAt = 0._wp
-               !$acc loop seq
-               DO jl = 1, jpl
-                  zAt = zAt + a_i(ji,jj,jl)
-               END DO
-
-               IF ( zAt > rn_amax ) THEN
-                  !$acc loop seq
-                  DO jl  = 1, jpl
-                     a_i(ji,jj,jl) = a_i(ji,jj,jl) * rn_amax / zAt
-                  END DO
-               ENDIF
-
-               !-------------------------------------------------------------------------------
-               ! 4) Update ice thickness and temperature
-               !-------------------------------------------------------------------------------
-               !$acc loop seq
-               DO jl = 1, jpl
-                  IF ( a_i(ji,jj,jl) >= epsi20 ) THEN
-                     h_i (ji,jj,jl) =  v_i(ji,jj,jl) / a_i(ji,jj,jl)
-                     t_su(ji,jj,jl) =  zaTsfn(jl)    / a_i(ji,jj,jl)
-                  ELSE
-                     h_i (ji,jj,jl) = 0._wp
-                     t_su(ji,jj,jl) = rt0
-                  ENDIF
-
-               END DO !DO jl = 1, jpl
-
-            ENDIF !IF( lptidx(ji,jj) )
-         END DO !DO ji=Nis0-1, Nie0+1
-      END DO !DO jj=Njs0-1, Nje0+1
-      !$acc end parallel loop
-      !
-      !$acc end data
-      !
-   END SUBROUTINE itd_shiftice_gpu
-
-
-
    SUBROUTINE ice_itd_reb( kt )
       !!------------------------------------------------------------------
       !!                ***  ROUTINE ice_itd_reb ***
@@ -1013,133 +442,115 @@ CONTAINS
       INTEGER  ::   ji, jj, jl !, npti   ! dummy loop indices
       INTEGER  ::   ksatisfy
       REAL(wp) ::   zA
-      LOGICAL , DIMENSION(jpi,jpj)       ::   lptidx
-      INTEGER , DIMENSION(jpi,jpj,jpl-1) ::   jdonor           ! donor category index
-      REAL(wp), DIMENSION(jpi,jpj,jpl-1) ::   zdaice, zdvice   ! ice area and volume transferred
+      LOGICAL                    ::   lptidx, lDo
+      INTEGER , DIMENSION(jpl-1) ::   jdonor           ! donor category index
+      REAL(wp), DIMENSION(jpl-1) ::   zdaice, zdvice   ! ice area and volume transferred
+      REAL(wp), DIMENSION(jpl)   ::   zaTsfn
+      !!
+      INTEGER  :: jk, jc, jc1, jc2
+      REAL(wp) ::   zworka, zworkv, ztrans, zAt, zdum ! ice/snow transferred
       !!------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('iceitd_reb')
-      !$acc data present( a_i, v_i, hi_max, hi_mean ) create( lptidx, jdonor, zdaice, zdvice )
+      !$acc data present( a_i, v_i, hi_max, hi_mean ) create( jdonor, zdaice, zdvice, zaTsfn )
       !
       IF( kt == nit000 .AND. lwp )   WRITE(numout,*) '-- ice_itd_reb: rebining ice thickness distribution'
       !
       !IF( ln_icediachk )   CALL ice_cons_hsm(0, 'iceitd_reb', rdiag_v, rdiag_s, rdiag_t, rdiag_fv, rdiag_fs, rdiag_ft)
       !IF( ln_icediachk )   CALL ice_cons2D  (0, 'iceitd_reb',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft)
 
-      !$acc parallel loop collapse(3)
+
+      !$acc parallel loop collapse(2) private( jdonor, zdaice, zdvice, zaTsfn )
       DO jj=Njs0-1, Nje0+1
          DO ji=Nis0-1, Nie0+1
-            DO jl = 1, jpl-1
-               jdonor(ji,jj,jl) = 0
-               zdaice(ji,jj,jl) = 0._wp
-               zdvice(ji,jj,jl) = 0._wp
-            END DO
-         END DO
-      END DO
-      !$acc end parallel loop
 
-      !$acc loop seq          !---------------------------------------
-      DO jl = 1, jpl-1        ! identify thicknesses that are too big
-         !                    !---------------------------------------
-         ksatisfy = 0
-         !$acc parallel loop collapse(2) reduction(+:ksatisfy)
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
-               IF( a_i(ji,jj,jl) > 0._wp .AND. v_i(ji,jj,jl) > (a_i(ji,jj,jl) * hi_max(jl)) ) THEN
-                  lptidx(ji,jj) = .TRUE.
-                  ksatisfy = ksatisfy + 1
-               ELSE
-                  lptidx(ji,jj) = .FALSE.
-               ENDIF
+            !$acc loop seq
+            DO jl = 1, jpl-1
+               jdonor(jl) = 0
+               zdaice(jl) = 0._wp
+               zdvice(jl) = 0._wp
             END DO
-         END DO
-         !$acc end parallel loop
-         !
-         IF( ksatisfy > 0 ) THEN
-            !$acc parallel loop collapse(2)
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  IF( lptidx(ji,jj) ) THEN
+
+            !$acc loop seq          !---------------------------------------
+            DO jl = 1, jpl-1        ! identify thicknesses that are too big
+               !                    !---------------------------------------
+               ksatisfy = 0
+
+               IF( a_i(ji,jj,jl) > 0._wp .AND. v_i(ji,jj,jl) > (a_i(ji,jj,jl) * hi_max(jl)) ) THEN
+                  lptidx = .TRUE.
+                  ksatisfy = 1
+               ELSE
+                  lptidx = .FALSE.
+               ENDIF
+
+               IF( ksatisfy > 0 ) THEN
+
+                  IF( lptidx ) THEN
                      zA = a_i(ji,jj,jl)
-                     jdonor(ji,jj,jl)  = jl
+                     jdonor(jl)  = jl
                      ! how much of a_i you send in cat sup is somewhat arbitrary
                      ! these are from CICE => transfer everything
                      ! these are from LLN => transfer only half of the category
-                     zdaice(ji,jj,jl) =                          0.5_wp  * zA
-                     zdvice(ji,jj,jl) = v_i(ji,jj,jl) - (1._wp - 0.5_wp) * zA * hi_mean(jl)
+                     zdaice(jl) =                          0.5_wp  * zA
+                     zdvice(jl) = v_i(ji,jj,jl) - (1._wp - 0.5_wp) * zA * hi_mean(jl)
+                     
+                     ! ==> Shift jl=>jl+1
+#include             "iceitd_itd_shiftice_1d.h90"
+                     
                   ENDIF
-               END DO
-            END DO
-            !$acc end parallel loop
-            !
-            !CALL itd_shiftice( lptidx, jdonor, zdaice, zdvice )  ! Shift jl=>jl+1
-            CALL itd_shiftice_gpu( lptidx, jdonor, zdaice, zdvice )  ! Shift jl=>jl+1
 
-            ! Reset shift parameters
-            !$acc parallel loop collapse(2)
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  jdonor(ji,jj,jl) = 0
-                  zdaice(ji,jj,jl) = 0._wp
-                  zdvice(ji,jj,jl) = 0._wp
-               END DO
-            END DO
-            !$acc end parallel loop
+                  ! Reset shift parameters
+                  jdonor(jl) = 0
+                  zdaice(jl) = 0._wp
+                  zdvice(jl) = 0._wp
 
-         ENDIF ! IF( ksatisfy > 0 )
-         !
-      END DO ! DO jl = 1, jpl-1
+               ENDIF ! IF( ksatisfy > 0 )
+               !
+            END DO ! DO jl = 1, jpl-1
 
 
 
-      !$acc loop seq          !-----------------------------------------
-      DO jl = jpl-1, 1, -1    ! Identify thicknesses that are too small
-         !                    !-----------------------------------------
-         ksatisfy = 0
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
+            !$acc loop seq          !-----------------------------------------
+            DO jl = jpl-1, 1, -1    ! Identify thicknesses that are too small
+               !                    !-----------------------------------------
+               ksatisfy = 0
                IF( a_i(ji,jj,jl+1) > 0._wp .AND. v_i(ji,jj,jl+1) <= (a_i(ji,jj,jl+1) * hi_max(jl)) ) THEN
-                  lptidx(ji,jj) = .TRUE.
-                  ksatisfy = ksatisfy + 1
+                  lptidx = .TRUE.
+                  ksatisfy = 1
                ELSE
-                  lptidx(ji,jj) = .FALSE.
+                  lptidx = .FALSE.
                ENDIF
-            END DO
-         END DO
-         !$acc end parallel loop
-         !
-         IF( ksatisfy > 0 ) THEN
-            !$acc parallel loop collapse(2)
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  IF( lptidx(ji,jj) ) THEN
-                     jdonor(ji,jj,jl) = jl + 1
-                     zdaice(ji,jj,jl) = a_i(ji,jj,jl+1)
-                     zdvice(ji,jj,jl) = v_i(ji,jj,jl+1)
+               !
+               IF( ksatisfy > 0 ) THEN
+
+                  IF( lptidx ) THEN
+                     jdonor(jl) = jl + 1
+                     zdaice(jl) = a_i(ji,jj,jl+1)
+                     zdvice(jl) = v_i(ji,jj,jl+1)
+
+
+                     ! ==> Shift jl=>jl+1
+#include             "iceitd_itd_shiftice_1d.h90"
+
                   ENDIF
-               END DO
-            END DO
-            !$acc end parallel loop
+                     
+                  ! Reset shift parameters
+                  jdonor(jl) = 0
+                  zdaice(jl) = 0._wp
+                  zdvice(jl) = 0._wp
+
+               ENDIF ! IF( ksatisfy > 0 )
+               !
+            END DO !DO jl = jpl-1, 1, -1
             !
-            !CALL itd_shiftice( lptidx, jdonor, zdaice, zdvice )  ! Shift jl+1=>jl
-            CALL itd_shiftice_gpu( lptidx, jdonor, zdaice, zdvice )  ! Shift jl+1=>jl
 
-            ! Reset shift parameters
-            !$acc parallel loop collapse(2)
-            DO jj=Njs0-1, Nje0+1
-               DO ji=Nis0-1, Nie0+1
-                  jdonor(ji,jj,jl) = 0
-                  zdaice(ji,jj,jl) = 0._wp
-                  zdvice(ji,jj,jl) = 0._wp
-               END DO
-            END DO
-            !$acc end parallel loop
 
-         ENDIF ! IF( ksatisfy > 0 )
-         !
-      END DO !DO jl = jpl-1, 1, -1
-      !
-      ! clem: those fields must be updated on the halos: a_i, v_i, v_s, sv_i, oa_i, h_i, t_su, a_ip, v_ip, v_il, e_i, e_s
+         END DO !DO ji=Nis0-1, Nie0+1
+      END DO !DO jj=Njs0-1, Nje0+1
+      !$acc end parallel loop
+
+
+
+      ! clem: those fields must be updated on the halos: a_i, v_i, v_s,       oa_i, h_i, t_su, a_ip, v_ip, v_il, e_i, e_s
       !       note: ice_itd_reb is called in icedyn
       !             and in icethd (but once the arrays are already updated on the boundaries)
       !
@@ -1235,10 +646,10 @@ CONTAINS
       !
       !$acc update device( ln_cat_hfn, rn_himean, ln_cat_usr, rn_catbnd, rn_himin, rn_himax, nice_catbnd )
       !
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_itd_init() => adding `hi_max` & `hi_mean` arrays to memory!'
       !$acc enter data copyin( hi_max(0:jpl), hi_mean(1:jpl) )
-# endif
+#endif
       !
    END SUBROUTINE ice_itd_init
 

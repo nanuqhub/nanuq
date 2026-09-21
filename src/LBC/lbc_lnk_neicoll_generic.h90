@@ -1,271 +1,388 @@
-SUBROUTINE lbc_lnk_neicoll_/**/PRECISION( cdname, ptab, cd_nat, psgn, kfld, kfillmode, pfillval, khls, lsend, lrecv, ld4only )
-      CHARACTER(len=*)              , INTENT(in   ) ::   cdname      ! name of the calling subroutine
-      TYPE(PTR_4d_/**/PRECISION),  DIMENSION(:), INTENT(inout) ::   ptab        ! pointer of arrays on which apply the b.c.
-      CHARACTER(len=1), DIMENSION(:), INTENT(in   ) ::   cd_nat      ! nature of array grid-points
-      REAL(PRECISION),  DIMENSION(:), INTENT(in   ) ::   psgn        ! sign used across the north fold boundary
-      INTEGER                       , INTENT(in   ) ::   kfld        ! number of pt3d arrays
-      INTEGER ,             OPTIONAL, INTENT(in   ) ::   kfillmode   ! filling method for halo over land (default = constant)
-      REAL(PRECISION),      OPTIONAL, INTENT(in   ) ::   pfillval    ! background value (used at closed boundaries)
-      INTEGER ,             OPTIONAL, INTENT(in   ) ::   khls        ! halo size, default = nn_hls
-      LOGICAL, DIMENSION(8),OPTIONAL, INTENT(in   ) ::   lsend, lrecv  ! communication with other 4 proc
-      LOGICAL,              OPTIONAL, INTENT(in   ) ::   ld4only     ! if .T., do only 4-neighbour comm (ignore corners)
+
+SUBROUTINE lbc_lnk_neicoll_/**/PRECISION( cdname, ptab, cd_nat, psgn, kfld, kfillmode, pfillval, lsend, lrecv, ld4only, ldfull )
+   CHARACTER(len=*)              , INTENT(in   ) ::   cdname      ! name of the calling subroutine
+   TYPE(PTR_4d_/**/PRECISION),  DIMENSION(:), INTENT(inout) ::   ptab        ! pointer of arrays on which apply the b.c.
+   CHARACTER(len=1), DIMENSION(:), INTENT(in   ) ::   cd_nat      ! nature of array grid-points
+   REAL(PRECISION),  DIMENSION(:), INTENT(in   ) ::   psgn        ! sign used across the north fold boundary
+   INTEGER                       , INTENT(in   ) ::   kfld        ! number of pt3d arrays
+   INTEGER ,             OPTIONAL, INTENT(in   ) ::   kfillmode   ! filling method for halo over land (default = constant)
+   REAL(PRECISION),      OPTIONAL, INTENT(in   ) ::   pfillval    ! background value (used at closed boundaries)
+   LOGICAL, DIMENSION(8),OPTIONAL, INTENT(in   ) ::   lsend, lrecv  ! communication with other 4 proc
+   LOGICAL,              OPTIONAL, INTENT(in   ) ::   ld4only     ! if .T., do only 4-neighbour comm (ignore corners)
+   LOGICAL             , OPTIONAL, INTENT(in   ) ::   ldfull      ! .true. if we also update the last line of the inner domain
+   !
+   INTEGER  ::   ji,  jj,  jk , jl,  jf, jn      ! dummy loop indices
+   INTEGER  ::   ip0i, ip1i, im0i, im1i
+   INTEGER  ::   ip0j, ip1j, im0j, im1j
+   INTEGER  ::   ishti, ishtj, ishti1, ishtj1, ishti2, ishtj2
+   INTEGER  ::                 isgni1, isgni2, isgnj1, isgnj2
+   INTEGER  ::                    ii1,    ii2,    ij1,    ij2
+   INTEGER  ::   inbS, inbR, iszS, iszR
+   INTEGER  ::   ierr
+   INTEGER  ::   ihls, ihlsmax, idx
+   INTEGER  ::   impi_nc
+   INTEGER  ::   ifill_nfd
+   INTEGER, DIMENSION(4)  ::   iwewe, issnn
+   INTEGER, DIMENSION(  kfld)  ::   ipi, ipj, ipk, ipl   ! dimension of the input array
+   INTEGER, DIMENSION(8,kfld)  ::   ifill
+   INTEGER, DIMENSION(8,kfld)  ::   isizei, ishtSi, ishtRi, ishtPi
+   INTEGER, DIMENSION(8,kfld)  ::   isizej, ishtSj, ishtRj, ishtPj
+   INTEGER, DIMENSION(8)       ::   jnf
+   INTEGER, DIMENSION(:), ALLOCATABLE  ::   iScnt, iRcnt    ! number of elements to be sent/received
+   INTEGER, DIMENSION(:), ALLOCATABLE  ::   iSdpl, iRdpl    ! displacement in halos arrays
+   LOGICAL, DIMENSION(8,kfld)  ::   llsend, llrecv
+   LOGICAL  ::   ll4only                                    ! default: 8 neighbourgs
+   REAL(PRECISION) ::   zland
+   !!----------------------------------------------------------------------
+   !
+   ! ----------------------------------------- !
+   !     1. local variables initialization     !
+   ! ----------------------------------------- !
+   !
+   ! take care of optional parameters
+   !
+   ll4only = .FALSE.    ! default definition
+   IF( PRESENT(ld4only) )   ll4only = ld4only
+   !
+   zland = 0._wp                                     ! land filling value: zero by default
+   IF( PRESENT( pfillval ) )   zland = pfillval      ! set land value
+   !
+   ifill_nfd = jpfillcst                             ! default definition
+   IF( PRESENT(kfillmode) )   ifill_nfd = kfillmode
+   !
+   ihlsmax = 0
+   !
+   DO jf = 1, kfld
       !
-      INTEGER  ::    ji,  jj,  jk , jl,  jf, jn      ! dummy loop indices
-      INTEGER  ::   ipi, ipj, ipk, ipl, ipf          ! dimension of the input array
-      INTEGER  ::   ip0i, ip1i, im0i, im1i
-      INTEGER  ::   ip0j, ip1j, im0j, im1j
-      INTEGER  ::   ishti, ishtj, ishti2, ishtj2
-      INTEGER  ::   iszS, iszR
-      INTEGER  ::   ierr
-      INTEGER  ::   ihls, idx
-      INTEGER  ::   impi_nc
-      INTEGER  ::   ifill_nfd
-      INTEGER, DIMENSION(4)  ::   iwewe, issnn
-      INTEGER, DIMENSION(8)  ::   isizei, ishtSi, ishtRi, ishtPi
-      INTEGER, DIMENSION(8)  ::   isizej, ishtSj, ishtRj, ishtPj
-      INTEGER, DIMENSION(8)  ::   ifill, iszall
-      INTEGER, DIMENSION(8)  ::   jnf
-      INTEGER, DIMENSION(:), ALLOCATABLE  ::   iScnt, iRcnt    ! number of elements to be sent/received
-      INTEGER, DIMENSION(:), ALLOCATABLE  ::   iSdpl, iRdpl    ! displacement in halos arrays
-      LOGICAL, DIMENSION(8)  ::   llsend, llrecv
-      REAL(PRECISION) ::   zland
-      LOGICAL  ::   ll4only                                    ! default: 8 neighbourgs
-      !!----------------------------------------------------------------------
+      ipi(jf) = SIZE(ptab(jf)%pt4d,1)
+      ipj(jf) = SIZE(ptab(jf)%pt4d,2)
+      ipk(jf) = SIZE(ptab(jf)%pt4d,3)
+      ipl(jf) = SIZE(ptab(jf)%pt4d,4)
+      ihls    = ( ipi(jf) - Ni_0 ) / 2
+      ihlsmax = MAX(ihls, ihlsmax)
       !
-      ! ----------------------------------------- !
-      !     1. local variables initialization     !
-      ! ----------------------------------------- !
-      !
-      ipi = SIZE(ptab(1)%pt4d,1)
-      ipj = SIZE(ptab(1)%pt4d,2)
-      ipk = SIZE(ptab(1)%pt4d,3)
-      ipl = SIZE(ptab(1)%pt4d,4)
-      ipf = kfld
-      !
-      IF( narea == 1 .AND. numcom == -1 ) CALL mpp_report( cdname, ipk, ipl, ipf, ld_lbc = .TRUE. )
-      !
-      ! take care of optional parameters
-      !
-      ihls = nn_hls       ! default definition
-      IF( PRESENT( khls ) )   ihls = khls
-      IF( ihls > n_hlsmax ) THEN
-         WRITE(ctmp1,*) TRIM(cdname), '  is calling lbc_lnk with khls > n_hlsmax : ', khls, '>', n_hlsmax
-         CALL ctl_stop( 'STOP', ctmp1 )
+      IF( numcom == -1 ) THEN   ! test input array shape. Use numcom to do these tests only at the beginning of the run
+         IF( MOD( ipi(jf) - Ni_0, 2 ) /= 0 ) THEN
+            WRITE(ctmp1,*) TRIM(cdname), ' is calling lbc_lnk but the ', jf,'th input array has wong i-size: ', ipi(jf), Ni_0
+            CALL ctl_stop( 'STOP', ctmp1 )
+         ENDIF
+         IF( MOD( ipj(jf) - Nj_0, 2 ) /= 0 ) THEN
+            WRITE(ctmp1,*) TRIM(cdname), ' is calling lbc_lnk but the ', jf,'th input array has wong j-size: ', ipj(jf), Nj_0
+            CALL ctl_stop( 'STOP', ctmp1 )
+         ENDIF
+         IF( ( ipj(jf) - Nj_0 ) / 2 /= ihls ) THEN
+            WRITE(ctmp1,*) TRIM(cdname), ' is calling lbc_lnk but the ', jf,'th input array as wong i and j-size: ',   &
+               &           ipi(jf), Ni_0, ipj(jf), Nj_0
+            CALL ctl_stop( 'STOP', ctmp1 )
+         ENDIF
+         IF( ihls > n_hlsmax ) THEN
+            WRITE(ctmp1,*) TRIM(cdname), ' is calling lbc_lnk but for the ', jf,'th input array, ', ihls, ' > n_hlsmax = ',   &
+               &           n_hlsmax
+            CALL ctl_stop( 'STOP', ctmp1 )
+         ENDIF
       ENDIF
-      IF( ipi /= Ni_0+2*ihls ) THEN
-         WRITE(ctmp1,*) TRIM(cdname), ' is calling lbc_lnk with an input array which does not match ihls along i: ', ipi, ihls, Ni_0
-         CALL ctl_stop( 'STOP', ctmp1 )
-      ENDIF
-      IF( ipj /= Nj_0+2*ihls ) THEN
-         WRITE(ctmp1,*) TRIM(cdname), ' is calling lbc_lnk with an input array which does not match ihls along j:', ipj, ihls , Nj_0
-         CALL ctl_stop( 'STOP', ctmp1 )
-      ENDIF
-      !
-      ll4only = .FALSE.    ! default definition
-      IF( PRESENT(ld4only) )   ll4only = ld4only
-      !
-      impi_nc = mpi_nc_com8(ihls)   ! default
-      IF( ll4only )   impi_nc = mpi_nc_com4(ihls)
-      !
-      zland = 0._wp                                     ! land filling value: zero by default
-      IF( PRESENT( pfillval ) )   zland = pfillval      ! set land value
       !
       ! define llsend and llrecv: logicals which say if mpi-neibourgs for send or receive exist or not.
-      IF     ( PRESENT(lsend) .AND. PRESENT(lrecv) ) THEN   ! localy defined neighbourgs 
+      IF     ( PRESENT(lsend) .AND. PRESENT(lrecv) ) THEN   ! localy defined neighbourgs
          CALL ctl_stop( 'STOP', 'mpp_nc_generic+lsend and lrecv not yet implemented')
       ELSE IF( PRESENT(lsend) .OR.  PRESENT(lrecv) ) THEN
          WRITE(ctmp1,*) TRIM(cdname), '  is calling lbc_lnk with only one of the two arguments lsend or lrecv'
          CALL ctl_stop( 'STOP', ctmp1 )
-      ELSE                                              ! default neighbours
-         llsend(:) = mpiSnei(ihls,:) >= 0
-         IF( ll4only )   llsend(5:8) = .FALSE.          ! exclude corners
-         llrecv(:) = mpiRnei(ihls,:) >= 0
-         IF( ll4only )   llrecv(5:8) = .FALSE.          ! exclude corners
+      ELSE                                                  ! default neighbours
+         llsend(:,jf) = mpiSnei(:,ihls) >= 0
+         IF( ll4only )   llsend(5:8,jf) = .FALSE.           ! exclude corners
+         llrecv(:,jf) = mpiRnei(:,ihls) >= 0
+         IF( ll4only )   llrecv(5:8,jf) = .FALSE.           ! exclude corners
       ENDIF
       !
       ! define ifill: which method should be used to fill each parts (sides+corners) of the halos
       ! default definition
       DO jn = 1, 8
-         IF(             llrecv(jn) ) THEN   ;   ifill(jn) = jpfillmpi    ! with an mpi communication
-         ELSEIF(    l_SelfPerio(jn) ) THEN   ;   ifill(jn) = jpfillperio  ! with self-periodicity
-         ELSEIF( PRESENT(kfillmode) ) THEN   ;   ifill(jn) = kfillmode    ! localy defined
-         ELSE                                ;   ifill(jn) = jpfillcst    ! constant value (zland)
+         IF( llrecv(jn,jf) ) THEN
+            ifill(jn,jf) = jpfillmpi ! with an mpi communication
+         ELSEIF( l_SelfPerio(jn) ) THEN
+            ifill(jn,jf) = jpfillperio ! with self-periodicity
+         ELSEIF( PRESENT(kfillmode) ) THEN
+            ifill(jn,jf) = kfillmode ! localy defined
+         ELSEIF( ihls == 0 ) THEN
+            ifill(jn,jf) = jpfillnothing ! do nothing
+         ELSE
+            ifill(jn,jf) = jpfillcst ! constant value (zland)
          ENDIF
       END DO
       ! take care of "indirect self-periodicity" for the corners
       DO jn = 5, 8
-         IF(.NOT.l_SelfPerio(jn) .AND. l_SelfPerio(jpwe))   ifill(jn) = jpfillnothing   ! no bi-perio but ew-perio: do corners later
-         IF(.NOT.l_SelfPerio(jn) .AND. l_SelfPerio(jpso))   ifill(jn) = jpfillnothing   ! no bi-perio but ns-perio: do corners later
+         IF(.NOT.l_SelfPerio(jn) .AND. l_SelfPerio(jpwe)) ifill(jn,jf) = jpfillnothing ! no bi-perio but ew-perio: do corners later
+         IF(.NOT.l_SelfPerio(jn) .AND. l_SelfPerio(jpso)) ifill(jn,jf) = jpfillnothing ! no bi-perio but ns-perio: do corners later
       END DO
       ! north fold treatment
-      IF( l_IdoNFold ) THEN
-         ifill_nfd = ifill(jpno)             ! if we are here, this means llrecv(jpno) = .false. and l_SelfPerio(jpno) = .false.
-         ifill( (/jpno/) ) = jpfillnothing   ! we do north fold -> do nothing for northern halo
-      ENDIF
-      
+      IF( l_IdoNFold )   ifill(jpno,jf) = jpfillnothing    ! we do north fold -> do nothing for northern halo
+
       ! We first define the localization and size of the parts of the array that will be sent (s), received (r)
       ! or used for periodocity (p). The localization is defined as "the bottom left corner - 1" in i and j directions.
       ! This is a shift that will be applied later in the do loops to pick-up the appropriate part of the array
       !
       ! all definitions bellow do not refer to N[ij][se]0 so we can use it with any local value of ihls
-      !                   !                       ________________________
-      ip0i =          0   !          im0j = inner |__|________________|__|
-      ip1i =       ihls   !   im1j = inner - halo |  |__|__________|__|  |
-      im1i = ipi-2*ihls   !                       |  |  |          |  |  |
-      im0i = ipi - ihls   !                       |  |  |          |  |  |
-      ip0j =          0   !                       |  |  |          |  |  |
-      ip1j =       ihls   !                       |  |__|__________|__|  |
-      im1j = ipj-2*ihls   !           ip1j = halo |__|__|__________|__|__|
-      im0j = ipj - ihls   !              ip0j = 0 |__|________________|__|
-      !                   !                    ip0i ip1i        im1i im0i
+      !                       !                       ________________________
+      ip0i =              0   !          im0j = inner |__|________________|__|
+      ip1i =           ihls   !   im1j = inner - halo |  |__|__________|__|  |
+      im1i = ipi(jf)-2*ihls   !                       |  |  |          |  |  |
+      im0i = ipi(jf) - ihls   !                       |  |  |          |  |  |
+      ip0j =              0   !                       |  |  |          |  |  |
+      ip1j =           ihls   !                       |  |__|__________|__|  |
+      im1j = ipj(jf)-2*ihls   !           ip1j = halo |__|__|__________|__|__|
+      im0j = ipj(jf) - ihls   !              ip0j = 0 |__|________________|__|
+      !                       !                    ip0i ip1i        im1i im0i
       !
       iwewe(:) = (/ jpwe,jpea,jpwe,jpea /)   ;   issnn(:) = (/ jpso,jpso,jpno,jpno /)
-      !     sides:     west  east south north      ;   corners: so-we, so-ea, no-we, no-ea
-      isizei(1:4) = (/ ihls, ihls, Ni_0, Ni_0 /)   ;   isizei(5:8) = ihls              ! i- count
-      isizej(1:4) = (/ Nj_0, Nj_0, ihls, ihls /)   ;   isizej(5:8) = ihls              ! j- count
-      ishtSi(1:4) = (/ ip1i, im1i, ip1i, ip1i /)   ;   ishtSi(5:8) = ishtSi( iwewe )   ! i- shift send data
-      ishtSj(1:4) = (/ ip1j, ip1j, ip1j, im1j /)   ;   ishtSj(5:8) = ishtSj( issnn )   ! j- shift send data
-      ishtRi(1:4) = (/ ip0i, im0i, ip1i, ip1i /)   ;   ishtRi(5:8) = ishtRi( iwewe )   ! i- shift received data location
-      ishtRj(1:4) = (/ ip1j, ip1j, ip0j, im0j /)   ;   ishtRj(5:8) = ishtRj( issnn )   ! j- shift received data location
-      ishtPi(1:4) = (/ im1i, ip1i, ip1i, ip1i /)   ;   ishtPi(5:8) = ishtPi( iwewe )   ! i- shift data used for periodicity
-      ishtPj(1:4) = (/ ip1j, ip1j, im1j, ip1j /)   ;   ishtPj(5:8) = ishtPj( issnn )   ! j- shift data used for periodicity
+      !        sides:     west  east south north      ;   corners: so-we, so-ea, no-we, no-ea
+      isizei(1:4,jf) = (/ ihls, ihls, Ni_0, Ni_0 /)   ;   isizei(5:8,jf) = ihls                 ! i- count
+      isizej(1:4,jf) = (/ Nj_0, Nj_0, ihls, ihls /)   ;   isizej(5:8,jf) = ihls                 ! j- count
+      ishtSi(1:4,jf) = (/ ip1i, im1i, ip1i, ip1i /)   ;   ishtSi(5:8,jf) = ishtSi( iwewe,jf )   ! i- shift  send data
+      ishtSj(1:4,jf) = (/ ip1j, ip1j, ip1j, im1j /)   ;   ishtSj(5:8,jf) = ishtSj( issnn,jf )   ! j- shift  send data
+      ishtRi(1:4,jf) = (/ ip0i, im0i, ip1i, ip1i /)   ;   ishtRi(5:8,jf) = ishtRi( iwewe,jf )   ! i- shift  recv data
+      ishtRj(1:4,jf) = (/ ip1j, ip1j, ip0j, im0j /)   ;   ishtRj(5:8,jf) = ishtRj( issnn,jf )   ! j- shift  recv data
+      ishtPi(1:4,jf) = (/ im1i, ip1i, ip1i, ip1i /)   ;   ishtPi(5:8,jf) = ishtPi( iwewe,jf )   ! i- shift perio data
+      ishtPj(1:4,jf) = (/ ip1j, ip1j, im1j, ip1j /)   ;   ishtPj(5:8,jf) = ishtPj( issnn,jf )   ! j- shift perio data
       !
-      ! -------------------------------- !
-      !     2. Prepare MPI exchanges     !
-      ! -------------------------------- !
-      !
-      ! Allocate local temporary arrays to be sent/received.
-      iszS = COUNT( llsend )
-      iszR = COUNT( llrecv )
-      ALLOCATE( iScnt(iszS), iRcnt(iszR), iSdpl(iszS), iRdpl(iszR) )   ! ok if iszS = 0 or iszR = 0
-      iszall(:) = isizei(:) * isizej(:) * ipk * ipl * ipf
-      iScnt(:) = PACK( iszall, mask = llsend )                                       ! ok if mask = .false.
-      iRcnt(:) = PACK( iszall, mask = llrecv )
-      IF( iszS > 0 )   iSdpl(1) = 0
-      DO jn = 2,iszS
-         iSdpl(jn) = iSdpl(jn-1) + iScnt(jn-1)   ! with _alltoallv: in units of sendtype
-      END DO
-      IF( iszR > 0 )   iRdpl(1) = 0
-      DO jn = 2,iszR
-         iRdpl(jn) = iRdpl(jn-1) + iRcnt(jn-1)   ! with _alltoallv: in units of sendtype
-      END DO
-      
-      ! Allocate buffer arrays to be sent/received if needed
-      iszS = SUM(iszall, mask = llsend)                             ! send buffer size
-      IF( ALLOCATED(BUFFSND) ) THEN
-         IF( SIZE(BUFFSND) < iszS )    DEALLOCATE(BUFFSND)          ! send buffer is too small
-      ENDIF
-      IF( .NOT. ALLOCATED(BUFFSND) )   ALLOCATE( BUFFSND(iszS) )
-      iszR = SUM(iszall, mask = llrecv)                             ! recv buffer size
-      IF( ALLOCATED(BUFFRCV) ) THEN
-         IF( SIZE(BUFFRCV) < iszR )    DEALLOCATE(BUFFRCV)          ! recv buffer is too small
-      ENDIF
-      IF( .NOT. ALLOCATED(BUFFRCV) )   ALLOCATE( BUFFRCV(iszR) )
+   END DO   ! jf
+   !
+   IF( narea == 1 .AND. numcom == -1 )   CALL mpp_report( cdname, SUM(ipk(:))/kfld, SUM(ipl(:))/kfld, kfld, ld_lbc = .TRUE. )
+   !
+   ! -------------------------------- !
+   !     2. Prepare MPI exchanges     !
+   ! -------------------------------- !
+   !
+   ! Allocate local temporary arrays to be sent/received.
+   inbS = COUNT( ANY(llsend,dim=2) )   ! number of snd neighbourgs
+   inbR = COUNT( ANY(llrecv,dim=2) )   ! number of rcv neighbourgs
+   ALLOCATE( iScnt(inbS), iRcnt(inbR), iSdpl(inbS), iRdpl(inbR) )   ! ok if iszS = 0 or iszR = 0
 
-      ! fill sending buffer with ptab(jf)%pt4d
-      idx = 1
-      DO jn = 1, 8
-         IF( llsend(jn) ) THEN
-            ishti = ishtSi(jn)
-            ishtj = ishtSj(jn)
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jn)  ;  DO ji = 1,isizei(jn)
+   iScnt(:) = 0   ;   idx = 0
+   DO jn = 1, 8
+      IF( COUNT( llsend(jn,:) ) > 0 ) THEN   ! we send something to neighbourg jn
+         idx = idx + 1
+         DO jf = 1, kfld
+            IF( llsend(jn,jf) ) iScnt(idx) = iScnt(idx) + isizei(jn,jf) * isizej(jn,jf) * ipk(jf) * ipl(jf)
+         END DO
+      ENDIF
+   END DO
+   IF( inbS > 0 )   iSdpl(1) = 0
+   DO jn = 2,inbS
+      iSdpl(jn) = iSdpl(jn-1) + iScnt(jn-1)   ! with _alltoallv: in units of sendtype
+   END DO
+
+   iRcnt(:) = 0   ;   idx = 0
+   DO jn = 1, 8
+      IF( COUNT( llrecv(jn,:) ) > 0 ) THEN   ! we get something from neighbourg jn
+         idx = idx + 1
+         DO jf = 1, kfld
+            IF( llrecv(jn,jf) ) iRcnt(idx) = iRcnt(idx) + isizei(jn,jf) * isizej(jn,jf) * ipk(jf) * ipl(jf)
+         END DO
+      ENDIF
+   END DO
+   IF( inbR > 0 )   iRdpl(1) = 0
+   DO jn = 2,inbR
+      iRdpl(jn) = iRdpl(jn-1) + iRcnt(jn-1)   ! with _alltoallv: in units of sendtype
+   END DO
+   !
+   ! Allocate buffer arrays to be sent/received if needed
+   iszS = SUM(iScnt)                             ! send buffer size
+   IF( ALLOCATED(BUFFSND) ) THEN
+      CALL mpi_waitall(8, nreq_p2p, MPI_STATUSES_IGNORE, ierr)   ! needed only if PREVIOUS call was using nn_comm = 1 (for tests)
+      IF( SIZE(BUFFSND) < iszS )    DEALLOCATE(BUFFSND)          ! send buffer is too small
+   ENDIF
+   IF( .NOT. ALLOCATED(BUFFSND) )   ALLOCATE( BUFFSND(iszS) )
+   iszR = SUM(iRcnt)                             ! recv buffer size
+   IF( ALLOCATED(BUFFRCV) ) THEN
+      IF( SIZE(BUFFRCV) < iszR )    DEALLOCATE(BUFFRCV)          ! recv buffer is too small
+   ENDIF
+   IF( .NOT. ALLOCATED(BUFFRCV) )   ALLOCATE( BUFFRCV(iszR) )
+   !
+   ! fill sending buffer with ptab(jf)%pt4d
+   idx = 0
+   DO jn = 1, 8
+      DO jf = 1, kfld
+         IF( llsend(jn,jf) ) THEN
+            ishti = ishtSi(jn,jf)
+            ishtj = ishtSj(jn,jf)
+            DO jl = 1, ipl(jf)   ;   DO jk = 1, ipk(jf)   ;   DO jj = 1,isizej(jn,jf)   ;   DO ji = 1,isizei(jn,jf)
+               idx = idx + 1
                BUFFSND(idx) = ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl)
-               idx = idx + 1
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
+            END DO;   END DO   ;   END DO   ;   END DO
          ENDIF
       END DO
-      !
-      ! ------------------------------------------------ !
-      !     3. Do all MPI exchanges in 1 unique call     !
-      ! ------------------------------------------------ !
-      !
-      IF( ln_timing ) CALL tic_tac(.TRUE.)
-      CALL mpi_neighbor_alltoallv (BUFFSND, iScnt, iSdpl, MPI_TYPE, BUFFRCV, iRcnt, iRdpl, MPI_TYPE, impi_nc, ierr)
-      IF( ln_timing ) CALL tic_tac(.FALSE.)
-      !
-      ! ------------------------- !
-      !     4. Fill all halos     !
-      ! ------------------------- !
-      !
-      idx = 1
-      ! MPI3 bug fix when domain decomposition has 2 columns/rows
-      IF (jpni .eq. 2) THEN
-         IF (jpnj .eq. 2) THEN
-            jnf(1:8) = (/ 2, 1, 4, 3, 8, 7, 6, 5 /)
-         ELSE
-            jnf(1:8) = (/ 2, 1, 3, 4, 6, 5, 8, 7 /)
-         ENDIF
-      ELSE
-         IF (jpnj .eq. 2) THEN
-            jnf(1:8) = (/ 1, 2, 4, 3, 7, 8, 5, 6 /)
-         ELSE
-            jnf(1:8) = (/ 1, 2, 3, 4, 5, 6, 7, 8 /)
-         ENDIF
-      ENDIF
-
-      DO jn = 1, 8
-         ishti = ishtRi(jnf(jn))
-         ishtj = ishtRj(jnf(jn))
-         SELECT CASE ( ifill(jnf(jn)) )
-         CASE ( jpfillnothing )               ! no filling 
-         CASE ( jpfillmpi   )                 ! fill with data received by MPI
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jnf(jn))  ;  DO ji = 1,isizei(jnf(jn))
-               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = BUFFRCV(idx)
-               idx = idx + 1
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
-         CASE ( jpfillperio )                 ! use periodicity
-            ishti2 = ishtPi(jnf(jn))
-            ishtj2 = ishtPj(jnf(jn))
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jnf(jn))  ;  DO ji = 1,isizei(jnf(jn))
-               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = ptab(jf)%pt4d(ishti2+ji,ishtj2+jj,jk,jl)
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
-         CASE ( jpfillcopy  )                 ! filling with inner domain values
-            ishti2 = ishtSi(jnf(jn))
-            ishtj2 = ishtSj(jnf(jn))
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jnf(jn))  ;  DO ji = 1,isizei(jnf(jn))
-               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = ptab(jf)%pt4d(ishti2+ji,ishtj2+jj,jk,jl)
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
-         CASE ( jpfillcst   )                 ! filling with constant value
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jnf(jn))  ;  DO ji = 1,isizei(jnf(jn))
+   END DO
+   !
+   ! ------------------------------------------------ !
+   !     3. Do all MPI exchanges in 1 unique call     !
+   ! ------------------------------------------------ !
+   !
+   IF( ihlsmax > 0 ) THEN
+      impi_nc = mpi_nc_com8( ihlsmax )
+      IF( ll4only )   impi_nc = mpi_nc_com4( ihlsmax )
+#if ! defined key_mpi2 && ! defined key_mpi_off
+      CALL mpi_Ineighbor_alltoallv(BUFFSND, iScnt, iSdpl, MPI_TYPE, BUFFRCV, iRcnt, iRdpl, MPI_TYPE, impi_nc, nreq_nei, ierr)
+#endif
+   ENDIF
+   nreq_p2p = MPI_REQUEST_NULL   ! needed only if we switch between nn_comm = 1 and 2 (for tests)
+   !
+   ! --------------------------------- !
+   !     4. Fill all Non-MPI halos     !
+   ! --------------------------------- !
+   !
+   ! do it first to give (potentially) more time for the communications
+   DO jn = 1, 8
+      DO jf = 1, kfld
+         !
+         IF(     ifill(jn,jf) == jpfillcst ) THEN
+            !
+            ishti = ishtRi(jn,jf)
+            ishtj = ishtRj(jn,jf)
+            DO jl = 1, ipl(jf)  ;  DO jk = 1, ipk(jf)  ;  DO jj = 1,isizej(jn,jf)  ;  DO ji = 1,isizei(jn,jf)
                ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = zland
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
-         END SELECT
-      END DO
-
-      DEALLOCATE( iScnt, iRcnt, iSdpl, iRdpl )
-      IF( iszS > jpi*jpj )   DEALLOCATE(BUFFSND)                    ! blocking Send -> can directly deallocate
-      IF( iszR > jpi*jpj )   DEALLOCATE(BUFFRCV)                    ! blocking Recv -> can directly deallocate
-
-      ! potential "indirect self-periodicity" for the corners
-      DO jn = 5, 8
-         IF( .NOT. l_SelfPerio(jn) .AND. l_SelfPerio(jpwe)  ) THEN   ! no bi-perio but ew-perio: corners indirect definition
-            ishti  = ishtRi(jn)
-            ishtj  = ishtRj(jn)
-            ishti2 = ishtPi(jn)   ! use i- shift periodicity
-            ishtj2 = ishtRj(jn)   ! use j- shift recv location: use ew-perio -> ok as filling of the south and north halos now done
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jn)  ;  DO ji = 1,isizei(jn)
-               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = ptab(jf)%pt4d(ishti2+ji,ishtj2+jj,jk,jl)
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
+            END DO;   END DO   ;   END DO   ;   END DO
+            !
+         ELSEIF( ifill(jn,jf) == jpfillperio .OR. ifill(jn,jf) == jpfillcopy ) THEN
+            !
+            IF(     jn == jpwe .OR. jn == jpsw .OR. jn == jpnw ) THEN   ! western side
+               ishti1 = ishtSi(jpwe,jf) + 1   ;   isgni1 = -1
+               IF( ifill(jn,jf) == jpfillperio ) THEN
+                  ishti2 = ishtRi(jpea,jf) + 1
+                  isgni2 = -1
+               ELSE
+                  ishti2 = ishtSi(jpwe,jf)
+                  isgni2 = 1
+               ENDIF
+            ELSEIF( jn == jpea .OR. jn == jpse .OR. jn == jpne ) THEN   ! eastern side
+               ishti1 = ishtRi(jpea,jf)       ;   isgni1 =  1
+               IF( ifill(jn,jf) == jpfillperio ) THEN
+                  ishti2 = ishtSi(jpwe,jf)
+                  isgni2 = 1
+               ELSE
+                  ishti2 = ishtRi(jpea,jf) + 1
+                  isgni2 = -1
+               ENDIF
+            ELSE                                                        ! southern/northern side
+               ishti1 = ishtRi(jn,jf)   ;   isgni1 =  1
+               ishti2 = ishtSi(jn,jf)   ;   isgni2 =  1
+            ENDIF
+            IF(     jn == jpso .OR. jn == jpsw .OR. jn == jpse ) THEN   ! southern side
+               ishtj1 = ishtSj(jpso,jf) + 1   ;   isgnj1 = -1
+               IF( ifill(jn,jf) == jpfillperio ) THEN
+                  ishtj2 = ishtRj(jpno,jf) + 1
+                  isgnj2 = -1
+               ELSE
+                  ishtj2 = ishtSj(jpso,jf)
+                  isgnj2 = 1
+               ENDIF
+            ELSEIF( jn == jpno .OR. jn == jpnw .OR. jn == jpne ) THEN   ! northern side
+               ishtj1 = ishtRj(jpno,jf)       ;   isgnj1 =  1
+               IF( ifill(jn,jf) == jpfillperio ) THEN
+                  ishtj2 = ishtSj(jpso,jf)
+                  isgnj2 = 1
+               ELSE
+                  ishtj2 = ishtRj(jpno,jf) + 1
+                  isgnj2 = -1
+               ENDIF
+            ELSE                                                        ! western/eastern side
+               ishtj1 = ishtRj(jn,jf)   ;   isgnj1 =  1
+               ishtj2 = ishtSj(jn,jf)   ;   isgnj2 =  1
+            ENDIF
+            !
+            DO jl = 1, ipl(jf)  ;  DO jk = 1, ipk(jf)  ;  DO jj = 1,isizej(jn,jf)  ;  DO ji = 1,isizei(jn,jf)
+               ii1 = ishti1 +       ji                * isgni1
+               ij1 = ishtj1 +       jj                * isgnj1
+               ii2 = ishti2 + ( MOD(ji-1, Ni_0) + 1 ) * isgni2   ! warning: Ni_0 might be smaller than isizei(jn,jf)
+               ij2 = ishtj2 + ( MOD(jj-1, Nj_0) + 1 ) * isgnj2   ! warning: Nj_0 might be smaller than isizej(jn,jf)
+               ptab(jf)%pt4d(ii1,ij1,jk,jl) = ptab(jf)%pt4d(ii2,ij2,jk,jl)
+            END DO;   END DO   ;   END DO   ;   END DO
+            !
+!!$      ELSEIF( ifill(jn,jf) == jpfillnothing ) THEN   ! no filling
+!!$      ELSEIF( ifill(jn,jf) == jpfillmpi     ) THEN   ! do it later
          ENDIF
-         IF( .NOT. l_SelfPerio(jn) .AND. l_SelfPerio(jpso)  ) THEN   ! no bi-perio but ns-perio: corners indirect definition
-            ishti  = ishtRi(jn)
-            ishtj  = ishtRj(jn)
-            ishti2 = ishtRi(jn)   ! use i- shift recv location: use ns-perio -> ok as filling of the west and east halos now done
-            ishtj2 = ishtPj(jn)   ! use j- shift periodicity
-            DO jf = 1, ipf  ;  DO jl = 1, ipl  ;  DO jk = 1, ipk  ;  DO jj = 1,isizej(jn)  ;  DO ji = 1,isizei(jn)
-               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = ptab(jf)%pt4d(ishti2+ji,ishtj2+jj,jk,jl)
-            END DO   ;   END DO   ;   END DO   ;   END DO   ;   END DO
-         ENDIF
-      END DO
-      !
-      ! ------------------------------- !
-      !     5. north fold treatment     !
-      ! ------------------------------- !
-      !
-      IF( l_IdoNFold ) THEN
-         IF( jpni == 1 )  THEN   ;   CALL lbc_nfd( ptab, cd_nat, psgn                  , ihls, ipf )   ! self NFold
-         ELSE                    ;   CALL mpp_nfd( ptab, cd_nat, psgn, ifill_nfd, zland, ihls, ipf )   ! mpi  NFold
-         ENDIF
+      END DO   ! jf
+   END DO   ! jn
+   !
+   ! ----------------------------- !
+   !     5. Fill all MPI halos     !
+   ! ----------------------------- !
+   !
+   CALL mpi_wait( nreq_nei, MPI_STATUS_IGNORE, ierr )
+   !
+   ! --------------------------------------------------------- !
+   ! MPI3 bug fix when domain decomposition has 2 columns/rows !
+   ! --------------------------------------------------------- !
+   !
+   IF( jpni == 2 ) THEN
+      IF( jpnj == 2 ) THEN
+         jnf(1:8) = (/ 2, 1, 4, 3, 8, 7, 6, 5 /)
+      ELSE
+         jnf(1:8) = (/ 2, 1, 3, 4, 6, 5, 8, 7 /)
       ENDIF
-      !
-   END SUBROUTINE lbc_lnk_neicoll_/**/PRECISION
+   ELSE
+      IF( jpnj == 2 ) THEN
+         jnf(1:8) = (/ 1, 2, 4, 3, 7, 8, 5, 6 /)
+      ELSE
+         jnf(1:8) = (/ 1, 2, 3, 4, 5, 6, 7, 8 /)
+      ENDIF
+   ENDIF
+   !
+   idx = 0
+   DO jn = 1, 8
+      DO jf = 1, kfld
+         IF( ifill(jnf(jn),jf) == jpfillmpi ) THEN   ! fill with data received by MPI
+            ishti = ishtRi(jnf(jn),jf)
+            ishtj = ishtRj(jnf(jn),jf)
+            DO jl = 1, ipl(jf)   ;   DO jk = 1, ipk(jf)   ;   DO jj = 1,isizej(jnf(jn),jf)   ;  DO ji = 1,isizei(jnf(jn),jf)
+               idx = idx + 1
+               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = BUFFRCV(idx)
+            END DO;   END DO   ;   END DO   ;   END DO
+         ENDIF
+      END DO
+   END DO
+
+   DEALLOCATE( iScnt, iRcnt, iSdpl, iRdpl )
+   IF( iszS > jpi*jpj )   DEALLOCATE(BUFFSND)                    ! blocking Send -> can directly deallocate
+   IF( iszR > jpi*jpj )   DEALLOCATE(BUFFRCV)                    ! blocking Recv -> can directly deallocate
+   !
+   ! ---------------------------------------------------------------- !
+   !     6. Potential "indirect self-periodicity" for the corners     !
+   ! ---------------------------------------------------------------- !
+   !
+   DO jn = 5, 8
+      IF( .NOT. l_SelfPerio(jn) .AND. l_SelfPerio(jpwe)  ) THEN   ! no bi-perio but ew-perio: corners indirect definition
+         DO jf = 1, kfld
+            ishti  = ishtRi(jn,jf)
+            ishtj  = ishtRj(jn,jf)
+            ishti2 = ishtPi(jn,jf)   ! use i- shift periodicity
+            ishtj2 = ishtRj(jn,jf)   ! use j- shift recv location: use ew-perio -> ok as filling of the so and no halos now done
+            DO jl = 1, ipl(jf)   ;   DO jk = 1, ipk(jf)   ;   DO jj = 1,isizej(jn,jf)   ;   DO ji = 1,isizei(jn,jf)
+               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = ptab(jf)%pt4d(ishti2+ji,ishtj2+jj,jk,jl)
+            END DO;   END DO   ;   END DO   ;   END DO
+         END DO
+      ENDIF
+      IF( .NOT. l_SelfPerio(jn) .AND. l_SelfPerio(jpso)  ) THEN   ! no bi-perio but ns-perio: corners indirect definition
+         DO jf = 1, kfld
+            ishti  = ishtRi(jn,jf)
+            ishtj  = ishtRj(jn,jf)
+            ishti2 = ishtRi(jn,jf)   ! use i- shift recv location: use ns-perio -> ok as filling of the we and ea halos now done
+            ishtj2 = ishtPj(jn,jf)   ! use j- shift periodicity
+            DO jl = 1, ipl(jf)   ;   DO jk = 1, ipk(jf)   ;   DO jj = 1,isizej(jn,jf)   ;   DO ji = 1,isizei(jn,jf)
+               ptab(jf)%pt4d(ishti+ji,ishtj+jj,jk,jl) = ptab(jf)%pt4d(ishti2+ji,ishtj2+jj,jk,jl)
+            END DO;   END DO   ;   END DO   ;   END DO
+         END DO
+      ENDIF
+   END DO
+   !
+   ! ------------------------------- !
+   !     7. north fold treatment     !
+   ! ------------------------------- !
+   !
+   IF( l_IdoNFold ) THEN
+      IF( jpni == 1 )  THEN   ;   CALL lbc_nfd(         ptab, cd_nat, psgn                  , kfld         )   ! self NFold
+      ELSE                    ;   CALL mpp_nfd( cdname, ptab, cd_nat, psgn, ifill_nfd, zland, kfld, ldfull )   ! mpi  NFold
+      ENDIF
+   ENDIF
+   !
+END SUBROUTINE lbc_lnk_neicoll_/**/PRECISION

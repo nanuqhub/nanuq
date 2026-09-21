@@ -196,7 +196,7 @@ CONTAINS
       !   !*acc end parallel loop
       !ENDIF
 
-      !# if ! defined _OPENACC
+      !#if ! defined _OPENACC || defined _OPENMP
       !      !! Sanity test to remove:
       !      IF(  .NOT. l_skin ) THEN
       !         PRINT *, 'sbcblk_algo_ecmwf.F90 => equality check of `pSST` vs `pT_s` !'
@@ -204,7 +204,7 @@ CONTAINS
       !         zdum = SUM( ABS( pSST(Nis0:Nie0,Njs0:Nje0) - pT_s(Nis0:Nie0,Njs0:Nje0) ) )
       !         IF( zdum > 1.E-9 ) CALL ctl_stop( '['//TRIM(crtnm)//'] => ' , 'No CS/WL used, yet `pSST/=pT_s` !' )
       !      ENDIF
-      !# endif
+      !#endif
 
 
       !$acc parallel loop collapse(2)
@@ -320,7 +320,6 @@ CONTAINS
                !   !! Warm-layer contribution
                !   CALL UPDATE_QNSOL_TAU( zu, zT_s, zq_s, ztzu, zqzu, zus, zts, zqs, zUzu, zUbzu, &
                !      &                   pslp(ji,jj), prad_lw(ji,jj), zQns, ztmp0)  ! Tau -> ztmp0
-               !   !IF((ji==10).AND.(jj==10)) PRINT *, 'LOLO: sbcblk_algo_ecmwf.F90 => depth SST = ', 0.5*e3t_m(ji,jj)
                !   !CALL WL_ECMWF( ji, jj, pQsw(ji,jj), zQns, zus, zsst(ji,jj), 0.5*e3t_m(ji,jj) )
                !   CALL WL_ECMWF( ji, jj, pQsw(ji,jj), zQns, zus, zSST, 0.5*e3t_m(ji,jj) )
                !   !! Updating pT_s and pq_s !!!

@@ -32,7 +32,7 @@ MODULE icethd_ent
    PUBLIC   ice_thd_ent_scl     ! called by icethd and icethd_do
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icethd_ent.F90 14778 2021-05-03 08:58:22Z clem $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------

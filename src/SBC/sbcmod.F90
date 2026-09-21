@@ -33,9 +33,9 @@ MODULE sbcmod
    !
    USE cpl_oasis3, ONLY : cpl_freq     ! OASIS routines for coupling
    !
-# if ! defined _OPENACC   
+#if ! defined _OPENACC || defined _OPENMP
    USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
-# endif
+#endif
    !
    USE in_out_manager ! I/O manager
    USE lib_mpp, ONLY : ctl_nam, ctl_stop, ctl_warn
@@ -54,7 +54,7 @@ MODULE sbcmod
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: sbcmod.F90 15372 2021-10-14 15:47:24Z davestorkey $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -74,7 +74,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER ::   ios, icpt                         ! local integer
       !!
-      NAMELIST/namsbc/ ln_flx, ln_blk, ln_abl, ln_cpl_atm, nn_lsm
+      NAMELIST/namsbc/ ln_flx, ln_blk, ln_abl, sn_loc_vct_tau, ln_cpl_atm, nn_lsm
       !!----------------------------------------------------------------------
       !
       IF(lwp) THEN
@@ -85,17 +85,30 @@ CONTAINS
       !
       !                       !**  read Surface Module namelist
       READ_NML_REF(numnam,namsbc)
-      !901   IF( ios /= 0 )   CALL ctl_nam ( ios , 'namsbc in reference namelist' )
       READ_NML_CFG(numnam,namsbc)
-      !902   IF( ios >  0 )   CALL ctl_nam ( ios , 'namsbc in configuration namelist' )
+
       IF(lwm) WRITE( numond, namsbc )
       !
       IF(lwp) THEN                  !* Control print
-         WRITE(numout,*) '   Namelist namsbc (partly overwritten with CPP key setting)'
+         WRITE(numout,*) '   Namelist namsbc'
          WRITE(numout,*) '      Type of air-sea fluxes : '
          WRITE(numout,*) '         flux         formulation                   ln_flx        = ', ln_flx
          WRITE(numout,*) '         bulk         formulation                   ln_blk        = ', ln_blk
          WRITE(numout,*) '         ABL          formulation                   ln_abl        = ', ln_abl
+         !
+         WRITE(numout,*) ''
+         WRITE(numout,*) '         C-grid point loc. of surf. (air/ice-sea) stress   sn_loc_vct_tau = ', sn_loc_vct_tau
+         IF(     sn_loc_vct_tau == 'T' ) THEN
+            k_tau_air_at_T = 1
+            WRITE(numout,*) '            ==> both `utau` & `vtau` are located at T-point !'
+         ELSEIF( sn_loc_vct_tau == 'C' ) THEN
+            k_tau_air_at_T = 0
+            WRITE(numout,*) '            ==> C-grid convention => `utau` @ U-point & `vtau` @ V-point !'
+         ELSE
+            CALL ctl_stop( '`sn_loc_vct_tau` can take only "T" or "C" as a value!' )
+         ENDIF
+         WRITE(numout,*) ''
+         !
          WRITE(numout,*) '      Type of coupling (Ocean/Ice/Atmosphere) : '
          WRITE(numout,*) '         ocean-atmosphere coupled formulation       ln_cpl_atm        = ', ln_cpl_atm
          WRITE(numout,*) '         OASIS coupling                             lk_oasis_atm      = ', lk_oasis_atm
@@ -180,7 +193,7 @@ CONTAINS
             WRITE(numout,*)
             WRITE(numout,*)" * NANUQ is coupled to an atmospheric model via OASIS !"
             WRITE(numout,*)
-            CALL ctl_stop( 'sbc_init : coupling with atmospheric model not ready yet !!!' )           
+            CALL ctl_stop( 'sbc_init : coupling with atmospheric model not ready yet !!!' )
          ENDIF
       ENDIF
       !
@@ -189,6 +202,8 @@ CONTAINS
       IF( ln_blk      )   CALL sbc_blk_init              ! bulk formulae initialization
       !
       IF( ln_abl      )   CALL sbc_abl_init              ! Atmospheric Boundary Layer (ABL)
+      !
+      !$acc update device( k_tau_air_at_T )
       !
    END SUBROUTINE sbc_init
 
@@ -226,7 +241,7 @@ CONTAINS
                utau_b(ji,jj) = utau(ji,jj)                       ! Swap the ocean forcing fields
                vtau_b(ji,jj) = vtau(ji,jj)                       ! (except at nit000 where before fields
                qns_b (ji,jj) = qns (ji,jj)                       !  are set at the end of the routine)
-               qsr_b (ji,jj) = qsr (ji,jj)                       !  are set at the end of the routine)               
+               qsr_b (ji,jj) = qsr (ji,jj)                       !  are set at the end of the routine)
                emp_b (ji,jj) = emp (ji,jj)
                sfx_b (ji,jj) = sfx (ji,jj)
             END DO
@@ -241,9 +256,9 @@ CONTAINS
       SELECT CASE( nsbc )               ! Compute ocean surface boundary condition
          !                              ! (i.e. utau,vtau, qns, qsr, emp)      !LOLOfixme: NOT `sfx` !!! `sfx` should come from ICE model !!!
       CASE( jp_flx )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'sbc : prescribed surface fluxes method `jp_flx` not done yet for GPU! (only bulk for now)')
-# endif
+#endif
          CALL sbc_flx( kt )                        ! flux formulation
          !
          !
@@ -251,9 +266,9 @@ CONTAINS
          CALL sbc_blk( kt )                        ! bulk formulation for the ocean
          !
       CASE( jp_abl )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'sbc : ABL coupling method `jp_abl` not done yet for GPU! (only bulk for now)')
-# endif
+#endif
          CALL sbc_abl( kt )                        ! ABL  formulation for the ocean
          !
          !
@@ -268,9 +283,9 @@ CONTAINS
       !!       emp, qsr, qns, qns_oce, qsr_oce, fatm_prcp, fatm_snow, wndm, utau, vtau, taum, theta_zu, q_zu, rhoa
       !!     Note: not `sfx` and not `fmmflx` !!!
 
-# if ! defined _OPENACC
+#if ! defined _OPENACC || defined _OPENMP
       CALL lbc_lnk( 'sbcmod', utau,'T',-1._wp, vtau,'T',-1._wp, emp,'T',1._wp, qns,'T',1._wp, taum,'T',1._wp )
-# endif
+#endif
 
 
       IF( kt == nit000 ) THEN                          !   set the forcing field at nit000 - 1    !
@@ -297,7 +312,7 @@ CONTAINS
                utau_b(ji,jj) = utau(ji,jj)
                vtau_b(ji,jj) = vtau(ji,jj)
                qns_b (ji,jj) = qns (ji,jj)
-               qsr_b (ji,jj) = qsr (ji,jj)               
+               qsr_b (ji,jj) = qsr (ji,jj)
                emp_b (ji,jj) = emp (ji,jj)
                sfx_b (ji,jj) = sfx (ji,jj)  !#LOLOfixme: it should be provided by ICE model, it is not updated by the 3 `sbc_*` routines above!!!
             END DO

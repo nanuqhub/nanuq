@@ -45,8 +45,8 @@ MODULE dommsk
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: dommsk.F90 15556 2021-11-29 15:23:06Z jchanut $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !!
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -71,6 +71,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       REAL(wp), DIMENSION(:,:), INTENT(in) :: pbathy
       !
+      REAL(wp),   DIMENSION(jpi,jpj) :: zmsku
       REAL(wp),   DIMENSION(jpi,jpj) :: z2dt, z2df, z2du
       INTEGER(1), DIMENSION(jpi,jpj) :: i2dt, i2df, i2du
       !
@@ -94,13 +95,15 @@ CONTAINS
 
       ! Mask corrections for bdy (read in mppini2)
       READ_NML_REF(numnam,nambdy)
-      !903   IF( ios /= 0 )   CALL ctl_nam ( ios , 'nambdy in reference namelist' )
       READ_NML_CFG(numnam,nambdy)
-      !904   IF( ios >  0 )   CALL ctl_nam ( ios , 'nambdy in configuration namelist' )
+
       ! ------------------------
       IF ( ln_bdy .AND. ln_mask_file ) THEN
+#if defined _OPENACC || defined _OPENMP
+         CALL ctl_stop( 'dom_msk : finish the `bdytmask` "bdy_msk" stuff for GPU!' )
+#endif
          CALL iom_open( cn_mask_file, inum )
-         CALL iom_get ( inum, jpdom_global, 'bdy_msk', bdytmask(:,:) )
+         CALL iom_get ( 'dom_msk', inum, jpdom_global, 'bdy_msk', bdytmask(:,:) )
          CALL iom_close( inum )
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
@@ -150,20 +153,20 @@ CONTAINS
       xmskf(Nis0:Nie0,Njs0:Nje0) = REAL( MIN( i2dt(Nis0:Nie0,Njs0:Nje0) + i2dt(Nis0+1:Nie0+1,Njs0+1:Nje0+1) &
          &                       + i2dt(Nis0+1:Nie0+1,Njs0:Nje0) + i2dt(Nis0:Nie0,Njs0+1:Nje0+1), 1 ), wp )
 
-      !! Same spirit as for `xmskt`: `xmsku` is the mask at U-points for tracers that are not velocities and can therefore
+      !! Same spirit as for `xmskt`: `zmsku` is the mask at U-points for tracers that are not velocities and can therefore
       !! have a value other than 0. at the solid interface...
-      xmsku(:,:) = 0._wp
-      xmsku(Nis0:Nie0,Njs0:Nje0) = REAL( MIN( i2dt(Nis0:Nie0,Njs0:Nje0) + i2dt(Nis0+1:Nie0+1,Njs0:Nje0), 1 ), wp )
+      zmsku(:,:) = 0._wp
+      zmsku(Nis0:Nie0,Njs0:Nje0) = REAL( MIN( i2dt(Nis0:Nie0,Njs0:Nje0) + i2dt(Nis0+1:Nie0+1,Njs0:Nje0), 1 ), wp )
 
-      CALL lbc_lnk( 'dommsk',  xmskt,'T',1._wp, xmskf,'F',1._wp, xmsku,'U',1._wp ) !LOLOlbclnk, probably not needed for `xmskt`
+      CALL lbc_lnk( 'dommsk',  xmskt,'T',1._wp, xmskf,'F',1._wp, zmsku,'U',1._wp ) !LOLOlbclnk, probably not needed for `xmskt`
 
       !IF(ldebug) THEN
       !   WRITE(cf_tmp,'("xmskt_",i4.4,".tmp")') narea
       !   CALL DUMP_FIELD( REAL(xmskt(Nis0:Nie0,Njs0:Nje0),4), TRIM(cf_tmp), 'xmskt' )
       !   WRITE(cf_tmp,'("xmskf_",i4.4,".tmp")') narea
       !   CALL DUMP_FIELD( REAL(xmskf(Nis0:Nie0,Njs0:Nje0),4), TRIM(cf_tmp), 'xmskf' )
-      !   WRITE(cf_tmp,'("xmsku_",i4.4,".tmp")') narea
-      !   CALL DUMP_FIELD( REAL(xmsku(Nis0:Nie0,Njs0:Nje0),4), TRIM(cf_tmp), 'xmsku' )
+      !   WRITE(cf_tmp,'("zmsku_",i4.4,".tmp")') narea
+      !   CALL DUMP_FIELD( REAL(zmsku(Nis0:Nie0,Njs0:Nje0),4), TRIM(cf_tmp), 'zmsku' )
       !ENDIF
 
       r1_e1e2t(:,:) = r1_e1e2t(:,:) * xmskt(:,:)
@@ -179,7 +182,7 @@ CONTAINS
       i2df(:,:) = 0
       i2df(:,:) = 1 - INT(xmskf(:,:),1)
       i2du(:,:) = 0
-      i2du(:,:) = 1 - INT(xmsku(:,:),1)
+      i2du(:,:) = 1 - INT(zmsku(:,:),1)
 
       !! #LOLOfixme: add `ln_damage` test or equivalent to prevent working with the F-arrays if they are not needed!
 
@@ -359,10 +362,10 @@ CONTAINS
       !   CALL DUMP_FIELD( REAL(z2du(Nis0:Nie0,Njs0:Nje0),4), TRIM(cf_tmp), 'kmSu' )
       !ENDIF
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: dom_msk() => adding `umask,vmask,xmskt,xmskf,klbct,klbcf,klbcu` arrays to memory!'
       !$acc enter data copyin( umask,vmask, xmskt,xmskf, klbct,klbcf,klbcu )
-# endif
+#endif
 
    END SUBROUTINE dom_msk
 

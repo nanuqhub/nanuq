@@ -15,12 +15,11 @@ MODULE icedyn_rhg_evp
    !!----------------------------------------------------------------------
    !!----------------------------------------------------------------------
    !!   ice_dyn_rhg_evp : computes ice velocities from EVP rheology
-   !!   rhg_evp_rst     : read/write EVP fields in ice restart
    !!----------------------------------------------------------------------
    USE phycst         ! Physical constant
    USE dom_oce        ! Ocean domain
    USE oss_nnq , ONLY : ssh_m
-   USE sbc_ice , ONLY : utau_ice, vtau_ice, snwice_mass_b
+   USE sbc_ice , ONLY : taux_ai_t, tauy_ai_t, snwice_mass_b
    USE par_ice
    USE ice            ! sea-ice: ice variables
    USE icevar         ! ice_var_sshdyn
@@ -33,7 +32,7 @@ MODULE icedyn_rhg_evp
    USE lib_mpp        ! MPP library
    USE lib_fortran    ! fortran utilities (glob_sum + no signed zero)
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
 #endif
    USE prtctl         ! Print control
@@ -47,7 +46,6 @@ MODULE icedyn_rhg_evp
 
    PUBLIC   ice_dyn_rhg_evp_init
    PUBLIC   ice_dyn_rhg_evp   ! called by icedyn_rhg.F90
-   PUBLIC   rhg_evp_rst       ! called by icedyn_rhg.F90
 
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zdelta, zp_delt                 ! delta and P/delta at T points
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zbeta                           ! beta coef from Kimmritz 2017
@@ -55,11 +53,9 @@ MODULE icedyn_rhg_evp
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zdt_m                           ! (dt / ice-snow_mass) on T points
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zmU_dt, zmV_dt                  ! (ice-snow_mass / dt) on U/V points
    !
-   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zht, zhf
-   !
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zds                             ! shear
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zten_i, zshear                  ! tension, shear
-   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zs1, zs2, zs12                  ! stress tensor components
+   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   xS1, xS2, xS12                  ! stress tensor components
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zsshdyn                         ! array used for the calculation of ice surface slope:
    !                                                                           !    ocean surface (ssh_m) if ice is not embedded
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zfU  , zfV                      ! internal stresses
@@ -72,13 +68,13 @@ MODULE icedyn_rhg_evp
    INTEGER(1), ALLOCATABLE, SAVE, DIMENSION(:,:)  :: kmsk00x, kmsk00y                ! mask for ice presence
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icedyn_rhg_evp.F90 15550 2021-11-28 20:02:31Z clem $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_dyn_rhg_evp( kt, pstress1_i, pstress2_i, pstress12_i, pshear_i, pdivu_i, pdelta_i )
+   SUBROUTINE ice_dyn_rhg_evp( kt, pshear_i, pdivu_i, pdelta_i )
       !!-------------------------------------------------------------------
       !!                 ***  SUBROUTINE ice_dyn_rhg_evp  ***
       !!                             EVP-C-grid
@@ -131,13 +127,12 @@ CONTAINS
       !!              Kimmritz et al., Ocean Modelling 2016 & 2017
       !!-------------------------------------------------------------------
       INTEGER                 , INTENT(in   ) ::   kt                                    ! time step
-      REAL(wp), DIMENSION(:,:), INTENT(inout) ::   pstress1_i, pstress2_i, pstress12_i   !
       REAL(wp), DIMENSION(:,:), INTENT(  out) ::   pshear_i  , pdivu_i   , pdelta_i      !
       !!
       INTEGER ::   ji, jj       ! dummy loop indices
       INTEGER ::   jter         ! local integers
       !
-      REAL(wp) ::   zswitch, zmask
+      REAL(wp) ::   zswitch, zmask, z1_A
       REAL(wp) ::   zrhoco                                              ! rho0 * rn_Cd_io
       REAL(wp) ::   ztau_ai                                             ! ice-atm. stress at U-V points
       REAL(wp) ::   zdtevp, z1_dtevp                                    ! time step for subcycling
@@ -154,7 +149,7 @@ CONTAINS
       REAL(wp) ::   zfac_x, zfac_y
       !!-------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_dyn_rhg_evp')
-      !$acc data present( pstress1_i, pstress2_i, pstress12_i, pshear_i, pdivu_i, pdelta_i, u_ice, v_ice, uVice, vUice, SIGMAt )
+      !$acc data present( pshear_i, pdivu_i, pdelta_i, u_ice, v_ice, uVice, vUice, SIGMAt )
 
       IF( kt == nit000 .AND. lwp ) WRITE(numout,*) '-- ice_dyn_rhg_evp: EVP sea-ice rheology'
 
@@ -171,46 +166,6 @@ CONTAINS
       ! 1) define some variables and initialize arrays
       !------------------------------------------------------------------------------!
 
-      !! Ice thickness @T & @F we are going to work with:
-      IF( l_use_v_for_h ) THEN
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               zht(ji,jj) = MAX( vt_i(ji,jj) , 0._wp)
-            END DO
-         END DO
-         !$acc end parallel loop
-         CALL do_rmpT2F( zht, zhf, lconserv=.TRUE. )
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               zhf(ji,jj) = MAX( zhf(ji,jj) , 0._wp)
-               zds(ji,jj) = 0._wp
-            END DO
-         END DO
-         !$acc end parallel loop
-
-# if defined _OPENACC
-         CALL lbc_lnk_gpu( 'icedyn_rhg_evp', zhf )         
-# else
-         CALL lbc_lnk(     'icedyn_rhg_evp', zhf,'F',1._wp )
-# endif
-      ELSE
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               zht(ji,jj) = hm_i  (ji,jj)
-               zhf(ji,jj) = hm_i_f(ji,jj)
-               zds(ji,jj) = 0._wp
-            END DO
-         END DO
-         !$acc end parallel loop
-         !
-      ENDIF !IF( l_use_v_for_h )
-
-
-
-
       zrhoco = rho0 * rn_Cd_io
 
       ! ecc2: square of yield ellipse eccenticrity
@@ -221,17 +176,6 @@ CONTAINS
       zdtevp   = rDt_ice
       ! zalpha parameters set later on adaptatively
       z1_dtevp = 1._wp / zdtevp
-
-      ! Initialise stress tensor
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            zs1 (ji,jj) = pstress1_i (ji,jj)
-            zs2 (ji,jj) = pstress2_i (ji,jj)
-            zs12(ji,jj) = pstress12_i(ji,jj)
-         END DO
-      END DO
-      !$acc end parallel loop
 
       ! Ice strength
       CALL ice_strength
@@ -251,7 +195,7 @@ CONTAINS
       DO jj = Njs0-1, Nje0+1
          DO ji = Nis0-1, Nie0+1
             zm1          = ( rhos * vt_s(ji,jj) + rhoi * vt_i(ji,jj) )  ! Ice/snow mass at U-V points
-            zdt_m(ji,jj) = zdtevp / MAX( zm1, rmass_min )               ! dt/m at T points (for alpha and beta coefficients)
+            zdt_m(ji,jj) = zdtevp / MAX( zm1, rMmin_vel )               ! dt/m at T points (for alpha and beta coefficients)
          END DO
       END DO
       !$acc end parallel loop
@@ -282,8 +226,8 @@ CONTAINS
             kmsk00y(ji,jj) = MERGE( 1,  0,  zmassV > 0._wp )   ! 0 if no ice
 
             ! switches
-            kmsk01x(ji,jj) = MERGE( 0,  1,  zmassU <= rmass_min .AND. au_i(ji,jj) <= rconc_min )
-            kmsk01y(ji,jj) = MERGE( 0,  1,  zmassV <= rmass_min .AND. av_i(ji,jj) <= rconc_min )
+            kmsk01x(ji,jj) = MERGE( 0,  1,  zmassU <= rMmin_vel .AND. au_i(ji,jj) <= rAmin_vel )
+            kmsk01y(ji,jj) = MERGE( 0,  1,  zmassV <= rMmin_vel .AND. av_i(ji,jj) <= rAmin_vel )
 
          END DO
       END DO
@@ -293,25 +237,25 @@ CONTAINS
       !                                  !== Landfast ice parameterization ==!
       !
       IF( ln_landfast_L16 ) THEN         !-- Lemieux 2016
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL ctl_stop('STOP', 'ice_dyn_rhg_evp: add the OpenACC stuff for `ln_landfast_L16` !')
-# endif
+#endif
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
                ! ice thickness at U-V points
                zvU = 0.5_wp * ( vt_i(ji,jj) * e1e2t(ji,jj) + vt_i(ji+1,jj) * e1e2t(ji+1,jj) ) * r1_e1e2u(ji,jj) * umask(ji,jj,1)
                zvV = 0.5_wp * ( vt_i(ji,jj) * e1e2t(ji,jj) + vt_i(ji,jj+1) * e1e2t(ji,jj+1) ) * r1_e1e2v(ji,jj) * vmask(ji,jj,1)
                ! ice-bottom stress at U points
-               !LOLO:zvCr = au_i(ji,jj) * rn_lf_depfra * hu(ji,jj,Kmm) * ( 1._wp - icb_mask(ji,jj) ) ! if grounded icebergs are read: ocean depth = 0
-               zvCr = au_i(ji,jj) * rn_lf_depfra * 1._wp * ( 1._wp - icb_mask(ji,jj) ) ! if grounded icebergs are read: ocean depth = 0
+               !LOLO:zvCr = au_i(ji,jj) * rn_lf_depfra * hu(ji,jj,Kmm) * ( 1._wp - REAL(icb_mask(ji,jj),wp) ) ! if grounded icebergs are read: ocean depth = 0
+               zvCr = au_i(ji,jj) * rn_lf_depfra * 1._wp * ( 1._wp - REAL(icb_mask(ji,jj),wp) ) ! if grounded icebergs are read: ocean depth = 0
                ztaux_base(ji,jj) = - rn_lf_bfr * MAX( 0._wp, zvU - zvCr ) * EXP( -rn_crhg * ( 1._wp - au_i(ji,jj) ) )
                ! ice-bottom stress at V points
-               !LOLO:zvCr = av_i(ji,jj) * rn_lf_depfra * hv(ji,jj,Kmm) * ( 1._wp - icb_mask(ji,jj) ) ! if grounded icebergs are read: ocean depth = 0
-               zvCr = av_i(ji,jj) * rn_lf_depfra * 1._wp * ( 1._wp - icb_mask(ji,jj) ) ! if grounded icebergs are read: ocean depth = 0
+               !LOLO:zvCr = av_i(ji,jj) * rn_lf_depfra * hv(ji,jj,Kmm) * ( 1._wp - REAL(icb_mask(ji,jj),wp) ) ! if grounded icebergs are read: ocean depth = 0
+               zvCr = av_i(ji,jj) * rn_lf_depfra * 1._wp * ( 1._wp - REAL(icb_mask(ji,jj),wp) ) ! if grounded icebergs are read: ocean depth = 0
                ztauy_base(ji,jj) = - rn_lf_bfr * MAX( 0._wp, zvV - zvCr ) * EXP( -rn_crhg * ( 1._wp - av_i(ji,jj) ) )
                ! ice_bottom stress at T points
-               !LOLO:zvCr = at_i(ji,jj) * rn_lf_depfra * ht(ji,jj) * ( 1._wp - icb_mask(ji,jj) )    ! if grounded icebergs are read: ocean depth = 0
-               zvCr = at_i(ji,jj) * rn_lf_depfra * 1._wp * ( 1._wp - icb_mask(ji,jj) )    ! if grounded icebergs are read: ocean depth = 0
+               !LOLO:zvCr = at_i(ji,jj) * rn_lf_depfra * ht(ji,jj) * ( 1._wp - REAL(icb_mask(ji,jj),wp) )    ! if grounded icebergs are read: ocean depth = 0
+               zvCr = at_i(ji,jj) * rn_lf_depfra * 1._wp * ( 1._wp - REAL(icb_mask(ji,jj),wp) )    ! if grounded icebergs are read: ocean depth = 0
                tau_icebfr(ji,jj) = - rn_lf_bfr * MAX( 0._wp, vt_i(ji,jj) - zvCr ) * EXP( -rn_crhg * ( 1._wp - at_i(ji,jj) ) )
             END DO
          END DO
@@ -337,7 +281,7 @@ CONTAINS
       !$acc loop seq                                  ! ==================== !
       DO jter = 1 , nn_nevp                           !    loop over jter    !
          !                                            ! ==================== !
-         l_full_nf_update = jter == nn_nevp   ! false: disable full North fold update (performances) for iter = 1 to nn_nevp-1
+         !l_full_nf_update = jter == nn_nevp   ! false: disable full North fold update (performances) for iter = 1 to nn_nevp-1
 
          ! --- divergence, tension & shear (Appendix B of Hunke & Dukowicz, 2002) --- !
          !$acc parallel loop collapse(2) present( zds, r1_e1u, e1f2, r1_e2v, e2f2, r1_e1e2f )
@@ -382,15 +326,15 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL lbc_lnk_gpu( 'icedyn_rhg_evp', zdelta, zp_delt )
-# else
+#else
          CALL lbc_lnk(     'icedyn_rhg_evp', zdelta, 'T', 1.0_wp, zp_delt, 'T', 1.0_wp )
-# endif
+#endif
 
-         !$acc parallel loop collapse(2) present( zp_delt, zdt_m, zs1, zs2 )
+         !$acc parallel loop collapse(2) present( zp_delt, zdt_m, xS1, xS2 )
          DO jj = Njs0, Nje0+1
-            DO ji = Nis0, Nie0+1   ! loop ends at jpi,jpj so that no lbc_lnk are needed for zs1 and zs2
+            DO ji = Nis0, Nie0+1   ! loop ends at jpi,jpj so that no lbc_lnk are needed for xS1 and xS2
 
                ! divergence at T points (duplication to avoid communications)
                ! (brackets added to fix the order of floating point operations for halo 1 - halo 2 compatibility)
@@ -417,9 +361,9 @@ CONTAINS
                ! zalph2 = zalph1
 
                ! stress at T points (zkt/=0 if landfast)
-               zs1(ji,jj) = ( zs1(ji,jj)*zalph1 + zp_delt(ji,jj) * ( zdiv*(1._wp + zkt) - zdelta(ji,jj)*(1._wp - zkt) ) ) &
+               xS1(ji,jj) = ( xS1(ji,jj)*zalph1 + zp_delt(ji,jj) * ( zdiv*(1._wp + zkt) - zdelta(ji,jj)*(1._wp - zkt) ) ) &
                   &         * z1_alph1 * zmsk(ji,jj) ! zmsk is for reducing cpu
-               zs2(ji,jj) = ( zs2(ji,jj)*zalph2 + zp_delt(ji,jj) * ( zdt * z1_ecc2 * (1._wp + zkt) ) ) &
+               xS2(ji,jj) = ( xS2(ji,jj)*zalph2 + zp_delt(ji,jj) * ( zdt * z1_ecc2 * (1._wp + zkt) ) ) &
                   &         * z1_alph2 * zmsk(ji,jj) ! zmsk is for reducing cpu
 
             END DO
@@ -435,7 +379,7 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-         !$acc parallel loop collapse(2) present( zs12 )
+         !$acc parallel loop collapse(2) present( xS12 )
          DO jj = Njs0-1, Nje0
             DO ji = Nis0-1, Nie0
 
@@ -451,7 +395,7 @@ CONTAINS
                zp_delf = 0.25_wp * ( (zp_delt(ji,jj) + zp_delt(ji+1,jj)) + (zp_delt(ji,jj+1) + zp_delt(ji+1,jj+1)) )
 
                ! stress at F points (zkt/=0 if landfast)
-               zs12(ji,jj)= ( zs12(ji,jj) * zalph2 + zp_delf * ( zds(ji,jj) * z1_ecc2 * (1._wp + zkt) ) * 0.5_wp ) &
+               xS12(ji,jj)= ( xS12(ji,jj) * zalph2 + zp_delf * ( zds(ji,jj) * z1_ecc2 * (1._wp + zkt) ) * 0.5_wp ) &
                   &         * z1_alph2
 
             END DO
@@ -464,18 +408,18 @@ CONTAINS
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
                !                   !--- U points
-               zfU(ji,jj) = 0.5_wp * ( (( zs1(ji+1,jj) - zs1(ji,jj) ) * e2u(ji,jj)                                             &
-                  &                  + ( zs2(ji+1,jj) * e2t(ji+1,jj) * e2t(ji+1,jj) - zs2(ji,jj) * e2t2(ji,jj)    &
+               zfU(ji,jj) = 0.5_wp * ( (( xS1(ji+1,jj) - xS1(ji,jj) ) * e2u(ji,jj)                                             &
+                  &                  + ( xS2(ji+1,jj) * e2t(ji+1,jj) * e2t(ji+1,jj) - xS2(ji,jj) * e2t2(ji,jj)    &
                   &                    ) * r1_e2u(ji,jj))                                                                      &
-                  &                  + ( zs12(ji,jj) * e1f2(ji,jj) - zs12(ji,jj-1) * e1f(ji,jj-1) * e1f(ji,jj-1)  &
+                  &                  + ( xS12(ji,jj) * e1f2(ji,jj) - xS12(ji,jj-1) * e1f(ji,jj-1) * e1f(ji,jj-1)  &
                   &                    ) * 2._wp * r1_e1u(ji,jj)                                                              &
                   &                  ) * r1_e1e2u(ji,jj)
                !
                !                !--- V points
-               zfV(ji,jj) = 0.5_wp * ( (( zs1(ji,jj+1) - zs1(ji,jj) ) * e1v(ji,jj)                                             &
-                  &                  - ( zs2(ji,jj+1) * e1t(ji,jj+1) * e1t(ji,jj+1) - zs2(ji,jj) * e1t2(ji,jj)    &
+               zfV(ji,jj) = 0.5_wp * ( (( xS1(ji,jj+1) - xS1(ji,jj) ) * e1v(ji,jj)                                             &
+                  &                  - ( xS2(ji,jj+1) * e1t(ji,jj+1) * e1t(ji,jj+1) - xS2(ji,jj) * e1t2(ji,jj)    &
                   &                    ) * r1_e1v(ji,jj))                                                                      &
-                  &                  + ( zs12(ji,jj) * e2f2(ji,jj) - zs12(ji-1,jj) * e2f(ji-1,jj) * e2f(ji-1,jj)  &
+                  &                  + ( xS12(ji,jj) * e2f2(ji,jj) - xS12(ji-1,jj) * e2f(ji-1,jj) * e2f(ji-1,jj)  &
                   &                    ) * 2._wp * r1_e2v(ji,jj)                                                              &
                   &                  ) * r1_e1e2v(ji,jj)
                !
@@ -504,7 +448,7 @@ CONTAINS
             ENDIF
 
          ELSE
-            
+
             IF( MOD(jter,2) == 0 ) THEN ! even iterations
                !
 #include    "icedyn_rhg_evp_updtV.h90"
@@ -528,18 +472,18 @@ CONTAINS
       END DO !DO jter = 1 , nn_nevp                       !  end loop over jter  !
       !                                                   ! ==================== !
 
-      IF(iom_use('fUu')) THEN
-         !$acc update self ( zfU )
-         CALL iom_put( 'fUu' , zfU )
-      ENDIF
-      IF(iom_use('fVv')) THEN
-         !$acc update self ( zfV )
-         CALL iom_put( 'fVv' , zfV )
-      ENDIF
-      IF(iom_use('beta_evp')) THEN
-         !$acc update self ( zbeta )
-         CALL iom_put( 'beta_evp' , zbeta )
-      ENDIF
+      !IF(iom_use('fUu')) THEN
+      !   !$acc update self ( zfU )
+      !   CALL iom_put( 'fUu' , zfU )
+      !ENDIF
+      !IF(iom_use('fVv')) THEN
+      !   !$acc update self ( zfV )
+      !   CALL iom_put( 'fVv' , zfV )
+      !ENDIF
+      !IF(iom_use('beta_evp')) THEN
+      !   !$acc update self ( zbeta )
+      !   CALL iom_put( 'beta_evp' , zbeta )
+      !ENDIF
 
       !------------------------------------------------------------------------------!
       ! 4) Recompute delta, shear and div (inputs for mechanical redistribution)
@@ -595,28 +539,23 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# if defined _OPENACC
-      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i, zten_i, zshear, zdelta, zs1, zs2, zs12 )
-# else
+#if defined _OPENACC || defined _OPENMP
+      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i, zten_i, zshear, zdelta, xS1, xS2, xS12 )
+#else
       CALL lbc_lnk(     'icedyn_rhg_evp', pshear_i,'T',1._wp, pdivu_i,'T',1._wp, pdelta_i,'T',1._wp, zten_i,'T',1._wp, &
-         &                                zshear  ,'T',1._wp, zdelta ,'T',1._wp, zs1     ,'T',1._wp, zs2   ,'T',1._wp, zs12,'F',1._wp )
-# endif
+         &                                zshear  ,'T',1._wp, zdelta ,'T',1._wp, xS1     ,'T',1._wp, xS2   ,'T',1._wp, xS12,'F',1._wp )
+#endif
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
             !! Vertically-integrated components of the T-centric stress tensor (in Pa.m):
-            SIGMAt(ji,jj,1) = 0.5_wp*( zs1(ji,jj) + zs2(ji,jj) ) * xmskt(ji,jj)
-            SIGMAt(ji,jj,2) = 0.5_wp*( zs1(ji,jj) - zs2(ji,jj) ) * xmskt(ji,jj)
-            SIGMAt(ji,jj,3) =                 zs12(ji,jj)        * xmskf(ji,jj)
-            ! --- Store the stress tensor for the next time step --- !
-            pstress1_i (ji,jj) =  zs1(ji,jj)
-            pstress2_i (ji,jj) =  zs2(ji,jj)
-            pstress12_i(ji,jj) = zs12(ji,jj)
+            SIGMAt(ji,jj,1) = 0.5_wp*( xS1(ji,jj) + xS2(ji,jj) ) * xmskt(ji,jj)
+            SIGMAt(ji,jj,2) = 0.5_wp*( xS1(ji,jj) - xS2(ji,jj) ) * xmskt(ji,jj)
+            SIGMAt(ji,jj,3) =                 xS12(ji,jj)        * xmskf(ji,jj)
          END DO
       END DO
       !$acc end parallel loop
-
 
 
       ! 5) diagnostics
@@ -712,66 +651,6 @@ CONTAINS
    END SUBROUTINE ice_dyn_rhg_evp
 
 
-   SUBROUTINE rhg_evp_rst( cdrw, kt )
-      !!---------------------------------------------------------------------
-      !!                   ***  ROUTINE rhg_evp_rst  ***
-      !!
-      !! ** Purpose :   Read or write RHG file in restart file
-      !!
-      !! ** Method  :   use of IOM library
-      !!----------------------------------------------------------------------
-      CHARACTER(len=*) , INTENT(in) ::   cdrw   ! "READ"/"WRITE" flag
-      INTEGER, OPTIONAL, INTENT(in) ::   kt     ! ice time-step
-      !
-      INTEGER  ::   iter            ! local integer
-      INTEGER  ::   id1, id2, id3   ! local integers
-      !!----------------------------------------------------------------------
-      !
-      IF( TRIM(cdrw) == 'READ' ) THEN        ! Read/initialize
-         !                                   ! ---------------
-         IF( ln_rstart ) THEN                   !* Read the restart file
-            !
-            id1 = iom_varid( numrir, 'stress1_i' , ldstop = .FALSE. )
-            id2 = iom_varid( numrir, 'stress2_i' , ldstop = .FALSE. )
-            id3 = iom_varid( numrir, 'stress12_i', ldstop = .FALSE. )
-            !
-            IF( MIN( id1, id2, id3 ) > 0 ) THEN      ! fields exist
-               CALL iom_get( numrir, jpdom_auto, 'stress1_i' , stress1_i , cd_type = 'T' )
-               CALL iom_get( numrir, jpdom_auto, 'stress2_i' , stress2_i , cd_type = 'T' )
-               CALL iom_get( numrir, jpdom_auto, 'stress12_i', stress12_i, cd_type = 'F' )
-            ELSE                                     ! start rheology from rest
-               IF(lwp) WRITE(numout,*)
-               IF(lwp) WRITE(numout,*) '   ==>>>   previous run without rheology, set stresses to 0'
-               stress1_i (:,:) = 0._wp
-               stress2_i (:,:) = 0._wp
-               stress12_i(:,:) = 0._wp
-            ENDIF
-         ELSE                                   !* Start from rest
-            IF(lwp) WRITE(numout,*)
-            IF(lwp) WRITE(numout,*) '   ==>>>   start from rest: set stresses to 0'
-            stress1_i (:,:) = 0._wp
-            stress2_i (:,:) = 0._wp
-            stress12_i(:,:) = 0._wp
-         ENDIF
-         !
-         !$acc update device ( stress1_i, stress2_i, stress12_i )
-         !
-      ELSEIF( TRIM(cdrw) == 'WRITE' ) THEN   ! Create restart file
-         !                                   ! -------------------
-         IF(lwp) WRITE(numout,*) '---- rhg-rst ----'
-         iter = kt             ! ice restarts are written at kt == nitrst
-         !
-         !$acc update self ( stress1_i, stress2_i, stress12_i )
-         !
-         CALL iom_rstput( iter, nitrst, numriw, 'stress1_i' , stress1_i )
-         CALL iom_rstput( iter, nitrst, numriw, 'stress2_i' , stress2_i )
-         CALL iom_rstput( iter, nitrst, numriw, 'stress12_i', stress12_i )
-         !
-      ENDIF
-      !
-   END SUBROUTINE rhg_evp_rst
-
-
    SUBROUTINE ice_dyn_rhg_evp_init( )
       !!-------------------------------------------------------------------
       !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
@@ -786,40 +665,49 @@ CONTAINS
       ENDIF
 
       ALLOCATE( zdelta(jpi,jpj), zp_delt(jpi,jpj), zbeta(jpi,jpj), zdt_m(jpi,jpj), zmU_dt(jpi,jpj), zmV_dt(jpi,jpj), &
-         &      zht(jpi,jpj), zhf(jpi,jpj), zds(jpi,jpj), zten_i(jpi,jpj), zshear(jpi,jpj), zs1(jpi,jpj), zs2(jpi,jpj), zs12(jpi,jpj), &
+         &      zds(jpi,jpj), zten_i(jpi,jpj), zshear(jpi,jpj), xS1(jpi,jpj), xS2(jpi,jpj), xS12(jpi,jpj), &
          &      zsshdyn(jpi,jpj), zfU(jpi,jpj), zfV(jpi,jpj), zspgU(jpi,jpj), zspgV(jpi,jpj),   &
          &      zmsk(jpi,jpj), kmsk01x(jpi,jpj), kmsk01y(jpi,jpj), kmsk00x(jpi,jpj), kmsk00y(jpi,jpj), &
          &      ztaux_base(jpi,jpj), ztauy_base(jpi,jpj), ztaux_bi(jpi,jpj), ztauy_bi(jpi,jpj), &
          &      STAT = ierr(1) )
       !
       zdelta(:,:) = 0._wp ;  zp_delt(:,:) = 0._wp ;  zbeta(:,:) = 0._wp ;  zdt_m(:,:) = 0._wp ;  zmU_dt(:,:) = 0._wp ;  zmV_dt(:,:) = 0._wp
-      zht(:,:) = 0._wp ;  zhf(:,:) = 0._wp ;  zds(:,:) = 0._wp ;  zten_i(:,:) = 0._wp ;  zshear(:,:) = 0._wp ;  zs1(:,:) = 0._wp ;  zs2(:,:) = 0._wp ;  zs12(:,:) = 0._wp
+      zds(:,:) = 0._wp ;  zten_i(:,:) = 0._wp ;  zshear(:,:) = 0._wp ;  xS1(:,:) = 0._wp ;  xS2(:,:) = 0._wp ;  xS12(:,:) = 0._wp
       zsshdyn(:,:) = 0._wp ;  zfU(:,:) = 0._wp ;  zfV(:,:) = 0._wp ;  zspgU(:,:) = 0._wp ;  zspgV(:,:) = 0._wp
       zmsk(:,:) = 0._wp
       ztaux_base(:,:) = 0._wp ;  ztauy_base(:,:) = 0._wp ;  ztaux_bi(:,:) = 0._wp ;  ztauy_bi(:,:) = 0._wp
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_dyn_rhg_evp_init() => adding aEVP work arrays to memory!'
-      !$acc enter data copyin( zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zht, zhf, zds )
-      PRINT *, '    ==> zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zht, zhf, zds'
-      !$acc enter data copyin( zten_i, zshear, zs1, zs2, zs12, zsshdyn, zfU, zfV, zspgU, zspgV )
-      PRINT *, '    ==> zten_i, zshear, zs1, zs2, zs12, zsshdyn, zfU, zfV, zspgU, zspgV'
+      !$acc enter data copyin( zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zds )
+      PRINT *, '    ==> zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zds'
+      !$acc enter data copyin( zten_i, zshear, xS1, xS2, xS12, zsshdyn, zfU, zfV, zspgU, zspgV )
+      PRINT *, '    ==> zten_i, zshear, xS1, xS2, xS12, zsshdyn, zfU, zfV, zspgU, zspgV'
       !$acc enter data copyin( zmsk, kmsk01x, kmsk01y, kmsk00x, kmsk00y, ztaux_base, ztauy_base, ztaux_bi, ztauy_bi )
       PRINT *, '    ==> zmsk, kmsk01x, kmsk01y, kmsk00x, kmsk00y, ztaux_base, ztauy_base, ztaux_bi, ztauy_bi'
-# endif
+#endif
 
       !      IF( ln_landfast_L16 ) THEN
-      !         PRINT *, 'LOLO_EVP => allocating work landfast arrays!'
+      !         PRXNT *, 'LOLO_EVP => allocating work landfast arrays!'
       !         ALLOCATE( ,  STAT = ierr(2)  )
-      !# if defined _OPENACC
+      !#if defined _OPENACC || defined _OPENMP
       !         !$acc enter data copyin( ztaux_bi, ztauy_bi )
-      !         PRINT *, '    ==> ztaux_bi, ztauy_bi'
-      !# endif
+      !         PRXNT *, '    ==> ztaux_bi, ztauy_bi'
+      !#endif
       !      ENDIF
-
       k_alloc = MAXVAL( ierr(:) )
       CALL mpp_sum ( 'ice_dyn_rhg_evp_init', k_alloc )
       IF( k_alloc > 0 ) CALL ctl_stop('STOP', 'ice_dyn_rhg_evp_init: unable to allocate work arrays for EVP')
+
+      !! If it is a restarted run, then we must initialize xS1, xS2 & xS12 with content of restart-filled `SIGMAt(:,:,:)`:
+      IF( ln_rstart ) THEN
+#if defined key_verbose
+         IF(lwp) PRINT *, 'LOLO/restart: `ice_dyn_rhg_evp_init` updating xS1, xS2 & xS12 with SIGMAt !!!'
+#endif
+         xS1(:,:)  = SIGMAt(:,:,1) + SIGMAt(:,:,2)  ! @T
+         xS2(:,:)  = SIGMAt(:,:,1) - SIGMAt(:,:,2)  ! @T
+         xS12(:,:) =        SIGMAt(:,:,3)           ! @F
+      ENDIF
 
    END SUBROUTINE ice_dyn_rhg_evp_init
 

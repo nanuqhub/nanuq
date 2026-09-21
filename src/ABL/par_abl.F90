@@ -47,6 +47,7 @@ MODULE par_abl
    REAL(wp), PUBLIC, PARAMETER ::   rn_phimax = (1._wp - 2.2_wp) / 2.2_wp !: maximum value for Ri * mxl^2 * N^2 / tke in phiz computation
    REAL(wp), PUBLIC, PARAMETER ::   rn_Cek    = 258._wp                   !: Ekman constant for Richardson number
    REAL(wp), PUBLIC, PARAMETER ::   rn_epssfc = 1._wp / ( 1._wp + 2.8_wp * 2.8_wp )
+   !
    REAL(wp), PUBLIC            ::   rn_Ceps                       !: namelist parameter
    REAL(wp), PUBLIC            ::   rn_Cm                         !: namelist parameter
    REAL(wp), PUBLIC            ::   rn_Ct                         !: namelist parameter
@@ -61,12 +62,15 @@ MODULE par_abl
    REAL(wp), PUBLIC            ::   rn_ltra_min                   !: namelist parameter
    REAL(wp), PUBLIC            ::   rn_ltra_max                   !: namelist parameter
    REAL(wp), PUBLIC            ::   rn_Ric                        !: critical Richardson number
+   !$acc declare create( rn_Ceps, rn_Cm, rn_Ct, rn_Ce, rn_Rod, rn_Sch, rn_Esfc, rn_Lsfc, mxl_min, rn_ldyn_min, rn_ldyn_max, rn_ltra_min, rn_ltra_max, rn_Ric )
+
 
    !!---------------------------------------------------------------------
    !! ABL parameters for the vertical profile of the restoring term
    !!---------------------------------------------------------------------
    REAL(wp), PUBLIC, PARAMETER ::   jp_bmin    =   0.5_wp
    REAL(wp), PUBLIC, PARAMETER ::   jp_bmax    =   1.5_wp
+   !
    REAL(wp), PUBLIC            ::   jp_alp0_tra
    REAL(wp), PUBLIC            ::   jp_alp1_tra
    REAL(wp), PUBLIC            ::   jp_alp2_tra
@@ -77,10 +81,13 @@ MODULE par_abl
    REAL(wp), PUBLIC            ::   jp_alp3_dyn
    REAL(wp), PUBLIC            ::   jp_pblh_min
    REAL(wp), PUBLIC            ::   jp_pblh_max
+   !$acc declare create( jp_alp0_tra, jp_alp1_tra, jp_alp2_tra, jp_alp3_tra, jp_alp0_dyn, jp_alp1_dyn, jp_alp2_dyn, jp_alp3_dyn, jp_pblh_min, jp_pblh_max )
+
    ! parameter for the semi-implicit treatment of Coriolis term
    REAL(wp), PUBLIC, PARAMETER ::   gamma_Cor  = 0.55_wp
    ! ABL timestep
    REAL(wp), PUBLIC            :: rDt_abl
+   !$acc declare create( rDt_abl )
 
    !!---------------------------------------------------------------------
    !! ABL parameters for the diagnostic mixing length option nn_amxl = 1
@@ -97,7 +104,7 @@ MODULE par_abl
    REAL(wp), PUBLIC, PARAMETER ::   bmx5 =  -72.076052686380677_wp
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0, Brodeau (2026)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ABL 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!======================================================================

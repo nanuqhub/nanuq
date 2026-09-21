@@ -23,13 +23,13 @@ MODULE icethd_zdf_BL99
    PUBLIC   ice_thd_zdf_BL99   ! called by icethd_zdf
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2025)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_thd_zdf_BL99( jl_cat, k_cnd, ll_ice_present )
+   SUBROUTINE ice_thd_zdf_BL99( jl_cat, k_cnd, lk_ice_present )
       !!-------------------------------------------------------------------
       !!                ***  ROUTINE ice_thd_zdf_BL99  ***
       !!
@@ -68,12 +68,12 @@ CONTAINS
       !!-------------------------------------------------------------------
       INTEGER,                     INTENT(in) ::   jl_cat        ! ice-category we are working with...
       INTEGER,                     INTENT(in) ::   k_cnd     ! conduction flux (off, on, emulated)
-      LOGICAL, DIMENSION(jpi,jpj), INTENT(in) ::   ll_ice_present
+      LOGICAL, DIMENSION(jpi,jpj), INTENT(in) ::   lk_ice_present
       !!-------------------------------------------------------------------
+      INTEGER, PARAMETER ::  iconv_max = 50   ! max number of iterations in iterative procedure
       INTEGER ::   ji, jj, jk                 ! spatial loop index
+      INTEGER ::   jitt
       INTEGER ::   jm                         ! current reference number of equation
-      INTEGER ::   iconv                      ! number of iterations in iterative procedure
-      INTEGER ::   iconv_max = 50             ! max number of iterations in iterative procedure
       INTEGER ::   k_T_converged              ! `1` when T has converged (per grid point)
       !
       REAL(wp) ::   zg1s      =  2._wp        ! for the tridiagonal system
@@ -139,23 +139,23 @@ CONTAINS
       REAL(wp) ::   zcnd_i            ! mean sea ice thermal conductivity
       REAL(wp) ::   z1_hi_ssl, zt_su, zA, zdum, zsum_i, zsum_s
       !!------------------------------------------------------------------
-      !$acc data present( cnd_ice,dqns_ice,hfx_dif,hfx_err_dif,h_i,h_s,ll_ice_present,qcn_ice,qcn_ice_bot,qcn_ice_top,qns_ice,qsr_ice,qtr_ice_bot,qtr_ice_top,sz_i,t1_ice ) create( zradtr_s,zradab_s,zradtr_i,zradab_i,ztcond_i,ztcond_i_cp,ztiold,ztsold,zkappa_i,zeta_i,zkappa_s,zeta_s,ztib,ztsb,zindterm,zindtbis,zdiagbis,ztrid )
+      !$acc data create( zradtr_s,zradab_s,zradtr_i,zradab_i,ztcond_i,ztcond_i_cp,ztiold,ztsold,zkappa_i,zeta_i,zkappa_s,zeta_s,ztib,ztsb,zindterm,zindtbis,zdiagbis,ztrid )
 
       IF( ln_virtual_itd ) THEN
          zepsilon = 0.1_wp
          zthres   = zepsilon * 0.5_wp * EXP(1._wp)
       ENDIF
 
-      z1_hi_ssl = 1._wp / zhi_ssl      
-      
-      !$acc parallel loop collapse(2) private(zradtr_s,zradab_s,zradtr_i,zradab_i,ztcond_i,ztcond_i_cp,ztiold,ztsold,zkappa_i,zeta_i,zkappa_s,zeta_s,ztib,ztsb,zindterm,zindtbis,zdiagbis,ztrid)
+      z1_hi_ssl = 1._wp / zhi_ssl
+
+      !$acc parallel loop collapse(2) private(zradtr_s,zradab_s,zradtr_i,zradab_i,ztcond_i,ztcond_i_cp,ztiold,ztsold,zkappa_i,zeta_i,zkappa_s,zeta_s,ztib,ztsb,zindterm,zindtbis,zdiagbis,ztrid,k_T_converged)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
-            IF( ll_ice_present(ji,jj) ) THEN
+            IF( lk_ice_present(ji,jj) ) THEN
 
                zt_su = t_su(ji,jj,jl_cat)
-               
+
                zsum_i = 0._wp ; zsum_s = 0._wp
                !$acc loop seq
                DO jk = 1, nlay_s
@@ -233,27 +233,20 @@ CONTAINS
 
                qtr_ice_bot(ji,jj,jl_cat) = zradtr_i(nlay_i)   ! record radiation transmitted below the ice
 
-            ENDIF ! IF( ll_ice_present(ji,jj) )
 
 
+               !************************************************************
+               !                      Iteration block
+               !************************************************************
 
-            !************************************************************
-            !                      Iteration block
-            !************************************************************
+               k_T_converged = 0 ! not converged
 
-            k_T_converged = MERGE( 0, 1,  ll_ice_present(ji,jj) )  ! => 1, aka "converged" where no ice
+               ! Convergence calculated until all sub-domain grid points have converged
+               ! Calculations keep going for all grid points until sub-domain convergence (vectorisation optimisation)
+               ! but values are not taken into account (results independant of MPI partitioning)
 
-            ! Convergence calculated until all sub-domain grid points have converged
-            ! Calculations keep going for all grid points until sub-domain convergence (vectorisation optimisation)
-            ! but values are not taken into account (results independant of MPI partitioning)
-            !
-            iconv = 0          ! number of iterations
-            !                                                                                  !============================!
-            DO WHILE ( (k_T_converged < 1).AND.( iconv < iconv_max ) )   ! Iterative procedure begins !
-               !                                                                               !============================!
-               iconv = iconv + 1
-
-               IF( ll_ice_present(ji,jj) ) THEN
+               !$acc loop seq
+               DO jitt = 1, iconv_max
 
                   ! thicknesses
                   zh_i = h_i(ji,jj,jl_cat)
@@ -335,10 +328,10 @@ CONTAINS
                         zkappa_s(jk) = zghe * rcnd_s * z1_h_s
                      END DO
                      zfac = 0.5_wp * (  ztcond_i(0) * zh_s + rcnd_s * zh_i )
-                     IF( zfac<=0._wp) THEN
-                        PRINT *, 'LOLO: `zfac<=0.` !!! `icethd_zdf_bl99.F90` (did not think it could be negative)'
-                        STOP
-                     ENDIF
+                     !IF( zfac<=0._wp) THEN
+                     !   PRXNT *, 'LOLO: `zfac<=0.` !!! `icethd_zdf_bl99.F90` (did not think it could be negative)'
+                     !   STOP
+                     !ENDIF
                      !zkappa_s(nlay_s) = zisnow * zghe * rcnd_s * ztcond_i(0) / zfac   ! Snow-ice interface
                      zkappa_s(nlay_s) = zisnow * zghe * rcnd_s * ztcond_i(0) / MAX( zfac, epsi10 ) !LOLO
                      !
@@ -354,26 +347,23 @@ CONTAINS
                      ! If there is snow then use the same snow-ice interface conductivity for the top layer of ice
                      zkappa_i(0) = MERGE( zkappa_s(nlay_s) ,  zkappa_i(0) ,  h_s(ji,jj,jl_cat) > 0._wp )  ! Snow-ice interface
 
-
                      IF( k_cnd == np_cnd_OFF .OR. k_cnd == np_cnd_EMU ) THEN
 #                       include "icethd_zdf_bl99_cnd_OFF.h90"
                      ELSEIF( k_cnd == np_cnd_ON ) THEN
 #                       include "icethd_zdf_bl99_cnd_ON.h90"
                      ENDIF !IF( k_cnd == np_cnd_OFF .OR. k_cnd == np_cnd_EMU )
-                     IF( zdti_max < zdti_bnd )   k_T_converged = 1
 
+                     IF( zdti_max < zdti_bnd )   k_T_converged = 1
 
                   ENDIF !IF( k_T_converged==0 )
 
-               ENDIF !IF( ll_ice_present(ji,jj) )
+                  IF( k_T_converged >= 1 ) EXIT
 
-            END DO !DO WHILE ( ANY(k_T_converged(Nis0:Nie0,Njs0:Nje0)<1) .AND. (iconv < iconv_max) )
+               END DO !DO jitt = 1, iconv_max
 
-            !************************************************************
-            !                End of iteration block
-            !************************************************************
-
-            IF( ll_ice_present(ji,jj) ) THEN
+               !************************************************************
+               !                End of iteration block
+               !************************************************************
 
                zA = a_i(ji,jj,jl_cat)
 
@@ -410,7 +400,7 @@ CONTAINS
                !
                IF( k_cnd == np_cnd_OFF .OR. k_cnd == np_cnd_ON ) THEN
                   !
-                  !CALL ice_var_enthalpy(jl_cat, ll_ice_present)  ! ==> manual inlining:
+                  !CALL ice_var_enthalpy(jl_cat, lk_ice_present)  ! ==> manual inlining:
                   !$acc loop seq
                   DO jk = 1, nlay_i             ! Sea ice energy of melting
                      ztmelts       = - rTmlt  * sz_i(ji,jj,jk,jl_cat)
@@ -445,7 +435,7 @@ CONTAINS
                   ELSEIF( k_cnd == np_cnd_ON ) THEN
                      zhfx_err =  zsum_i * zA
                   ENDIF
-                  
+
                   ! total heat sink to be sent to the ocean
                   hfx_err_dif(ji,jj) = hfx_err_dif(ji,jj) + zhfx_err
                   !
@@ -476,23 +466,25 @@ CONTAINS
                   END DO
                   qcn_ice(ji,jj,jl_cat) = qcn_ice_top(ji,jj,jl_cat)
                ENDIF
-               !
+
                ! --- SIMIP diagnostics (Snow-ice interfacial temperature)
-               IF( h_s(ji,jj,jl_cat) >= zhs_ssl ) THEN
-                  zdum   = h_i(ji,jj,jl_cat) * r1_nlay_i
-                  zsum_s = ztcond_i(1) * h_s(ji,jj,jl_cat) * r1_nlay_s
-                  t_si(ji,jj,jl_cat) = ( rcnd_s*zdum*t_s(ji,jj,nlay_s,jl_cat) + zsum_s*t_i(ji,jj,1,jl_cat) ) / ( rcnd_s*zdum + zsum_s )
-               ELSE
-                  t_si(ji,jj,jl_cat) = zt_su
-               ENDIF
-               
+               !IF( h_s(ji,jj,jl_cat) >= zhs_ssl ) THEN
+               !   zdum   = h_i(ji,jj,jl_cat) * r1_nlay_i
+               !   zsum_s = ztcond_i(1) * h_s(ji,jj,jl_cat) * r1_nlay_s
+               !   t_si(ji,jj,jl_cat) = ( rcnd_s*zdum*t_s(ji,jj,nlay_s,jl_cat) + zsum_s*t_i(ji,jj,1,jl_cat) ) / ( rcnd_s*zdum + zsum_s )
+               !ELSE
+               !   t_si(ji,jj,jl_cat) = zt_su
+               !ENDIF
+
                t_su(ji,jj,jl_cat) = zt_su
-               
-            ENDIF !IF( ll_ice_present(ji,jj) )
+
+            ENDIF !IF( lk_ice_present(ji,jj) )
 
          END DO !DO ji=Nis0, Nie0
       END DO !DO jj=Njs0, Nje0
       !$acc end parallel loop
+
+      !%acc end data
 
       !$acc end data
    END SUBROUTINE ice_thd_zdf_BL99

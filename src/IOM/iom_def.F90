@@ -30,12 +30,11 @@ MODULE iom_def
    INTEGER, PARAMETER, PUBLIC ::   jpmax_dims   =  4   !: maximum number of dimensions for one variable
    INTEGER, PARAMETER, PUBLIC ::   jpmax_digits =  9   !: maximum number of digits for the cpu number in the file name
 
-!$AGRIF_DO_NOT_TREAT
    INTEGER, PUBLIC            ::   iom_open_init = 0   !: used to initialize iom_file(:)%nfid to 0
-!XIOS write restart
+   !XIOS write restart
    LOGICAL, PUBLIC            ::   lwxios = .FALSE.    !: write single file restart using XIOS
    INTEGER, PUBLIC            ::   nxioso = 0          !: type of restart file when writing using XIOS 1 - single, 2 - multiple
-!XIOS read restart
+   !XIOS read restart
    LOGICAL, PUBLIC            ::   lrxios = .FALSE.     !: read single file restart using XIOS main switch
    LOGICAL, PUBLIC            ::   lxios_sini = .FALSE. ! is restart in a single file
 
@@ -45,7 +44,7 @@ MODULE iom_def
       CHARACTER(LEN=240)                        ::   name     !: name of the file
       CHARACTER(LEN=3  )                        ::   comp     !: name of component opening the file ('OCE', 'ICE'...)
       INTEGER                                   ::   nfid     !: identifier of the file (0 if closed)
-                                                              !: jpioipsl option has been removed)
+      !: jpioipsl option has been removed)
       INTEGER                                   ::   nvars    !: number of identified varibles in the file
       INTEGER                                   ::   iduld    !: id of the unlimited dimension
       INTEGER                                   ::   lenuld   !: length of the unlimited dimension (number of records in file)
@@ -60,11 +59,10 @@ MODULE iom_def
       REAL(kind=wp), DIMENSION(jpmax_vars)      ::   ofs      !: add_offset of the variables
    END TYPE file_descriptor
    TYPE(file_descriptor), DIMENSION(jpmax_files), PUBLIC ::   iom_file !: array containing the info for all opened files
-!$AGRIF_END_DO_NOT_TREAT
    !
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: iom_def.F90 14072 2020-12-04 07:48:38Z laurent $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!======================================================================
 END MODULE iom_def

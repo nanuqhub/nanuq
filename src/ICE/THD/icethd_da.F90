@@ -21,7 +21,7 @@ MODULE icethd_da
    USE lib_mpp        , ONLY : ctl_stop, ctl_warn, ctl_nam                               ! MPP library
    !
    USE timing
-   
+
    IMPLICIT NONE
    PRIVATE
 
@@ -36,13 +36,13 @@ MODULE icethd_da
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2025)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE ice_thd_da(jl_cat, ll_ice_present)
+   SUBROUTINE ice_thd_da(jl_cat, lk_ice_present)
       !!-------------------------------------------------------------------
       !!                ***  ROUTINE ice_thd_da  ***
       !!
@@ -111,7 +111,7 @@ CONTAINS
       !!              Phil. Trans. R. Soc. A, 373(2052), 20140167.
       !!---------------------------------------------------------------------
       INTEGER,                     INTENT(IN)    :: jl_cat
-      LOGICAL, DIMENSION(jpi,jpj), INTENT(inout) :: ll_ice_present
+      LOGICAL, DIMENSION(jpi,jpj), INTENT(inout) :: lk_ice_present
       !!---------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk ! dummy loop indices
       REAL(wp)            ::   zastar, zdfloe, zperi, zwlat, zda, zda_tot, zt1, zt2
@@ -122,30 +122,29 @@ CONTAINS
       REAL(wp)            ::   zsum_s_i, zsum_e_i, zsum_e_s      ! SUM along `nlay_i` or `nlay_s`...
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_thd_da')
-      !$acc data present( a_i, at_i, e_i, e_s, hfx_thd, h_i, h_s, ll_ice_present, rDt_ice, at_i, sfx_lam, sst_s, t_bo, wfx_lam )
-      
+      !$acc data present(a_i,at_i,e_i,e_s,hfx_thd,h_i,h_s,lk_ice_present,rDt_ice,sfx_lam,sst_s,t_bo,wfx_lam)
+
       zastar = 1._wp / ( 1._wp - (rn_dmin / zdmax)**(1._wp/rn_beta) )
-      
+
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
-            IF(ll_ice_present(ji,jj)) THEN
+            IF(lk_ice_present(ji,jj)) THEN
                !
-               zsum_s_i = 0._wp ; zsum_e_i = 0._wp               
+               zsum_e_i = 0._wp
                !$acc loop seq
                DO jk=1, nlay_i
                   zsum_e_i = zsum_e_i +  e_i(ji,jj,jk,jl_cat)
-                  IF( nn_icesal == 4 ) THEN
-                     zsum_s_i = zsum_s_i + sz_i(ji,jj,jk,jl_cat)  ! use layer salinity if nn_icesal=4
-                  ELSE
-                     zsum_s_i = zsum_s_i + s_i (ji,jj,  jl_cat)  !     bulk salinity otherwise (for conservation purpose)
-                  ENDIF
                END DO
-               !
-               zsum_e_s = 0._wp               
+               zsum_e_s = 0._wp
                !$acc loop seq
                DO jk=1, nlay_s
-                  zsum_e_s =    zsum_e_s +  e_s(ji,jj,jk,jl_cat)
+                  zsum_e_s = zsum_e_s +  e_s(ji,jj,jk,jl_cat)
+               END DO
+               zsum_s_i = 0._wp
+               !$acc loop seq
+               DO jk=1, nlay_i
+                  zsum_s_i = zsum_s_i + sz_i(ji,jj,jk,jl_cat)
                END DO
                !
                ! --- Calculate reduction of total sea ice concentration --- !
@@ -164,13 +163,13 @@ CONTAINS
 
                zt1 = zda * r1_Dt_ice
                zt2 = h_i(ji,jj,jl_cat) * r1_nlay_i
-               
+
                ! Contribution to salt flux
                sfx_lam(ji,jj) = sfx_lam(ji,jj) + rhoi * zt1 * zt2 * zsum_s_i
 
                ! Contribution to heat flux into the ocean [W.m-2], (<0)
                hfx_thd(ji,jj) = hfx_thd(ji,jj) - zt1 * ( zt2 * zsum_e_i + h_s(ji,jj,jl_cat)*r1_nlay_s * zsum_e_s )
-               
+
                ! Contribution to mass flux
                wfx_lam(ji,jj) = wfx_lam(ji,jj) + zt1 * ( rhoi * h_i(ji,jj,jl_cat) + rhos * h_s(ji,jj,jl_cat) )
 
@@ -181,9 +180,9 @@ CONTAINS
                IF( a_i(ji,jj,jl_cat) == 0._wp ) THEN
                   h_i(ji,jj,jl_cat) = 0._wp
                   h_s(ji,jj,jl_cat) = 0._wp
-                  ll_ice_present(ji,jj) = .false.
+                  lk_ice_present(ji,jj) = .FALSE.
                ENDIF
-               
+
             ENDIF
          END DO
       END DO

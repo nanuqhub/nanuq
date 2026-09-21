@@ -10,7 +10,7 @@ PROGRAM nanuq
    !!----------------------------------------------------------------------
    USE nanuqgcm   ! NANUQ system   (nanuq_gcm routine)
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
    !

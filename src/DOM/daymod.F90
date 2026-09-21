@@ -41,8 +41,8 @@ MODULE daymod
    INTEGER, PUBLIC ::   nsecd, nsecd05, ndt, ndt05   !: (PUBLIC for TAM)
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: daymod.F90 14072 2020-12-04 07:48:38Z laurent $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -66,7 +66,7 @@ CONTAINS
       !!              - nmonth_len, nyear_len, nmonth_beg through day_mth
       !!----------------------------------------------------------------------
       INTEGER  ::   inbday, imonday, isecrst   ! local integers
-      REAL(dp) ::   zjul             ! local scalar
+      REAL(wp) ::   zjul             ! local scalar
       !!----------------------------------------------------------------------
       !
       ! max number of seconds between each restart
@@ -81,27 +81,26 @@ CONTAINS
 
       CALL day_rst( nit000, 'READ' )
 
-      ! set the calandar from ndastp (read in restart file and namelist)
+      ! set date and time based on restart information or namelist variables
       nyear   =   ndastp / 10000
       nmonth  = ( ndastp - (nyear * 10000) ) / 100
       nday    =   ndastp - (nyear * 10000) - ( nmonth * 100 )
+      isecrst = ( nhour0 * NINT(rhhmm) + nminute0 ) * NINT(rmmss)
 
-      nhour   =   nn_time0 / 100
-      nminute = ( nn_time0 - nhour * 100 )
-      isecrst = ( nhour * NINT(rhhmm) + nminute ) * NINT(rmmss)
-
-      CALL ymds2ju( nyear, nmonth, nday, REAL(isecrst,dp), fjulday )
+      CALL ymds2ju( nyear, nmonth, nday, REAL(isecrst,wp), fjulday )
       IF( ABS(fjulday - REAL(NINT(fjulday),wp)) < 0.1 / rday )   fjulday = REAL(NINT(fjulday),wp)   ! avoid truncation error
-      IF( nhour*NINT(rhhmm*rmmss) + nminute*NINT(rmmss) - ndt05 .LT. 0 ) fjulday = fjulday+1.       ! move back to the day at nit000 (and not at nit000 - 1)
+      IF( nhour0 * NINT( rhhmm * rmmss ) + nminute0 * NINT( rmmss ) - ndt05 .LT. 0 ) THEN
+         fjulday = fjulday + 1.0_wp   ! move back to the day at nit000 (and not at nit000 - 1)
+      ENDIF
 
       nsec1jan000 = 0
       CALL day_mth
 
-      IF ( nday == 0 ) THEN     !   for ex if ndastp = ndate0 - 1
+      IF( nday == 0 ) THEN     !   for ex if ndastp = ndate0 - 1
          nmonth = nmonth - 1
          nday = nmonth_len(nmonth)
       ENDIF
-      IF ( nmonth == 0 ) THEN   ! go at the end of previous year
+      IF( nmonth == 0 ) THEN   ! go at the end of previous year
          nmonth = 12
          nyear = nyear - 1
          nsec1jan000 = nsec1jan000 - nsecd * nyear_len(0)
@@ -112,11 +111,10 @@ CONTAINS
       nday_year = nday + SUM( nmonth_len(1:nmonth - 1) )
 
       !compute number of days between last Monday and today
-      CALL ymds2ju( 1900, 01, 01, 0.0_dp, zjul )     ! compute julian day value of 01.01.1900 (our reference that was a Monday)
-
+      CALL ymds2ju( 1900, 01, 01, 0.0_wp, zjul )     ! compute julian day value of 01.01.1900 (our reference that was a Monday)
       inbday = FLOOR(fjulday - zjul)              ! compute nb day between  01.01.1900 and start of current day
       imonday = MOD(inbday, 7)                    ! compute nb day between last monday and current day
-      IF (imonday .LT. 0) imonday = imonday + 7   ! Avoid negative values for dates before 01.01.1900
+      IF(imonday .LT. 0) imonday = imonday + 7   ! Avoid negative values for dates before 01.01.1900
 
       ! number of seconds since the beginning of current year/month/week/day at the middle of the time-step
       IF( isecrst - ndt05 .GT. 0 ) THEN
@@ -135,9 +133,9 @@ CONTAINS
 
       ! control print
       IF(lwp) WRITE(numout,'(a,i6,a,i2,a,i2,a,i8,a,i8,a,i8,a,i8)')   &
-           &                   ' =======>> 1/2 time step before the start of the run DATE Y/M/D = ',   &
-           &                   nyear, '/', nmonth, '/', nday, '  nsec_day:', nsec_day, '  nsec_monday:', nsec_monday, '  &
-           &                   nsec_month:', nsec_month , '  nsec_year:' , nsec_year
+         &                   ' =======>> 1/2 time step before the start of the run DATE Y/M/D = ',   &
+         &                   nyear, '/', nmonth, '/', nday, '  nsec_day:', nsec_day, '  nsec_monday:', nsec_monday, '  &
+         &                   nsec_month:', nsec_month , '  nsec_year:' , nsec_year
 
       nsec000_1jan000 = nsec1jan000 + nsec_year + ndt05
       nsecend_1jan000 = nsec000_1jan000 + ndt * ( nitend - nit000 + 1 )
@@ -165,15 +163,15 @@ CONTAINS
       !!----------------------------------------------------------------------
 
       ! length of the month of the current year (from nleapy, read in namelist)
-      IF ( nleapy < 2 ) THEN
+      IF( nleapy < 2 ) THEN
          ! default values
          idaymt(1:12) = (/ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 /)
          nmonth_len(-11: 25) = (/ idaymt(1:12), idaymt(1:12), idaymt(1:12), idaymt(1) /)
          nyear_len(:) = 365
          !
-         IF ( nleapy == 1 ) THEN   ! we are using calandar with leap years
+         IF( nleapy == 1 ) THEN   ! we are using calandar with leap years
             DO jy = -1,1
-               IF ( MOD(nyear+jy, 4) == 0 .AND. ( MOD(nyear+jy, 400) == 0 .OR. MOD(nyear+jy, 100) /= 0 ) ) THEN
+               IF( MOD(nyear+jy, 4) == 0 .AND. ( MOD(nyear+jy, 400) == 0 .OR. MOD(nyear+jy, 100) /= 0 ) ) THEN
                   nmonth_len(2 + 12*jy) = 29
                   nyear_len( 1 +    jy) = 366
                ENDIF
@@ -218,7 +216,7 @@ CONTAINS
       INTEGER, INTENT(in) ::   kt        ! ocean time-step indices
       !
       CHARACTER (len=25) ::   charout
-      REAL(dp)           ::   zprec      ! fraction of day corresponding to 0.1 second
+      REAL(wp)           ::   zprec      ! fraction of day corresponding to 0.1 second
       !!----------------------------------------------------------------------
       !
       IF( ln_timing )   CALL timing_start('day')
@@ -257,12 +255,12 @@ CONTAINS
          ndastp = nyear * 10000 + nmonth * 100 + nday   ! New date
          !
          !compute first day of the year in julian days
-         CALL ymds2ju( nyear, 01, 01, 0.0_dp, fjulstartyear )
+         CALL ymds2ju( nyear, 01, 01, 0.0_wp, fjulstartyear )
          !
          IF(lwp) WRITE(numout,'(a,i8,a,i4.4,a,i2.2,a,i2.2,a,i3.3)') '======>> time-step =', kt,   &
-              &   '      New day, DATE Y/M/D = ', nyear, '/', nmonth, '/', nday, '      nday_year = ', nday_year
+            &   '      New day, DATE Y/M/D = ', nyear, '/', nmonth, '/', nday, '      nday_year = ', nday_year
          IF(lwp) WRITE(numout,'(a,i8,a,i7,a,i5)') '         nsec_year = ', nsec_year,   &
-              &   '   nsec_month = ', nsec_month, '   nsec_day = ', nsec_day, '   nsec_monday = ', nsec_monday
+            &   '   nsec_month = ', nsec_month, '   nsec_day = ', nsec_day, '   nsec_monday = ', nsec_monday
       ENDIF
 
       IF( nsec_monday > 7*nsecd )   nsec_monday = ndt05     ! New week
@@ -305,14 +303,14 @@ CONTAINS
       INTEGER         , INTENT(in) ::   kt         ! ocean time-step
       CHARACTER(len=*), INTENT(in) ::   cdrw       ! "READ"/"WRITE" flag
       !
-      REAL(dp) ::   zkt, zndastp, zdayfrac, ksecs, ktime
+      REAL(wp) ::   zkt, zndastp, zdayfrac, ksecs, ktime
       INTEGER  ::   ihour, iminute, isecond
       !!----------------------------------------------------------------------
 
       IF( TRIM(cdrw) == 'READ' ) THEN
-         IF( iom_varid( numror, 'kt', ldstop = .FALSE. ) > 0 ) THEN
+         IF( iom_varid( 'day_rst', numror, 'kt', ldstop = .FALSE. ) > 0 ) THEN
             ! Get Calendar informations
-            CALL iom_get( numror, 'kt', zkt )   ! last time-step of previous run
+            CALL iom_get( 'day_rst', numror, 'kt', zkt )   ! last time-step of previous run
             IF(lwp) THEN
                WRITE(numout,*) ' *** Info read in restart : '
                WRITE(numout,*) '   previous time-step                               : ', NINT( zkt )
@@ -326,44 +324,42 @@ CONTAINS
             ENDIF
             ! Control of date
             IF( nit000 - NINT( zkt ) /= 1 .AND. nrstdt /= 0 )                                         &
-                 &   CALL ctl_stop( ' ===>>>> : problem with nit000 for the restart',                 &
-                 &                  ' verify the restart file or rerun with nrstdt = 0 (namelist)' )
+               &   CALL ctl_stop( ' ===>>>> : problem with nit000 for the restart',                 &
+               &                  ' verify the restart file or rerun with nrstdt = 0 (namelist)' )
             ! define ndastp and adatrj
-            IF ( nrstdt == 2 ) THEN
+            IF( nrstdt == 2 ) THEN
                ! read the parameters corresponding to nit000 - 1 (last time step of previous run)
-               CALL iom_get( numror, 'ndastp', zndastp )
+               CALL iom_get( 'day_rst', numror, 'ndastp', zndastp )
                ndastp = NINT( zndastp )
-               CALL iom_get( numror, 'adatrj', adatrj  )
-	       CALL iom_get( numror, 'ntime' , ktime   )
-               nn_time0 = NINT(ktime)
-               ! calculate start time in hours and minutes
+               CALL iom_get( 'day_rst', numror, 'adatrj', adatrj  )
+               CALL iom_get( 'day_rst', numror, 'ntime' , ktime   )
+        ! calculate start time in hours and minutes
                zdayfrac = adatrj - REAL(INT(adatrj), wp)
-	       ksecs = NINT(zdayfrac * rday)	       ! Nearest second to catch rounding errors in adatrj
+               ksecs = NINT(zdayfrac * rday)           ! Nearest second to catch rounding errors in adatrj
                ihour = ksecs / NINT( rhhmm*rmmss )
-	       iminute = ksecs / NINT(rmmss) - ihour*NINT(rhhmm)
+               iminute = ksecs / NINT(rmmss) - ihour*NINT(rhhmm)
 
-               ! Add to nn_time0
-               nhour   =   nn_time0 / 100
-               nminute = ( nn_time0 - nhour * 100 )
-	       nminute = nminute + iminute
+        ! Add to nn_time0
+               nhour0   =   NINT( ktime ) / 100
+               nminute0 = ( NINT( ktime ) - nhour0 * 100 )
+               nminute0 = nminute0 + iminute
 
-               IF( nminute >= NINT(rhhmm) ) THEN
-	          nminute = nminute - NINT(rhhmm)
-		  nhour = nhour+1
-	       ENDIF
-	       nhour=nhour+ihour
-	       IF( nhour >= NINT(rjjhh) ) THEN
-		  nhour = nhour - NINT(rjjhh)
-	          adatrj = adatrj + 1.
-	       ENDIF
-	       nn_time0 = nhour * 100 + nminute
-               adatrj = REAL(INT(adatrj), wp)                    ! adatrj set to integer as nn_time0 updated
+               IF( nminute0 >= NINT(rhhmm) ) THEN
+                  nminute0 = nminute0 - NINT(rhhmm)
+                  nhour0 = nhour0 + 1
+               ENDIF
+               nhour0 = nhour0 + ihour
+               IF( nhour0 >= NINT(rjjhh) ) THEN
+                  nhour0 = nhour0 - NINT(rjjhh)
+                  adatrj = adatrj + 1.0_wp
+               ENDIF
+               adatrj = REAL( INT( adatrj ), wp )   ! adatrj adjustment after potential update of the initial time of day
             ELSE
                ! parameters corresponding to nit000 - 1 (as we start the step loop with a call to day)
                ndastp = ndate0        ! ndate0 read in the namelist in dom_nam
-               nhour   =   nn_time0 / 100
-               nminute = ( nn_time0 - nhour * 100 )
-               isecond = ( nhour * NINT(rhhmm) + nminute ) * NINT(rmmss)
+               nhour0   =   nn_time0 / 100
+               nminute0 = ( nn_time0 - nhour0 * 100 )
+               isecond = ( nhour0 * NINT( rhhmm ) + nminute0 ) * NINT(rmmss)
                IF( isecond - ndt05 .lt. 0 )   ndastp = ndastp - 1      ! Start hour is specified in the namelist (default 0)
                adatrj = ( REAL( nit000-1, wp ) * rn_Dt ) / rday
                ! note this is wrong if time step has changed during run
@@ -371,9 +367,9 @@ CONTAINS
          ELSE
             ! parameters corresponding to nit000 - 1 (as we start the step loop with a call to day)
             ndastp = ndate0           ! ndate0 read in the namelist in dom_nam
-            nhour   =   nn_time0 / 100
-	    nminute = ( nn_time0 - nhour * 100 )
-            isecond = ( nhour * NINT(rhhmm) + nminute ) * NINT(rmmss)
+            nhour0   =   nn_time0 / 100
+            nminute0 = ( nn_time0 - nhour0 * 100 )
+            isecond = ( nhour0 * NINT( rhhmm ) + nminute0 ) * NINT(rmmss)
             IF( isecond - ndt05 .LT. 0 )   ndastp = ndastp - 1         ! Start hour is specified in the namelist (default 0)
             adatrj = ( REAL( nit000-1, wp ) * rn_Dt ) / rday
          ENDIF
@@ -383,7 +379,7 @@ CONTAINS
             WRITE(numout,*) ' *** Info used values : '
             WRITE(numout,*) '   date ndastp                                      : ', ndastp
             WRITE(numout,*) '   number of elapsed days since the begining of run : ', adatrj
-	    WRITE(numout,*) '   nn_time0                                         : ',nn_time0
+            WRITE(numout,*) '   initial time of day                              : ', nhour0 * 100 + nminute0
             WRITE(numout,*)
          ENDIF
          !
@@ -399,7 +395,7 @@ CONTAINS
          CALL iom_rstput( kt, nitrst, numrow, 'ndastp' , REAL( ndastp, wp)   )   ! date
          CALL iom_rstput( kt, nitrst, numrow, 'adatrj' , adatrj              )   ! number of elapsed days since
          !                                                                                                   ! the begining of the run [s]
-         CALL iom_rstput( kt, nitrst, numrow, 'ntime'  , REAL( nn_time0, wp) ) ! time
+         CALL iom_rstput( kt, nitrst, numrow, 'ntime'  , REAL( nhour0 * 100 + nminute0, wp ) )   ! Initial time of day
       ENDIF
       !
    END SUBROUTINE day_rst

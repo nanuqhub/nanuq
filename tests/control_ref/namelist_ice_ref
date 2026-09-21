@@ -21,9 +21,9 @@
 !------------------------------------------------------------------------------
 &nampar         !   Generic parameters
 !------------------------------------------------------------------------------
-   jpl              =   5             !  number of ice  categories
-   nlay_i           =   2             !  number of ice  layers
-   nlay_s           =   2             !  number of snow layers
+   nn_jpl           =   5             !  number of ice  categories
+   nn_nlay_i        =   2             !  number of ice  layers
+   nn_nlay_s        =   2             !  number of snow layers
    ln_virtual_itd   =   .false.       !  virtual ITD mono-category parameterization (jpl=1 only)
                                       !     i.e. enhanced thermal conductivity & virtual thin ice melting
    ln_icedyn        = .true.          !  ice dynamics (T) or not (F)
@@ -35,9 +35,11 @@
    cn_icerst_outdir = '.'             !  directory to write output ice restarts
    !
    ! E-grid stuff (relevant when `ln_damage=T`):
-   ln_damage        = .false.         !  existance of the "ice damage" tracer in the code?
+   ln_damage        = .true.          !  existance of the "ice damage" tracer in the code?
    !                                  !   must be used with brittle rheologies
-   !                                  !   => set to .true. if `ln_rhg_BBM==.true.` !!!
+   !                                  !   => set to .true. if `ln_rhg_brittle == .true.` (when using MEB or BBM) !!!
+   ln_age           = .false.         !  advect the tracer "age of the ice"
+   ln_rdgtrc        = .false.         !  consider & advect the "ridged-ice" volume fraction tracer
 /
 !------------------------------------------------------------------------------
 &namitd         !   Ice discretization
@@ -71,6 +73,13 @@
    !                                          => uses ocean velocities provided in netCDF SSX forcing as sea-ice velocities
       ln_pureADV2D  = .false.         !       `T` => only pure advection, do not apply any king of corrections on advected fields
    !
+   ln_bri_rk3       = .true.          ! Use an implicit RK3 implementation for the time integration of internal stress tensor & the momentum equations
+   !                                  !       => when `false`, use the traditional 1st-order implicit Euler scheme
+   !                                  !          (implicit in terms of ice velocity for the bottom ice-water drag though)
+      nn_rk3_iter_v = 2               !    number of iterations for convergence of ice-oce stress term `rho_o*CD_o*||U_oce-U_ice||/mass`
+   !                                  !         => 1 itteration is okay for most applications        => faster
+   !                                  !         => 4 iterations and it is generally fully converged  => costly
+   !
    rn_ishlat        =   2.            !  lbc : free slip (0) ; partial slip (0-2) ; no slip (2) ; strong slip (>2)
    ln_landfast_L16  = .false.         !  landfast: parameterization from Lemieux 2016
       rn_lf_depfra  =   0.125         !        fraction of ocean depth that ice must reach to initiate landfast
@@ -83,19 +92,19 @@
    !___________!________________!___________________!___________!_____________!________!___________!__________!__________!_______________!
    !           !  file name     ! frequency (hours) ! variable  ! time interp.!  clim  ! 'yearly'/ ! weights  ! rotation ! land/sea mask !
    !           !                !  (if <0  months)  !   name    !   (logical) !  (T/F) ! 'monthly' ! filename ! pairing  !    filename   !
-   sn_icbmsk       = 'NOT USED' ,       -12.        , 'icb_mask',   .false.   , .true. , 'yearly'  , ''       , ''       , ''
+   sn_icbmsk       = 'NOT_USED' ,       -12.        , 'icb_mask',   .false.   , .true. , 'yearly'  , ''       , ''       , ''
 /
 !------------------------------------------------------------------------------
 &namdyn_rdgrft  !   Ice ridging/rafting
 !------------------------------------------------------------------------------
    rn_delta_ecc     =   2.0           !  eccentricity of the elliptical yield curve to use when computing `delta`
    !                                  !  via the use of the `strain_rate()` function defined inside `icedyn_rhg_util.F90`
-   !                                  !  ==> so will only be used when using BBM rheology
+   !                                  !  ==> so will only be used when using a brittle rheology (BBM or MEB)
    !                                  !  ==> if *EVP rheology is used, is is `rn_ecc` defined in namelist block `&namdyn_rhg`
    !                                  !      that will actually be used
    !                                  !  => overwritten with `rn_ecc` (&namdyn_rhg) when VP rheologies are used
    !                                  !  `rn_delta_ecc = 1` implies that `delta` = `total deformation`
-          ! -- ice_rdgrft_strength -- !
+   ! -- ice_rdgrft_strength -- !
    ln_str_H79       = .true.          !  ice strength param.: Hibler_79   => P = pstar*<h>*exp(-c_rhg*A)
       rn_pstar      =   2.0e+04       !     ice strength thickness parameter [N/m2]
       rn_crhg       =  20.0           !     ice strength conc. parameter (-)
@@ -128,9 +137,12 @@
 !------------------------------------------------------------------------------
 &namdyn_rhg     !   Ice rheology
 !------------------------------------------------------------------------------
-   ln_idealized  = .false.            ! Idealized test-case: `true` => Coriolis and SSH tilt terms disregarded in the momentum eq.
+   ln_idealized     = .false.         ! Idealized test-case: `true` => Coriolis and SSH tilt terms disregarded in the momentum eq.
    !
-   ln_rhg_EVP       = .true.          !  EVP rheology
+   ln_rhg_DUMMY     = .false.         !  DUMMY rheology => No rheology! Sea-ice velocity is set to that of the surface of the ocean
+   !                                  !      => for debugging purposes...
+   !
+   ln_rhg_EVP       = .false.         !  EVP rheology
       rn_creepl     =   2.0e-9        !     creep limit [1/s]
       rn_ecc        =   2.0           !     eccentricity of the elliptical yield curve
       nn_nevp       = 100             !     number of EVP subcycles
@@ -142,17 +154,23 @@
                                       !     = 2  check at both main and rheology time steps (additional output: ice_cvg.nc)
                                       !          this option 2 asks a lot of communications between cpu
    !                                  !
-   ln_rhg_BBM       = .false.         !  BBM rheology
-      rn_Nref       = 1.E10           !     upper limit for compressive stress at the reference scale [Pa]
+   ln_rhg_brittle   = .true.          !  BRITTLE rheology !
+      !
+      rn_cfl_coeff  = 1.0             !  factor used for the CFL test (w.r.t. elastic shear wave propagation speed) to define the small rheology time-step
+      !                               !      => small `sub time step`: `Δt_s = rn_cfl_coeff * 0.5 * ( Δx / C_e )`
+      !                               !      => the smaller the smaller the small time step, i.e. the larger `nbrttl`
+      !
+      ln_rhg_MEB    = .false.         !  MEB rheology (Dansereau et al., 2016)
+      ln_rhg_BBM    = .true.          !  BBM rheology (Òlason et al., 2022)
+      !
+      rn_N_ref      = -1.E10          !     upper limit for compressive stress at the reference scale [Pa]
       rn_E0         = 5.9605E8        !     elasticity of undamaged ice [Pa]
       rn_eta0       = 5.9605E15       !     viscosity of undamaged ice [Pa.s] (neXtSIM => rn_lamb0 = 1.E7 s)
       !
-      rn_P0         = 1.E4            !     scaling parameter for the ridging threshold (in "P_max")
+      rn_P0         = 1.E4            ! (BBM-only) scaling parameter for the ridging threshold (in "P_max") [Pa]
       !
       rn_kth        = 25.92E6         !     constant for healing of damage [K.s] (Olason et al.,2022 => 15 days for 20 K)
       !                               !     => 15 * 3600s * 24 * 20K
-      !
-      rn_bbm_flt    = 1.              !     filtering window (over rn_bbm_flt*dt) for ice velocities. Range=[0. 1.]
       !
       nn_d_adv      = 1               !     advection of damage @T & @F at big time step
       !                               !        = 0 no advection at all!
@@ -160,28 +178,27 @@
       ln_adv_d_pra = .true.           !      use Prather advection scheme to advect damage (and stress components)
       ln_adv_d_wnx = .false.          !      use  WENO order X advection scheme to advect damage (and stress components)
       !                               !
-      !
-      ln_x_MC_test  = .false.         ! Perform only 1 Mohr-Coulomb test, at mid-point between T & F points (implicit smoothing)
+      ln_MCx_test   = .false.         ! Perform only 1 Mohr-Coulomb test, at mid-point between T & F points (implicit smoothing)
       rn_crndg      = 1.0             ! Cross-Nudging coefficient [-]
       !                               !
       rn_dmg_max     = 0.999999       !     upper-bound value to cap the damage to ! (~ 1 - eps )
       rn_C0          = -20.           ! compaction parameter "C" (Hibler's exponential)                              =  -20.
-      nn_alrlx       =   5            ! `alpha` inherent to viscosity, Eq.10 of [Olason al.2022], used by Dansereau  =   5.
-      nn_btrlx       =   5            ! `beta`: sort of an `alpha` to go in the exp[] of `lambda`, used by Olason Boutin =   5.
       !
       ! Ice cohesion:
-      rn_c_ref       = 2.E6           ! cohesion value at the reference scale                      = 2.E6
-      rn_l_ref       = 0.1            !     scaling parameter for cohesion (`l_ref` in Olason et al.,2022)
+      rn_pow_scl_res = 0.2   !Anton   ! "power" at which the cohesion scales w.r.t local grid resolution / reference scale
+      !                               !        Òlason et. al. 2022 => 0.5 (root square)), recent studies suggest much weaker, around `0.2` !
+      rn_c_ref       = 41000.!Anton   ! cohesion value at the reference "lab" scale [Pa]
+      rn_l_ref       = 0.1   !Anton   !     reference "lab" scale (`l_ref` in Olason et al.,2022) [m]
 /
 !------------------------------------------------------------------------------
 &namdyn_adv     !   Ice advection
 !------------------------------------------------------------------------------
-   ln_adv_Pra       = .false.         !  Advection scheme (Prather)
+   ln_adv_Pra       = .true.          !  Advection scheme (Prather)
    ln_adv_UMx       = .false.         !  Advection scheme (Ultimate-Macho)
       nn_UMx        =   5             !     order of the scheme for UMx (1-5 ; 20=centered 2nd order)
    ln_adv_WNx       = .false.         !  Advection scheme (WENO)
-      nn_WNx        =   5             !     order of the scheme for WENO (5 or 7)
-      cn_weno_wght  = 'WENO5_weights' !     file in which WENO weights are read
+      nn_WNx        =   7             !     order of the scheme for WENO (5 or 7)
+      cn_weno_wght  = 'WENO7_weights' !     file in which WENO weights are read
 /
 !------------------------------------------------------------------------------
 &namsbc         !   Ice surface boundary conditions
@@ -197,10 +214,10 @@
 !------------------------------------------------------------------------------
 &namthd         !   Ice thermodynamics
 !------------------------------------------------------------------------------
-   ln_icedH         = .true.          !  activate ice thickness change from growing/melting (T) or not (F)
-   ln_icedA         = .true.          !  activate lateral melting param. (T) or not (F)
-   ln_icedO         = .true.          !  activate ice growth in open-water (T) or not (F)
-   ln_leadhfx       = .false.         !  heat in the leads is used to melt sea-ice before warming the ocean
+   ln_icedH         = .true         !  activate ice thickness change from growing/melting (T) or not (F)
+   ln_icedA         = .true         !  activate lateral melting param. (T) or not (F)
+   ln_icedO         = .true.        !  activate ice growth in open-water (T) or not (F)
+   ln_leadhfx       = .true         !  heat in the leads is used to melt sea-ice before warming the ocean
 /
 !------------------------------------------------------------------------------
 &namthd_zdf     !   Ice heat diffusion
@@ -239,24 +256,10 @@
 !------------------------------------------------------------------------------
 &namthd_sal     !   Ice salinity
 !------------------------------------------------------------------------------
-   nn_icesal        =   4             !  ice salinity option
-                                      !     1: constant ice salinity (S=rn_icesal)
-                                      !     2: varying salinity parameterization S(z,t)
-                                      !     3: prescribed salinity profile S(z) (Schwarzacher 1959)
-                                      !     4: Gravity Drainage and Flushing
    ln_flushing      = .true.          !  activate ice salt flushing
    ln_drainage      = .true.          !  activate ice salt gravity drainage
    rn_simin         =   0.1           !  minimum tolerated ice salinity (g/kg)
-   rn_sinew         =   0.75          !  fraction of sss that is entrapped in new ice 
-                                      !      (must be set to 0.25 if nn_icesal=2)
-                  ! -- nn_icesal=1 -- !
-   rn_icesal        =   4.            !  ice salinity (g/kg)
-                  ! -- nn_icesal=2 -- !
-   rn_sal_gd        =   5.            !  restoring ice salinity, gravity drainage (g/kg)
-   rn_time_gd       =   1.73e+6       !  restoring time scale,   gravity drainage  (s)
-   rn_sal_fl        =   2.            !  restoring ice salinity, flushing (g/kg)
-   rn_time_fl       =   8.64e+5       !  restoring time scale,   flushing (s)
-                  ! -- nn_icesal=4 -- !
+   rn_sinew         =   0.75          !  fraction of sss that is entrapped in new ice
    rn_sal_himin     =   0.1           !   min ice thickness for gravity drainage and flushing calculation
    nn_liquidus      =   2             !   formulation of liquidus (also used for outputs)
                                       !     1 = linear liquidus
@@ -325,6 +328,7 @@
    rn_hld_ini_s     =   0.0           !        "            "             South
    rn_dmg_ini_n     =   0.0           !  initial ice damage          (-), North  (if `ln_rhg_BBM`!)
    rn_dmg_ini_s     =   0.0           !        "            "             South  (if `ln_rhg_BBM`!)
+   !
    ! -- for nn_iceini_file = 1
    sn_hti = 'Ice_initialization'    , -12. ,'hti'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_hts = 'Ice_initialization'    , -12. ,'hts'   ,  .false.  , .true., 'yearly'  , '' , '', ''
@@ -332,12 +336,12 @@
    sn_smi = 'Ice_initialization'    , -12. ,'smi'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tmi = 'Ice_initialization'    , -12. ,'tmi'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    sn_tsu = 'Ice_initialization'    , -12. ,'tsu'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_tms = 'NOT USED'              , -12. ,'tms'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_tms = 'NOT_USED'              , -12. ,'tms'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    !      melt ponds (be careful, sn_apd is the pond concentration (not fraction), so it differs from rn_apd)
-   sn_apd = 'NOT USED'              , -12. ,'apd'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_hpd = 'NOT USED'              , -12. ,'hpd'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_hld = 'NOT USED'              , -12. ,'hld'   ,  .false.  , .true., 'yearly'  , '' , '', ''
-   sn_dmg = 'NOT USED'              , -12. ,'dmg'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_apd = 'NOT_USED'              , -12. ,'apd'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_hpd = 'NOT_USED'              , -12. ,'hpd'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_hld = 'NOT_USED'              , -12. ,'hld'   ,  .false.  , .true., 'yearly'  , '' , '', ''
+   sn_dmg = 'NOT_USED'              , -12. ,'dmg'   ,  .false.  , .true., 'yearly'  , '' , '', ''
    cn_dir='./'
 /
 !------------------------------------------------------------------------------

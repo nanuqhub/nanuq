@@ -1,138 +1,229 @@
-#if defined GLOBSUM_CODE
-!                          ! FUNCTION FUNCTION_GLOBSUM !
-#   if defined DIM_1d
-#      define XD                1d
-#      define ARRAY_TYPE(i,j,k)    REAL(dp)                 , INTENT(in   ) ::   ARRAY_IN(i,j,k)
-#      define ARRAY_IN(i,j,k)   ptab(i)
-#      define ARRAY2_IN(i,j,k)  ptab2(i)
-#      define J_SIZE(ptab)      1
-#      define K_SIZE(ptab)      1
-#      define MASK_ARRAY(i,j)   1.
+#if   XDIN == 2
+#   define K_SIZE(ptab)        1
+#   define L_SIZE(ptab)        1
+#   define DIMIN(i,j,k,l) i,j
+#elif XDIN == 3
+#   define K_SIZE(ptab)        SIZE(ptab,3)
+#   define L_SIZE(ptab)        1
+#   define DIMIN(i,j,k,l) i,j,k
+#   if   XDOPER == 2
+#      define DIMOUT(k,l) k
 #   endif
-#   if defined DIM_2d
-#      define XD                2d
-#      define ARRAY_TYPE(i,j,k)    REAL(dp)                 , INTENT(in   ) ::   ARRAY_IN(i,j,k)
-#      define ARRAY_IN(i,j,k)   ptab(i,j)
-#      define ARRAY2_IN(i,j,k)  ptab2(i,j)
-#      define J_SIZE(ptab)      SIZE(ptab,2)
-#      define K_SIZE(ptab)      1
-#      define MASK_ARRAY(i,j)   tmask_i(i,j)
+#elif XDIN == 4
+#   define K_SIZE(ptab)        SIZE(ptab,3)
+#   define L_SIZE(ptab)        SIZE(ptab,4)
+#   define DIMIN(i,j,k,l) i,j,k,l
+#   if   XDOPER == 2
+#      define DIMOUT(k,l) k,l
+#   elif XDOPER == 3
+#      define DIMOUT(k,l) l
 #   endif
-#   if defined DIM_3d
-#      define XD                3d
-#      define ARRAY_TYPE(i,j,k)    REAL(dp)                 , INTENT(in   ) ::   ARRAY_IN(i,j,k)
-#      define ARRAY_IN(i,j,k)   ptab(i,j,k)
-#      define ARRAY2_IN(i,j,k)  ptab2(i,j,k)
-#      define J_SIZE(ptab)      SIZE(ptab,2)
-#      define K_SIZE(ptab)      SIZE(ptab,3)
-#      define MASK_ARRAY(i,j)   tmask_i(i,j)
+#endif
+   /**/
+#if XDIN == 2 || ( XDIN == 3 && XDOPER == 3 )
+#   define DEFDIMOUT
+#   define ADDDIMOUT(k,l)
+#else
+#   define DEFDIMOUT        , DIMENSION(DIMOUT(SIZE(ptab,3),SIZE(ptab,4)))
+#   define ADDDIMOUT(k,l)   (DIMOUT(k,l))
+#endif
+   /**/
+#if   defined INTEGER_TYPE
+#   define TYPEIN    INTEGER
+#   define KIND      i4
+#elif defined REALSP_TYPE
+#   define KIND      sp
+#   define TYPEIN    REAL(sp)
+#elif defined REALDP_TYPE
+#   define KIND      dp
+#   define TYPEIN    REAL(dp)
+#endif
+   /**/
+#if defined OPERSUM
+#   define OPER   sum
+#elif defined OPERMIN
+#   define OPER   min
+#elif defined OPERMAX
+#   define OPER   max
+#endif
+   /**/
+   /**/
+#if defined LOCAL_ONLY || defined LOCAL_GLOBAL
+   /**/
+   /**/
+#   if defined OPERSUM && defined REALSP_TYPE
+#      define TYPEOUT   COMPLEX(sp)
+#   elif defined OPERSUM && defined REALDP_TYPE
+#      define TYPEOUT   COMPLEX(dp)
+#   else
+#      define TYPEOUT   TYPEIN
 #   endif
+   /**/
+#   if   defined OPERSUM
+#      if   defined INTEGER_TYPE
+#         define DEFAULT   0
+#      elif defined REALSP_TYPE
+#         define DEFAULT   CMPLX(0._sp, kind = sp)
+#      elif defined REALDP_TYPE
+#         define DEFAULT   CMPLX(0._dp, kind = dp)
+#      endif
+#   elif defined OPERMIN
+#      if   defined INTEGER_TYPE
+#         define DEFAULT   HUGE(0)
+#      elif defined REALSP_TYPE
+#         define DEFAULT   HUGE(0._sp)
+#      elif defined REALDP_TYPE
+#         define DEFAULT   HUGE(0._dp)
+#      endif
+#   elif defined OPERMAX
+#      if   defined INTEGER_TYPE
+#         define DEFAULT   -HUGE(0)
+#      elif defined REALSP_TYPE
+#         define DEFAULT   -HUGE(0._sp)
+#      elif defined REALDP_TYPE
+#         define DEFAULT   -HUGE(0._dp)
+#      endif
+#   endif
+   /**/
+#   if defined OPERSUM
+#      define ADDVAL
+#   else
+#      define ADDVAL   val
+#   endif
+   /**/
+#   if   XDOPER == 2
+#      define DIMOPER(i,j,k) i,j
+#      define MASKNAME(i,j,k) xmskt(i,j)
+#   elif XDOPER == 3
+#      define DIMOPER(i,j,k) i,j,k
+#      define MASKNAME(i,j,k) tmask(i,j,k)
+#   endif
+   /**/
 
-   FUNCTION glob_sum_/**/XD/**/( cdname, ptab )
+   !#      define MASKNAME(i,j,k) smask0_i(i,j)   
+   !#      define MASKNAME(i,j,k) ( tmask(i,j,k) * smask0_i(i,j) )
+   
+   FUNCTION local_/**/XDOPER/**/D/**/OPER/**/_/**/XDIN/**/Din/**/_/**/KIND( ptab, pcumul ) RESULT( pout )
       !!----------------------------------------------------------------------
-      CHARACTER(len=*),  INTENT(in   ) ::   cdname  ! name of the calling subroutine
-      ARRAY_TYPE(:,:,:)                             ! array on which operation is applied
-      REAL(wp)   ::  glob_sum_/**/XD
+      TYPEIN/**/, DIMENSION(DIMIN(:,:,:,:)), INTENT(in) :: ptab     ! array on which operation is applied
+      TYPEOUT/**/DEFDIMOUT, OPTIONAL, INTENT(in) ::   pcumul   ! existing sum to add to
       !
-      !!-----------------------------------------------------------------------
-      !
-      COMPLEX(dp)::   ctmp
-      REAL(wp)   ::   ztmp
-      INTEGER    ::   ji, jj, jk           ! dummy loop indices
-      INTEGER    ::   ipi,ipj, ipk         ! dimensions
-      INTEGER    ::   iis, iie, ijs, ije   ! loop start and end
+      TYPEOUT/**/DEFDIMOUT ::  pout
+      INTEGER    ::    ji,  jj,  jk,  jl        ! dummy loop indices
+      INTEGER    ::   ipi, ipj, ipk, ipl        ! dimensions
+      INTEGER    ::   iihls, ijhls              ! local halo size
+      INTEGER    ::   iisht, ijsht              ! array shift indices
+#   if defined OPERSUM && ( defined REALSP_TYPE || defined REALDP_TYPE )
+      TYPEIN :: zztmp
+#   else
+      INTEGER    ::   iis, iie, ijs, ije
+      LOGICAL, DIMENSION(DIMOPER(ntsi:ntei,ntsj:ntej,SIZE(ptab,3)-1)) :: llmsk
+#   endif
       !!-----------------------------------------------------------------------
       !
       ipi = SIZE(ptab,1)   ! 1st dimension
-      ipj = J_SIZE(ptab)   ! 2nd dimension
+      ipj = SIZE(ptab,2)   ! 2nd dimension
+#   if XDOPER == 3
+      ipk = K_SIZE(ptab) - 1   ! 3rd dimension
+#   else
       ipk = K_SIZE(ptab)   ! 3rd dimension
+#   endif
+      ipl = L_SIZE(ptab)   ! 4th dimension
       !
-      IF( ipi == jpi .AND. ipj == jpj ) THEN   ! do 2D loop only over the inner domain (-> avoid to use undefined values)
-         iis = Nis0   ;   iie = Nie0
-         ijs = Njs0   ;   ije = Nje0
-      ELSE
-         iis = 1   ;   iie = jpi
-         ijs = 1   ;   ije = jpj
-      ENDIF
+      iihls = ( ipi - (ntei - ntsi + 1) ) / 2   ! local halo size
+      ijhls = ( ipj - (ntej - ntsj + 1) ) / 2   ! should be identical to as iihls
+      iisht = 1 + iihls - ntsi   ! shift to switch from an "ntsi -> ntei" loop to an "1 + iihls -> 1 + iihls + ntei - ntsi" loop
+      ijsht = 1 + ijhls - ntsj   ! shift to switch from an "ntsj -> ntej" loop to an "1 + ijhls -> 1 + ijhls + ntei - ntsi" loop
+#   if ! defined OPERSUM || defined INTEGER_TYPE
+      iis = ntsi + iisht   ;   iie = ntei + iisht
+      ijs = ntsj + ijsht   ;   ije = ntej + ijsht
+#   endif
       !
-      ctmp = CMPLX( 0._dp, 0._dp, dp )   ! warning ctmp is cumulated
+      pout = DEFAULT
+      IF( PRESENT( pcumul ) )   pout = pcumul
+      !
+#   if ! defined OPERSUM || defined INTEGER_TYPE
       DO jk = 1, ipk
-        DO jj = ijs, ije
-          DO ji = iis, iie
-             ztmp =  ARRAY_IN(ji,jj,jk) * MASK_ARRAY(ji,jj)
-             CALL DDPDD( CMPLX( ztmp, 0._wp, dp ), ctmp )
-          END DO
-        END DO
+         llmsk(DIMOPER(ntsi:ntei,ntsj:ntej,jk)) = INT( MASKNAME(ntsi:ntei,ntsj:ntej,jk) ) == 1
       END DO
-      CALL mpp_sum( cdname, ctmp )   ! sum over the global domain
-      glob_sum_/**/XD = REAL(ctmp,wp)
-
-   END FUNCTION glob_sum_/**/XD
-
-#undef XD
-#undef ARRAY_TYPE
-#undef ARRAY2_TYPE
-#undef ARRAY_IN
-#undef ARRAY2_IN
-#undef J_SIZE
-#undef K_SIZE
-#undef MASK_ARRAY
-!
-# endif
-#if defined GLOBMINMAX_CODE
-!                          ! FUNCTION FUNCTION_GLOBMINMAX !
-#   if defined DIM_2d
-#      define XD                2d
-#      define ARRAY_TYPE(i,j,k)    REAL(dp)                 , INTENT(in   ) ::   ARRAY_IN(i,j,k)
-#      define ARRAY_IN(i,j,k)   ptab(i,j)
-#      define ARRAY2_IN(i,j,k)  ptab2(i,j)
-#      define K_SIZE(ptab)      1
+      !
 #   endif
-#   if defined DIM_3d
-#      define XD                3d
-#      define ARRAY_TYPE(i,j,k)    REAL(dp)                 , INTENT(in   ) ::   ARRAY_IN(i,j,k)
-#      define ARRAY_IN(i,j,k)   ptab(i,j,k)
-#      define ARRAY2_IN(i,j,k)  ptab2(i,j,k)
-#      define K_SIZE(ptab)      SIZE(ptab,3)
+      DO jl = 1, ipl
+#   if defined OPERSUM && defined REALSP_TYPE
+         DO jk = 1, ipk
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  zztmp = ptab(DIMIN(ji+iisht,jj+ijsht,jk,jl)) * MASKNAME(ji,jj,jk)
+                  CALL DDPDD( CMPLX( zztmp, kind = sp ), pout/**/ADDDIMOUT(jk,jl) )
+               END DO
+            END DO
+         END DO
+#   elif defined OPERSUM && defined REALDP_TYPE
+         DO jk = 1, ipk
+            DO jj=Njs0, Nje0
+               DO ji=Nis0, Nie0
+                  zztmp = ptab(DIMIN(ji+iisht,jj+ijsht,jk,jl)) * MASKNAME(ji,jj,jk)
+                  CALL DDPDD( CMPLX( zztmp, kind = dp ), pout/**/ADDDIMOUT(jk,jl) )
+               END DO
+            END DO
+         END DO
+#   else
+#      if   XDOPER == 2
+         DO jk = 1, ipk
+            pout/**/ADDDIMOUT(jk,jl) = OPER( pout/**/ADDDIMOUT(jk,jl), OPER/**/ADDVAL( ptab(DIMIN(iis:iie,ijs:ije,jk,jl)), mask = llmsk ) )
+         END DO
+#      elif XDOPER == 3
+         pout/**/ADDDIMOUT(jk,jl) = OPER( pout/**/ADDDIMOUT(jk,jl), OPER/**/ADDVAL( ptab(DIMIN(iis:iie,ijs:ije,1:ipk,jl)), mask = llmsk ) )
+#      endif
 #   endif
-#   if defined OPERATION_GLOBMIN
-#      define OPER min
-#   endif
-#   if defined OPERATION_GLOBMAX
-#      define OPER max
-#   endif
-
-   FUNCTION glob_/**/OPER/**/_/**/XD/**/( cdname, ptab )
+      END DO
+      !
+   END FUNCTION local_/**/XDOPER/**/D/**/OPER/**/_/**/XDIN/**/Din/**/_/**/KIND
+   /**/
+#   undef DEFAULT
+#   undef ADDVAL
+#   undef TYPEOUT
+#   undef DIMOPER
+#   undef MASKNAME
+   /**/
+#endif
+#if defined GLOBAL_ONLY || defined LOCAL_GLOBAL
+   /**/
+   FUNCTION glob_/**/XDOPER/**/D/**/OPER/**/_/**/XDIN/**/Din/**/_/**/KIND( cdname, ptab, cdelay ) RESULT( pout )
       !!----------------------------------------------------------------------
-      CHARACTER(len=*),  INTENT(in   ) ::   cdname  ! name of the calling subroutine
-      ARRAY_TYPE(:,:,:)                             ! array on which operation is applied
-      REAL(wp)   ::  glob_/**/OPER/**/_/**/XD
+      CHARACTER(len=*), INTENT(in) ::   cdname  ! name of the calling subroutine
+      TYPEIN/**/, DIMENSION(DIMIN(:,:,:,:)), INTENT(in) :: ptab     ! array on which operation is applied
+      CHARACTER(len=*),OPTIONAL, INTENT(in) ::   cdelay  ! tag of the delayed comm
       !
+      TYPEIN/**/DEFDIMOUT ::  pout
+#   if defined OPERSUM && defined REALSP_TYPE
+      COMPLEX(sp)/**/DEFDIMOUT ::   ctmp
       !!-----------------------------------------------------------------------
-      !
-      REAL(wp)   ::   ztmp
-      INTEGER    ::   jk       ! dummy loop indices
-      INTEGER    ::   ipk      ! dimensions
+      ctmp = local_/**/XDOPER/**/D/**/OPER( ptab )
+      CALL mpp_/**/OPER( cdname, ctmp, cdelay = cdelay )
+      pout = REAL( ctmp, KIND )
+#   elif defined OPERSUM && defined REALDP_TYPE
+      COMPLEX(dp)/**/DEFDIMOUT ::   ctmp
       !!-----------------------------------------------------------------------
+      ctmp = local_/**/XDOPER/**/D/**/OPER( ptab )
+      CALL mpp_/**/OPER( cdname, ctmp, cdelay = cdelay )
+      pout = REAL( ctmp, KIND )
+#   else
+      !!-----------------------------------------------------------------------
+      pout = local_/**/XDOPER/**/D/**/OPER( ptab )
+      CALL mpp_/**/OPER( cdname, pout, cdelay = cdelay )
+#   endif
       !
-      ipk = K_SIZE(ptab)   ! 3rd dimension
-      !
-      ztmp = OPER/**/val( ARRAY_IN(:,:,1)*tmask_i(:,:) )
-      DO jk = 2, ipk
-         ztmp = OPER/**/(ztmp, OPER/**/val( ARRAY_IN(:,:,jk)*tmask_i(:,:) ))
-      ENDDO
-
-      CALL mpp_/**/OPER/**/( cdname, ztmp)
-
-      glob_/**/OPER/**/_/**/XD  = ztmp
-
-   END FUNCTION glob_/**/OPER/**/_/**/XD
-
-#undef XD
-#undef ARRAY_TYPE
-#undef ARRAY2_TYPE
-#undef ARRAY_IN
-#undef ARRAY2_IN
+   END FUNCTION glob_/**/XDOPER/**/D/**/OPER/**/_/**/XDIN/**/Din/**/_/**/KIND
+#endif
+   /**/
+   /**/
 #undef K_SIZE
+#undef L_SIZE
+#undef DIMIN
+#undef DIMOUT
+#undef DEFDIMOUT
+#undef ADDDIMOUT
+#undef TYPEIN
+#undef KIND
 #undef OPER
-# endif

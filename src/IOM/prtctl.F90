@@ -26,7 +26,7 @@ MODULE prtctl
    PUBLIC prt_ctl_init    ! called by nanuqgcm.F90 and prt_ctl_trc_init
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: prtctl.F90 15148 2021-07-27 09:40:32Z gsamson $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -53,26 +53,26 @@ CONTAINS
             &            tab2d_1 =    REAL(tab2d_1, dp),                        tab2d_2 =    REAL(tab2d_2, dp),           &
             &           mask1 = mask1, mask2 = mask2, &
             &           clinfo = clinfo, clinfo1 = clinfo1, clinfo2 = clinfo2, clinfo3 = clinfo3 )
-      ELSEIF( PRESENT(tab3d_2) ) THEN     
+      ELSEIF( PRESENT(tab3d_2) ) THEN
          CALL prt_ctl_t(ktab2d_1 = 0, ktab3d_1 = 0, ktab4d_1 = 0, ktab2d_2 = 0, ktab3d_2 = 0,       &
             &                          tab3d_1 = REAL(tab3d_1, dp),                           tab3d_2 =    REAL(tab3d_2, dp), &
             &           mask1 = mask1, mask2 = mask2, &
             &           clinfo = clinfo, clinfo1 = clinfo1, clinfo2 = clinfo2, clinfo3 = clinfo3, kdim = kdim )
-      ELSEIF( PRESENT(tab2d_1) ) THEN     
+      ELSEIF( PRESENT(tab2d_1) ) THEN
          CALL prt_ctl_t(ktab2d_1 = 0, ktab3d_1 = 0, ktab4d_1 = 0, ktab2d_2 = 0, ktab3d_2 = 0,   &
             &           tab2d_1 = REAL(tab2d_1,dp),  &
             &           mask1 = mask1,  &
             &           clinfo = clinfo, clinfo1 = clinfo1, clinfo3 = clinfo3 )
-      ELSEIF( PRESENT(tab3d_1) ) THEN     
+      ELSEIF( PRESENT(tab3d_1) ) THEN
          CALL prt_ctl_t(ktab2d_1 = 0, ktab3d_1 = 0, ktab4d_1 = 0, ktab2d_2 = 0, ktab3d_2 = 0,   &
             &                          tab3d_1 =    REAL(tab3d_1, dp),  &
             &           mask1 = mask1,  &
             &           clinfo = clinfo, clinfo1 = clinfo1, clinfo3 = clinfo3, kdim = kdim )
-      ELSEIF( PRESENT(tab4d_1) ) THEN     
+      ELSEIF( PRESENT(tab4d_1) ) THEN
          CALL prt_ctl_t(ktab2d_1 = 0, ktab3d_1 = 0, ktab4d_1 = 0, ktab2d_2 = 0, ktab3d_2 = 0,   &
             &                                        tab4d_1 =    REAL(tab4d_1, dp),  &
             &           mask1 = mask1,  &
-           &           clinfo = clinfo, clinfo1 = clinfo1, clinfo3 = clinfo3, kdim = kdim )
+            &           clinfo = clinfo, clinfo1 = clinfo1, clinfo3 = clinfo3, kdim = kdim )
       ENDIF
 
    END SUBROUTINE prt_ctl
@@ -152,7 +152,7 @@ CONTAINS
 
       IF( wp == sp )   clfmt = 'D23.16'   ! 16 significant numbers
       IF( wp == dp )   clfmt = 'D41.34'   ! 34 significant numbers
-      
+
       ! Loop over each sub-domain, i.e. the total number of processors ijsplt
       DO jl = 1, SIZE(nall_ictls)
 
@@ -456,24 +456,26 @@ CONTAINS
          ! clfmt5: '   njmpp = XXX'                                          -> '(Nx, a9, iM)'
          ! clfmt6: '           nimpp = XXX'                                  -> '(Nx, a9, iM)'
          !
+
+
          idg = MAXVAL( (/ nall_ictls(jl), nall_ictle(jl), nall_jctls(jl), nall_jctle(jl) /) )   ! temporary use of idg
          idg = INT(LOG10(REAL(idg,wp))) + 1                                                     ! how many digits do we use?
-         idg2 = MAXVAL( (/ mig0(nall_ictls(jl)), mig0(nall_ictle(jl)), mjg0(nall_jctls(jl)), mjg0(nall_jctle(jl)) /) )
+         idg2 = MAXVAL( (/ mig(nall_ictls(jl),0), mig(nall_ictle(jl),0), mjg(nall_jctls(jl),0), mjg(nall_jctle(jl),0) /) )
          idg2 = INT(LOG10(REAL(idg2,wp))) + 1                                                   ! how many digits do we use?
          WRITE(clfmt2, "('(18x, 13a1, a9, i', i1, ', a2, i',i1,', a2, 13a1)')") idg, idg2
          WRITE(clfmt3, "('(18x, a1, ', i2,'x, a1)')") 13+9+idg+2+idg2+2+13 - 2
          WRITE(clfmt4, "('(', i2,'x, a9, i', i1,', a2, i', i1,', a2, ', i2,'x, a9, i', i1,', a2, i', i1,', a2)')") &
             &          18-7, idg, idg2, 13+9+idg+2+idg2+2+13 - (2+idg+2+idg2+2+8), idg, idg2
-         WRITE(inum,clfmt2) ('-', ji=1,13), ' jctle = ', nall_jctle(jl), ' (', mjg0(nall_jctle(jl)), ') ', ('-', ji=1,13)
+         WRITE(inum,clfmt2) ('-', ji=1,13), ' jctle = ', nall_jctle(jl), ' (', mjg(nall_jctle(jl),0), ') ', ('-', ji=1,13)
          WRITE(inum,clfmt3) '|', '|'
          WRITE(inum,clfmt3) '|', '|'
          WRITE(inum,clfmt3) '|', '|'
-         WRITE(inum,clfmt4)                 ' ictls = ', nall_ictls(jl), ' (', mig0(nall_ictls(jl)), ') ',   &
-            &                               ' ictle = ', nall_ictle(jl), ' (', mig0(nall_ictle(jl)), ') '
+         WRITE(inum,clfmt4)                 ' ictls = ', nall_ictls(jl), ' (', mig(nall_ictls(jl),0), ') ',   &
+            &                               ' ictle = ', nall_ictle(jl), ' (', mig(nall_ictle(jl),0), ') '
          WRITE(inum,clfmt3) '|', '|'
          WRITE(inum,clfmt3) '|', '|'
          WRITE(inum,clfmt3) '|', '|'
-         WRITE(inum,clfmt2) ('-', ji=1,13), ' jctls = ', nall_jctls(jl), ' (', mjg0(nall_jctls(jl)), ') ', ('-', ji=1,13)
+         WRITE(inum,clfmt2) ('-', ji=1,13), ' jctls = ', nall_jctls(jl), ' (', mjg(nall_jctls(jl),0), ') ', ('-', ji=1,13)
          WRITE(inum,*)
          WRITE(inum,*)
          !

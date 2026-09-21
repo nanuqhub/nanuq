@@ -15,6 +15,7 @@ MODULE icedyn
    USE ice            ! sea-ice: variables
    USE icedyn_rhg     ! sea-ice: rheology
    USE icedyn_adv     ! sea-ice: advection
+   USE ice_rdgtrc     ! sea-ice: ridged-ice update following advection of ice volume
    USE icedyn_rdgrft  ! sea-ice: ridging/rafting
    USE icecor         ! sea-ice: corrections
    USE icevar         ! sea-ice: operations
@@ -51,7 +52,7 @@ MODULE icedyn
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icedyn.F90 14997 2021-06-16 06:43:57Z smasson $
    !! Software governed by the CeCILL licence     (./LICENSE)
    !!----------------------------------------------------------------------
@@ -74,6 +75,7 @@ CONTAINS
       INTEGER  ::   ji, jj, jl        ! dummy loop indices
       LOGICAL  ::   lAp
       !!--------------------------------------------------------------------
+      !$acc data present(h_i,h_s,a_i,v_i,v_s,e_i,e_s,t_su,u_ice,v_ice,uVice,vUice,ato_i)
       !
       ! controls
       IF( ln_timing )   CALL timing_start('ice_dyn')
@@ -86,9 +88,50 @@ CONTAINS
       !
       ! retrieve thickness from volume for landfast param. and UMx advection scheme
 
-      !$acc parallel loop collapse(3)
+
+      !IF( ln_idealized .AND. .NOT. ln_icethd .AND. nn_jpl==1 ) THEN
+      !   !$acc parallel loop collapse(2)
+      !   DO jj=Njs0-nn_hls, Nje0+nn_hls-1
+      !      DO ji=Nis0-nn_hls, Nie0+nn_hls-1
+      !         PRINT *, 'LOLO: big clean! kt=',kt
+      !         IF( a_i(ji,jj,1) < rAmin_vel*5._wp ) THEN
+      !            a_i(ji,jj,1) = 0._wp
+      !            v_i(ji,jj,1) = 0._wp
+      !            v_s(ji,jj,1) = 0._wp
+      !            h_i(ji,jj,1) = 0._wp
+      !            h_s(ji,jj,1) = 0._wp
+      !            at_i(ji,jj)  = 0._wp
+      !            vt_i(ji,jj)  = 0._wp
+      !            xht(ji,jj)   = 0._wp
+      !            SIGMAt(ji,jj,1) = 0._wp
+      !            SIGMAt(ji,jj,2) = 0._wp
+      !            SIGMAf(ji,jj,3) = 0._wp
+      !         ENDIF
+      !         IF( a_i(ji,jj,1) < rAmin_vel*5._wp .AND. a_i(ji+1,jj,1) < rAmin_vel*5._wp ) THEN
+      !            u_ice(ji,jj) = 0._wp
+      !            vUice(ji,jj) = 0._wp
+      !         ENDIF
+      !         IF( a_i(ji,jj,1) < rAmin_vel*5._wp .AND. a_i(ji,jj+1,1) < rAmin_vel*5._wp ) THEN
+      !            v_ice(ji,jj) = 0._wp
+      !            uVice(ji,jj) = 0._wp
+      !         ENDIF
+      !         IF( af_i(ji,jj) < rAmin_vel*5._wp ) THEN
+      !            af_i(ji,jj) = 0._wp
+      !            xhf(ji,jj)  = 0._wp
+      !            SIGMAf(ji,jj,1) = 0._wp
+      !            SIGMAf(ji,jj,2) = 0._wp
+      !            SIGMAt(ji,jj,3) = 0._wp
+      !         ENDIF
+      !      END DO
+      !   END DO
+      !   !$acc end parallel loop
+      !ENDIF
+
+
+      !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
+            !$acc loop seq
             DO jl=1, jpl
                !
                lAp = ( a_i(ji,jj,jl) >= epsi20 )
@@ -113,15 +156,23 @@ CONTAINS
 
       IF( ln_landfast_L16 ) THEN
          CALL fld_read( kt, sf_icbmsk )
-         icb_mask(:,:) = sf_icbmsk(1)%fnow(:,:,1)
+         icb_mask(:,:) = INT(sf_icbmsk(1)%fnow(:,:,1) , 1)
       ENDIF
 
       SELECT CASE( nice_dyn )          !-- Set which dynamics is running
 
+
+
       CASE ( np_dynALL )           !==  all dynamical processes  ==!
          !
          CALL ice_dyn_rhg   ( kt )                                     ! -- rheology
+
+         !IF( ln_rdgtrc ) CALL ice_check_mean( kt, a_i, v_i, at_i, vt_i ) ! test if `at_i` & `vt_i` are consistent with `a_i` & `v_i` ! => to be commented then...
+
          CALL ice_dyn_adv   ( kt )                                     ! -- advection of ice
+
+         IF( ln_rdgtrc )  CALL ice_dyn_rdgtrc( kt, divu_i, a_i, at_i, v_i, vt_i, rdgc )   ! update `rdgc`, the "ridged ice concentration" tracer, following advection of `v_i` & `a_i`...
+
          CALL ice_dyn_rdgrft( kt )                                     ! -- ridging/rafting
          CALL ice_cor       ( kt , 1 )                                 ! -- Corrections
 
@@ -129,23 +180,20 @@ CONTAINS
          !
 
          CALL ice_dyn_rhg( kt )                                     ! -- rheology
-         !PRINT *, ' LOLOdyn1' ; CALL test4inf( ' a_i@icedyn 3 ice_dyn  ', a_i )
+
+         !IF( ln_rdgtrc ) CALL ice_check_mean( kt, a_i, v_i, at_i, vt_i ) ! test if `at_i` & `vt_i` are consistent with `a_i` & `v_i` ! => to be commented then...
 
          CALL ice_dyn_adv( kt )                                     ! -- advection of ice
-         !PRINT *, ' LOLOdyn2' ;  CALL test4inf( ' a_i@icedyn 4 ice_dyn  ', a_i )
+
+         IF( ln_rdgtrc )  CALL ice_dyn_rdgtrc( kt, divu_i, a_i, at_i, v_i, vt_i, rdgc )   ! update `rdgc`, the "ridged ice concentration" tracer, following advection of `v_i` & `a_i`...
 
          CALL ice_var_hpiling()                                     ! -- simple pile-up (replaces ridging/rafting)
 
          IF( ln_icethd ) THEN
-            CALL ice_var_zapsmall()                                    ! -- zap small areas
-            !    --> a_ip,h_ip,v_ip,h_il,v_il
+            CALL ice_var_zapsmall()                                 ! -- zap small areas
          ELSE
             CALL ice_var_zapsmall_dyn()
          ENDIF
-
-         !
-         !CALL ice_var_cap_at()  !LOLO: not needed when `hpiling` & `zapsmall` on    ! -- correct `a_i` so that `at_i` remains below `rn_amax`...
-
 
 
 
@@ -198,25 +246,27 @@ CONTAINS
 
 
       !#LOLOfixmeLBC:
-# if ! defined _OPENACC
+#if ! defined _OPENACC || defined _OPENMP
       ! --- Lateral boundary conditions --- !
       !     caution: t_su update needed from itd_reb
       !              plus, one needs ldfull=T to deal with the NorthFold in case of Prather advection
       IF( ln_icethd ) THEN
          !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
-         !   CALL lbc_lnk( 'icedyn', a_i , 'T', 1._wp, v_i , 'T', 1._wp, v_s , 'T', 1._wp, sv_i, 'T', 1._wp, oa_i, 'T', 1._wp, &
-         !      &                    t_su, 'T', 1._wp, a_ip, 'T', 1._wp, v_ip, 'T', 1._wp, v_il, 'T', 1._wp, ldfull = .TRUE. )
+         !   CALL lbc_lnk( 'icedyn', a_i ,'T',1._wp, v_i ,'T',1._wp, v_s ,'T',1._wp, oa_i,'T',1._wp, &
+         !      &                    t_su,'T',1._wp, a_ip,'T',1._wp, v_ip,'T',1._wp, v_il,'T',1._wp, ldfull = .TRUE. )
          !ELSE
-         CALL lbc_lnk( 'icedyn', a_i ,'T',1._wp, v_i ,'T',1._wp, v_s ,'T',1._wp, sv_i,'T',1._wp, oa_i,'T',1._wp, &
+         CALL lbc_lnk( 'icedyn', a_i ,'T',1._wp, v_i ,'T',1._wp, v_s ,'T',1._wp, oa_i,'T',1._wp, &
             &                    t_su,'T',1._wp )
          !ENDIF
-         CALL lbc_lnk( 'icedyn', e_i,'T',1._wp, e_s,'T',1._wp, szv_i,'T',1._wp )
+         CALL lbc_lnk( 'icedyn', e_i,'T',1._wp, e_s,'T',1._wp )
+         CALL lbc_lnk( 'icedyn', szv_i,'T',1._wp )
       ELSE
          CALL lbc_lnk( 'icedyn', a_i ,'T',1._wp, v_i ,'T',1._wp, v_s ,'T',1._wp )
       ENDIF
-# endif
+#endif
       !#LOLOfixmeLBC.
-      
+
+      !$acc end data
       IF( ln_timing )   CALL timing_stop ('ice_dyn')
       !
    END SUBROUTINE ice_dyn
@@ -243,9 +293,9 @@ CONTAINS
       CHARACTER(len=256) ::   cn_dir     ! Root directory for location of ice files
       TYPE(FLD_N)        ::   sn_icbmsk  ! informations about the grounded icebergs field to be read
       !!
-      NAMELIST/namdyn/ ln_dynALL, ln_dynRHGADV, ln_dynADV1D, ln_dynADV2D, ln_pureADV2D, rn_ishlat, &
-         &             ln_landfast_L16, rn_lf_depfra, rn_lf_bfr, rn_lf_relax, rn_lf_tensile,       &
-         &             sn_icbmsk, cn_dir
+      NAMELIST/namdyn/ ln_dynALL, ln_dynRHGADV, ln_dynADV1D, ln_dynADV2D, ln_pureADV2D, &
+         &             ln_bri_rk3, nn_rk3_iter_v, rn_ishlat, ln_landfast_L16, rn_lf_depfra, &
+         &             rn_lf_bfr, rn_lf_relax, rn_lf_tensile, sn_icbmsk, cn_dir
       !!-------------------------------------------------------------------
       !
       READ_NML_REF(numnam_ice,namdyn)
@@ -264,6 +314,13 @@ CONTAINS
          WRITE(numout,*) '      Advection 1D only      (Schar & Smolarkiewicz 1996)    ln_dynADV1D     = ', ln_dynADV1D
          WRITE(numout,*) '      Advection 2D only (with oce current used as ice vel)   ln_dynADV2D     = ', ln_dynADV2D
          WRITE(numout,*) '               ==> skip ALL post-advection corrections ?        ln_pureADV2D = ', ln_pureADV2D
+         WRITE(numout,*) '      Temporal integration scheme for momentume equation     ln_bri_rk3      = ', ln_bri_rk3
+         IF( ln_bri_rk3) THEN
+            WRITE(numout,*) '               ==> will use RK3 !'
+            WRITE(numout,*) '               ==> n. iterations for convergence of ice-oce stress term   = ', nn_rk3_iter_v
+         ELSE
+            WRITE(numout,*) '               ==> will use 1st-order Euler !'
+         ENDIF
          WRITE(numout,*) '      lateral boundary condition for sea ice dynamics        rn_ishlat       = ', rn_ishlat
          WRITE(numout,*) '      Landfast: param from Lemieux 2016                      ln_landfast_L16 = ', ln_landfast_L16
          WRITE(numout,*) '         fraction of ocean depth that ice must reach         rn_lf_depfra    = ', rn_lf_depfra
@@ -304,6 +361,7 @@ CONTAINS
          ioptio = ioptio + 1
          nice_dyn = np_dynADV2D
       ELSE
+         IF(lwp) WRITE(numout,*) ' * Forcing `ln_pureADV2D = F`, because `ln_dynADV2D = F` !'
          ln_pureADV2D = .FALSE.  ! force to false as it makes no sense otherwize
       ENDIF
       !
@@ -353,10 +411,10 @@ CONTAINS
          !
       ENDIF
       CALL lbc_lnk( 'icedyn_rhg_evp', fmask,'F',1._wp )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_dyn_init() => adding `fmask` arrays to memory!'
       !$acc enter data copyin( fmask )
-# endif
+#endif
 
       !                                      !--- Landfast ice
       IF( .NOT.ln_landfast_L16 )   tau_icebfr(:,:) = 0._wp
@@ -373,17 +431,17 @@ CONTAINS
          !
          ALLOCATE( sf_icbmsk(1)%fnow(jpi,jpj,1) )
          IF( sf_icbmsk(1)%ln_tint )   ALLOCATE( sf_icbmsk(1)%fdta(jpi,jpj,1,2) )
-         IF( TRIM(sf_icbmsk(1)%clrootname) == 'NOT USED' ) sf_icbmsk(1)%fnow(:,:,1) = 0._wp   ! not used field  (set to 0)
+         IF( TRIM(sf_icbmsk(1)%clrootname) == 'NOT_USED' ) sf_icbmsk(1)%fnow(:,:,1) = 0._wp   ! not used field  (set to 0)
       ELSE
-         icb_mask(:,:) = 0._wp
+         icb_mask(:,:) = 0
       ENDIF
 
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_dyn_init() => adding ice velocities arrays to memory!'
       !$acc enter data copyin( u_ice, v_ice, uVice, vUice )
       PRINT *, '    ==> u_ice, v_ice, uVice, vUice'
-# endif
+#endif
 
       IF( .NOT. ln_dynADV2D ) THEN
 
@@ -401,7 +459,7 @@ CONTAINS
             IF(lwp) WRITE(numout,*) '  *** since EVP used forcing `rn_delta_ecc` to `rn_ecc`! => rn_delta_ecc=',rn_delta_ecc
          ENDIF
 
-         !$acc update device ( rn_creepl, rn_delta_ecc )
+         !$acc update device ( rn_creepl, rn_delta_ecc, nn_rk3_iter_v )
 
       ENDIF
 

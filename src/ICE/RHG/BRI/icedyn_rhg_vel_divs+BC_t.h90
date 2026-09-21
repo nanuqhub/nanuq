@@ -1,0 +1,135 @@
+               ! *** T-centric cell
+               !     ~~~~~~~~~~~~~~
+               !  In this version we care about lateral boundary conditions for each component of the
+               !  vertically-integrated internal stress tensor !
+               !
+               !  * at sea-ice edge, i.e. the transition from sea-ice to "almost no sea-ice"=="open ocean"
+               !     => we assume that stresses become `0` at the edge (U-point in between the 2 adjacent T-points for d./dx), i.e a Dirichlet LBC
+               !  * at transition from ice-covered wet cells to their respective adjacent neighbor land cells
+               !     => we assume that the horizontal gradient of stresses is `0`, i.e a Neumann LBC, so gradients simply set to 0 !
+   
+               zS1    = pSt(ji  ,jj,1)
+               zS1ip1 = pSt(ji+1,jj,1)
+
+               zS2    = pSt(ji,jj  ,2)
+               zS2jp1 = pSt(ji,jj+1,2)
+
+               zSS    = pSt(ji  ,jj  ,3)
+               zSSim1 = pSt(ji-1,jj  ,3)
+               zSSjm1 = pSt(ji  ,jj-1,3)
+
+               ! `sigma11` & `sigma22` => going for a Dirichlet BC of `sigma=0` at the U-point
+               !                          located between the 2 T-point used
+
+               zmskP = 1._wp
+               IF( ztA   <rAmin_lbc )                      zS1    = -zS1ip1  ! => `s11=0` at U[i,j]
+               IF( ztAip1<rAmin_lbc )                      zS1ip1 = -zS1     ! => `s11=0` at U[i,j]
+               IF( ztAip1<rAmin_lbc .AND. ztA<rAmin_lbc )  zmskP  = 0._wp    ! => we want gradient=0 if both point have almost no ice
+               ! Land:
+               IF(    zX<0.1 )                             zS1    =  zS1ip1  ! => `d(s11)/dx=0` at U[i,j]
+               IF( zXip1<0.1 )                             zS1ip1 =  zS1     ! => `d(s11)/dx=0` at U[i,j]
+
+               zmskS = xmskt(ji,jj) ! Yes: T!
+               IF( zfA   <rAmin_lbc )                      zSS    = -zSSjm1  ! => `s12=0` at U[i,j]
+               IF( zfAjm1<rAmin_lbc )                      zSSjm1 = -zSS     ! => `s12=0` at U[i,j]
+               IF( zfAjm1<rAmin_lbc .AND. zfA<rAmin_lbc )  zmskS  = 0._wp    ! => we want gradient=0 if both point have almost no ice
+               ! Land:
+               !IF( zX<0.1 .AND. zXjm1>0.9 ) => needs to be 0, done WITH zmskS = xmskt(ji,jj)==zX         ! Northern Solid BC
+               !IF( zX>0.9 .AND. zXjm1<0.1 ) => NOTHING if `zSSjm1` has a honnest value: it is the case in CYCLONE ! Southern Solid BC
+               zmskU = umask(ji,jj,1)
+               !                              !--- ds11/dx + ds12/dy
+               zdivSx_t = ( ( zS1ip1*e2t2(ji+1,jj) - zS1   *e2t2(ji,jj  ) ) * r1_e2u(ji,jj) * zmskP &
+                  &       + ( zSS   *e1f2(ji  ,jj) - zSSjm1*e1f2(ji,jj-1) ) * r1_e1u(ji,jj) * zmskS &
+                  &             ) * r1_e1e2u(ji,jj) * zmskU
+               !
+#if defined key_dbgvel
+               !IF( (ztA<0.15_wp.OR.zfA<0.15_wp).AND.(ABS(zdivSx_t)>1.5_wp) ) THEN
+               IF( narea==narea_dbg .AND. ji==kdi .AND. jj==kdj ) THEN
+                  IF( ABS(zdivSx_t)>0.18_wp ) THEN
+                  PRINT *, ''
+                  PRINT *, '     -------------'
+                  PRINT *, '   *** icedyn_rhg_vel_divs+BC_t.h90 | kts =', kts
+                  PRINT *, ' **** `zdivSx_t`! kts, narea, ji, jj=', kts, INT(narea,2), INT(ji,2), INT(jj,2)
+                  PRINT *, '   zX, fmask, xmskf =', REAL(zX,4), REAL(fmask(ji,jj,1),4), REAL(xmskf(ji,jj),4)
+                  PRINT *, '-> zdivSx_t =', REAL(zdivSx_t,4)
+                  PRINT *, '   ztA, zS1, zS1_orig =', REAL(ztA,4), REAL(zS1,4), REAL(pSt(ji,jj,1),4)
+                  PRINT *, '   zfA, zSS, zSS_orig =', REAL(zfA,4), REAL(zSS,4), REAL(pSt(ji,jj,3),4)
+                  PRINT *, '     ----- `i+1 for ds11/dx` ----'
+                  PRINT *, '   zXip1 =', REAL(zXip1,4)
+                  PRINT *, '   ztAip1, zS1ip1, zS1ip1_orig =', REAL(ztAip1,4), REAL(zS1ip1,4), REAL(pSt(ji+1,jj,1),4)
+                  PRINT *, '     ----- `j-1 for ds12f/dy` ----'
+                  PRINT *, '   zXjm1 =', REAL(zXjm1,4)
+                  PRINT *, '   fmask_jm1, xmskf_jm1 =',REAL(fmask(ji,jj-1,1),4), REAL(xmskf(ji,jj-1),4)
+                  PRINT *, '   zfAjm1, zSSjm1, zSSjm1_orig =', REAL(zfAjm1,4), REAL(zSSjm1,4), REAL(pSt(ji,jj-1,3),4)
+                  PRINT *, '     -------------'
+                  PRINT *, '     => ds11t/dx =', REAL( ( zS1ip1*e2t2(ji+1,jj) - zS1   *e2t2(ji,jj  ) ) * r1_e2u(ji,jj) * zmskP * r1_e1e2u(ji,jj) * zmskU, 4)
+                  PRINT *, '     => ds12f/dy =', REAL( ( zSS   *e1f2(ji  ,jj) - zSSjm1*e1f2(ji,jj-1) ) * r1_e1u(ji,jj) * zmskS * r1_e1e2u(ji,jj) * zmskU, 4)
+                  PRINT *, '     -------------'
+                  ENDIF
+               ENDIF
+#endif
+
+               zmskP = 1._wp
+               IF( ztA   <rAmin_lbc )                      zS2    = -zS2jp1  ! => `s22=0` at V[i,j]
+               IF( ztAjp1<rAmin_lbc )                      zS2jp1 = -zS2     ! => `s22=0` at V[i,j]
+               IF( ztAjp1<rAmin_lbc .AND. ztA<rAmin_lbc )  zmskP  = 0._wp    ! => we want gradient=0 if both point have almost no ice
+               ! Land:
+               IF(    zX<0.1 )                             zS2    =  zS2jp1                
+               IF( zXjp1<0.1 )                             zS2jp1 =  zS2
+               !
+               zmskS = xmskt(ji,jj)   ! Yes: T!
+               IF( zfA   <rAmin_lbc )                      zSS    = -zSSim1  ! => `s12=0` at V[i,j]
+               IF( zfAim1<rAmin_lbc )                      zSSim1 = -zSS     ! => `s12=0` at V[i,j]
+               IF( zfAim1<rAmin_lbc .AND. zfA<rAmin_lbc )  zmskS  = 0._wp    ! => we want gradient=0 if both point have almost no ice
+               ! Land:
+               !IF( zX<0.1 .AND. zXim1>0.9 ) => needs to be 0, done WITH zmskS = xmskt(ji,jj)==zX         ! Eastern Solid BC
+               !IF( zX>0.9 .AND. zXim1<0.1 ) => NOTHING if `zSSim1` has a honnest value: it is the case in CYCLONE ! Western Solid BC
+
+               zmskV = vmask(ji,jj,1)
+               !                              !--- ds22/dy + ds12/dx
+               zdivSy_t = ( ( zS2jp1*e1t2(ji,jj+1) - zS2   *e1t2(ji  ,jj) ) * r1_e1v(ji,jj) * zmskP &
+                  &       + ( zSS   *e2f2(ji,jj  ) - zSSim1*e2f2(ji-1,jj) ) * r1_e2v(ji,jj) * zmskS &
+                  &             ) * r1_e1e2v(ji,jj) * zmskV
+               !
+#if defined key_dbgvel
+               !IF( (ztA<0.15_wp.OR.zfA<0.15_wp).AND.(ABS(zdivSy_t)>1.5_wp) ) THEN
+               IF( narea==narea_dbg .AND. ji==kdi .AND. jj==kdj ) THEN
+                  IF( ABS(zdivSy_t)>0.18_wp ) THEN
+                  PRINT *, '     -------------'
+                  PRINT *, ' **** `zdivSy_t`! kts, narea, ji, jj=', kts, INT(narea,2), INT(ji,2), INT(jj,2)
+                  PRINT *, '   zX, fmask, xmskf =', REAL(zX,4), REAL(fmask(ji,jj,1),4), REAL(xmskf(ji,jj),4)
+                  PRINT *, '-> zdivSy_t =', REAL(zdivSy_t,4)
+                  PRINT *, '   ztA, zS2, zS2_orig =', REAL(ztA,4), REAL(zS2,4), REAL(pSt(ji,jj,2),4)
+                  PRINT *, '   zfA, zSS, zSS_orig =', REAL(zfA,4), REAL(zSS,4), REAL(pSt(ji,jj,3),4)
+                  PRINT *, '     ----- `j+1 for ds22t/dy` ----'
+                  PRINT *, '   zXjp1 =', REAL(zXjp1,4)
+                  PRINT *, '   ztAjp1, zS2jp1, zS2jp1_orig =', REAL(ztAjp1,4), REAL(zS2jp1,4), REAL(pSt(ji,jj+1,2),4)
+                  PRINT *, '     ----- `i-1 for ds12f/dx` ----'
+                  PRINT *, '   zXim1 =', REAL(zXim1,4)
+                  PRINT *, '   fmask_im1, xmskf_im1 =',REAL(fmask(ji-1,jj,1),4), REAL(xmskf(ji-1,jj),4)
+                  PRINT *, '   zfAim1, zSSim1, zSSim1_orig =', REAL(zfAim1,4), REAL(zSSim1,4), REAL(pSt(ji-1,jj,3),4)
+                  PRINT *, '     -------------'
+                  PRINT *, '     => ds22t/dy =', REAL( ( zS2jp1*e1t2(ji,jj+1) - zS2   *e1t2(ji  ,jj) ) * r1_e1v(ji,jj) * zmskP * r1_e1e2v(ji,jj) * zmskV, 4)
+                  PRINT *, '     => ds12f/dx =', REAL( ( zSS   *e2f2(ji,jj  ) - zSSim1*e2f2(ji-1,jj) ) * r1_e2v(ji,jj) * zmskS * r1_e1e2v(ji,jj) * zmskV, 4)
+                  PRINT *, '     -------------'
+                  ENDIF
+               ENDIF
+#endif
+
+               !! Update the `sigma*h` tensor so these are taken into account in next itteration...
+               !pSt(ji  ,jj,1)   = zS1   
+               !pSt(ji+1,jj,1)   = zS1ip1
+               !pSt(ji,jj  ,2)   = zS2   
+               !pSt(ji,jj+1,2)   = zS2jp1
+               !pSt(ji  ,jj  ,3) = zSS   
+               !pSt(ji-1,jj  ,3) = zSSim1
+               !pSt(ji  ,jj-1,3) = zSSjm1
+
+#if defined key_dbgvel
+               divSx_t(ji,jj) = zdivSx_t
+               divSy_t(ji,jj) = zdivSy_t
+               ds11t_dx_u(ji,jj) = ( zS1ip1*e2t2(ji+1,jj) - zS1   *e2t2(ji,jj  ) ) * r1_e2u(ji,jj) * zmskP * r1_e1e2u(ji,jj) * zmskU
+               ds12f_dy_u(ji,jj) = ( zSS   *e1f2(ji  ,jj) - zSSjm1*e1f2(ji,jj-1) ) * r1_e1u(ji,jj) * zmskS * r1_e1e2u(ji,jj) * zmskU
+               ds22t_dy_v(ji,jj) = ( zS2jp1*e1t2(ji,jj+1) - zS2   *e1t2(ji  ,jj) ) * r1_e1v(ji,jj) * zmskP * r1_e1e2v(ji,jj) * zmskV
+               ds12f_dx_v(ji,jj) = ( zSS   *e2f2(ji,jj  ) - zSSim1*e2f2(ji-1,jj) ) * r1_e2v(ji,jj) * zmskS * r1_e1e2v(ji,jj) * zmskV
+#endif

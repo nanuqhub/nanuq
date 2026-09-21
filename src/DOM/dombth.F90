@@ -37,7 +37,7 @@ MODULE dombth
    PUBLIC   dom_bth   ! called by dom_init.F90
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: dombth.F90 15556 2021-11-29 15:23:06Z jchanut $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -65,7 +65,7 @@ CONTAINS
       CALL iom_open( cn_domcfg, inum )
       !
       !                          !* ocean top and bottom level
-      CALL iom_get( inum, jpdom_global, 'bathy_metry'    , z2d   )
+      CALL iom_get( 'bathy_read', inum, jpdom_global, 'bathy_metry'    , z2d   )
       pbathy(:,:) = NINT( z2d(:,:) )
       !
       CALL iom_close( inum )
@@ -114,14 +114,14 @@ CONTAINS
       !
       zmsk(:,:) = 1._wp                                       ! default: no closed boundaries
       IF( .NOT. l_Iperio ) THEN                                    ! E-W closed:
-         zmsk(  mi0(     1+nn_hls):mi1(     1+nn_hls),:) = 0._wp   ! first column of inner global domain at 0
-         zmsk(  mi0(jpiglo-nn_hls):mi1(jpiglo-nn_hls),:) = 0._wp   ! last  column of inner global domain at 0 
+         zmsk(  mi0(     1+nn_hls,nn_hls):mi1(     1+nn_hls,nn_hls),:) = 0._wp   ! first column of inner global domain at 0
+         zmsk(  mi0(jpiglo-nn_hls,nn_hls):mi1(jpiglo-nn_hls,nn_hls),:) = 0._wp   ! last  column of inner global domain at 0 
       ENDIF
       IF( .NOT. l_Jperio ) THEN                                    ! S closed:
-         zmsk(:,mj0(     1+nn_hls):mj1(     1+nn_hls)  ) = 0._wp   ! first   line of inner global domain at 0
+         zmsk(:,mj0(     1+nn_hls,nn_hls):mj1(     1+nn_hls,nn_hls)  ) = 0._wp   ! first   line of inner global domain at 0
       ENDIF
       IF( .NOT. ( l_Jperio .OR. l_NFold ) ) THEN                   ! N closed:
-         zmsk(:,mj0(jpjglo-nn_hls):mj1(jpjglo-nn_hls)  ) = 0._wp   ! last    line of inner global domain at 0
+         zmsk(:,mj0(jpjglo-nn_hls,nn_hls):mj1(jpjglo-nn_hls,nn_hls)  ) = 0._wp   ! last    line of inner global domain at 0
       ENDIF
       pbathy(:,:) = pbathy(:,:) * NINT( zmsk(:,:) )
       !

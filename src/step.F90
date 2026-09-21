@@ -9,6 +9,7 @@ MODULE step
    !!             .   !    .
    !!   NEMO     3.5  !  2012-03  (S. Alderson)
    !!----------------------------------------------------------------------
+
    !!----------------------------------------------------------------------
    !!   stp             : OCE system time-stepping
    !!----------------------------------------------------------------------
@@ -28,13 +29,11 @@ MODULE step
    USE in_out_manager   ! I/O manager
    USE prtctl           ! Print control                    (prt_ctl routine)
    USE iom              !
-   USE lbclnk           !
-   USE timing           ! Timing
    !
-   USE par_ice, ONLY : ln_dynADV2D
-   !
+#if defined key_xios
    USE xios
-   
+#endif
+
    IMPLICIT NONE
    PRIVATE
 
@@ -43,10 +42,10 @@ MODULE step
    !!----------------------------------------------------------------------
    !! time level indices
    !!----------------------------------------------------------------------
-   INTEGER, PUBLIC :: Nbb, Nnn, Naa, Nrhs          !! used by nanuq_init
+   INTEGER, PUBLIC :: Nbb, Nnn          !! used by nanuq_init
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: step.F90 14239 2020-12-23 08:57:16Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/SAS 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -62,7 +61,7 @@ CONTAINS
       !!              -2- Outputs and diagnostics
       !!----------------------------------------------------------------------
 
-      IF( kstp == nit000 )   CALL iom_init( cxios_context ) ! iom_put initialization (must be done after nanuq_init for AGRIF+XIOS+OASIS)
+      IF( kstp == nit000 )   CALL iom_init( cxios_context ) ! iom_put initialization (must be done after nanuq_init for XIOS+OASIS)
       CALL iom_setkt( kstp - nit000 + 1, cxios_context )   ! tell iom we are at time step kstp
       IF((kstp == nitrst) .AND. lwxios) THEN
          CALL iom_swap(      cw_ocerst_cxt          )
@@ -71,13 +70,18 @@ CONTAINS
       ENDIF
       IF( kstp /= nit000 )   CALL day( kstp )             ! Calendar (day was already called at nit000 in day_init)
 
-      IF((kstp == nitrst) .AND. lwxios) THEN
-         CALL iom_swap(      cw_icerst_cxt          )
+      IF( kstp == nitrst .AND. lwxios ) THEN
+         CALL iom_swap(   cw_icerst_cxt          )
          CALL iom_init_closedef(cw_icerst_cxt)
-         CALL iom_setkt( kstp - nit000 + 1,      cw_icerst_cxt          )
+         CALL iom_setkt( kstp - nit000 + 1,   cw_icerst_cxt          )
       ENDIF
 
-      IF( ln_bdy ) CALL bdy_dta( kstp, Nnn )  ! update sea-ice data at open boundaries
+      ! ==> clem: open boundaries is mandatory for sea-ice because ice BDY is not decoupled from
+      !           the environment of ocean BDY. Therefore bdy is called in both OCE and SAS modules.
+      !           From SAS: ocean bdy data are wrong  (but we do not care) and ice bdy data are OK.
+      !           This is not clean and should be changed in the future.
+      ! ==>
+      IF( ln_bdy     )       CALL bdy_dta( kstp,      Nnn )                   ! update dynamic & tracer data at open boundaries
 
 
       !! Ocean Surface State:
@@ -92,6 +96,7 @@ CONTAINS
       !!                       => updates:    sst_s, sss_s, t_bo
 
       !IF( .NOT. ln_dynADV2D ) THEN
+
       !! Surface Boundary Condition for the liquid ocean:
       CALL sbc( kstp )
       ! Arrays that have been update by `sbc()` have been put on the GPU, namely:
@@ -99,6 +104,7 @@ CONTAINS
       !!    => not `sfx` & `fmmflx` because they are given a value in ICE model...
       !!    => not `theta_zu` & `q_zu` I guess..
       !ENDIF
+
 
       CALL ice_stp( kstp, nsbc )  ! Sea-ice model
 
@@ -120,11 +126,13 @@ CONTAINS
       ENDIF
 
       !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-      ! Coupled mode
+      ! Coupling with Ocean Model => sending surface fluxes for the SBCs of the 3D liquid ocean
       !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
       IF( lk_oasis_oce .AND. nstop == 0 ) THEN
-         CALL oss_cpl_snd( kstp )   ! coupled mode: send the SBC for liquid ocean to the ocean component !
-      END IF
+         CALL oss_cpl_snd( kstp )       ! coupled mode : field exchanges if OASIS-coupled ice
+      ENDIF
+
+#if defined key_xios
       IF( kstp == nitrst ) THEN
          IF(.NOT.lwxios) THEN
             CALL iom_close( numrow )
@@ -135,10 +143,9 @@ CONTAINS
          ENDIF
       ENDIF
       IF( kstp == nitend .OR. nstop > 0 ) THEN
-         CALL iom_context_finalize( cxios_context ) ! needed for XIOS+AGRIF
+         CALL iom_context_finalize( cxios_context ) ! needed for XIOS
       ENDIF
-      !
-      IF( ln_timing .AND.  kstp == nit000  )   CALL timing_reset
+#endif
       !
    END SUBROUTINE stp
 

@@ -23,7 +23,7 @@
 
 # Production on CPU:
 # ~~~~~~~~~~~~~~~~~~
-%FPPFLAGS            -P  -traditional
+%FPPFLAGS            -P -traditional -Dkey_dbgvel
 %FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS
 
 # Debug on CPU:

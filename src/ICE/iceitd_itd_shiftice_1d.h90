@@ -1,0 +1,150 @@
+            !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> INLINING OF `itd_shiftice` => `iceitd_itd_shiftice.h90` <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            !----------------------------------------------------------------------------------------------
+            ! 1) Define a variable equal to a_i*T_su
+            !----------------------------------------------------------------------------------------------
+
+            !$acc loop seq
+            DO jc = 1, jpl
+               zaTsfn(jc) = a_i(ji,jj,jc) * t_su(ji,jj,jc)
+            END DO
+
+            !-------------------------------------------------------------------------------
+            ! 2) Transfer volume and energy between categories
+            !-------------------------------------------------------------------------------
+            !$acc loop seq
+            DO jc = 1, jpl - 1
+               !
+               jc1 = jdonor(jc)
+               !
+               IF( jc1 > 0 ) THEN
+                  !
+                  jc2 = MERGE( jc1+1  ,  jc  ,  jc1 == jc )
+                  !
+                  zworkv = MERGE( zdvice(jc) / MAX(v_i(ji,jj,jc1),epsi20)  ,  0._wp  ,  v_i(ji,jj,jc1) >= epsi10 )
+                  zworka = MERGE( zdaice(jc) / MAX(a_i(ji,jj,jc1),epsi20)  ,  0._wp  ,  a_i(ji,jj,jc1) >= epsi10 )
+                  !
+                  a_i(ji,jj,jc1) = a_i(ji,jj,jc1) - zdaice(jc)       ! Ice areas
+                  a_i(ji,jj,jc2) = a_i(ji,jj,jc2) + zdaice(jc)
+                  !
+                  v_i(ji,jj,jc1) = v_i(ji,jj,jc1) - zdvice(jc)       ! Ice volumes
+                  v_i(ji,jj,jc2) = v_i(ji,jj,jc2) + zdvice(jc)
+                  !
+                  ztrans         = v_s(ji,jj,jc1) * zworkv              ! Snow volumes
+                  v_s(ji,jj,jc1) = v_s(ji,jj,jc1) - ztrans
+                  v_s(ji,jj,jc2) = v_s(ji,jj,jc2) + ztrans
+                  !
+                  ztrans          = oa_i(ji,jj,jc1) * zworka            ! Ice age
+                  oa_i(ji,jj,jc1) = oa_i(ji,jj,jc1) - ztrans
+                  oa_i(ji,jj,jc2) = oa_i(ji,jj,jc2) + ztrans
+                  !
+                  ztrans             = zaTsfn(jc1) * zworka             ! Surface temperature
+                  zaTsfn(jc1)  = zaTsfn(jc1) - ztrans
+                  zaTsfn(jc2)  = zaTsfn(jc2) + ztrans
+                  !
+                  !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
+                  !   ztrans          = a_ip(ji,jj,jc1) * zworka         ! Pond fraction
+                  !   a_ip(ji,jj,jc1) = a_ip(ji,jj,jc1) - ztrans
+                  !   a_ip(ji,jj,jc2) = a_ip(ji,jj,jc2) + ztrans
+                  !   !
+                  !   ztrans          = v_ip(ji,jj,jc1) * zworkv         ! Pond volume
+                  !   v_ip(ji,jj,jc1) = v_ip(ji,jj,jc1) - ztrans
+                  !   v_ip(ji,jj,jc2) = v_ip(ji,jj,jc2) + ztrans
+                  !   !
+                  !   IF ( ln_pnd_lids ) THEN                            ! Pond lid volume
+                  !      ztrans          = v_il(ji,jj,jc1) * zworkv
+                  !      v_il(ji,jj,jc1) = v_il(ji,jj,jc1) - ztrans
+                  !      v_il(ji,jj,jc2) = v_il(ji,jj,jc2) + ztrans
+                  !   ENDIF
+                  !ENDIF
+                  !
+                  !$acc loop seq
+                  DO jk = 1, nlay_s                                     ! Snow heat content
+                     ztrans            = e_s(ji,jj,jk,jc1) * zworkv
+                     e_s(ji,jj,jk,jc1) = e_s(ji,jj,jk,jc1) - ztrans
+                     e_s(ji,jj,jk,jc2) = e_s(ji,jj,jk,jc2) + ztrans
+                  END DO
+                  !$acc loop seq
+                  DO jk = 1, nlay_i                                     ! Ice heat content
+                     ztrans            = e_i(ji,jj,jk,jc1) * zworkv
+                     e_i(ji,jj,jk,jc1) = e_i(ji,jj,jk,jc1) - ztrans
+                     e_i(ji,jj,jk,jc2) = e_i(ji,jj,jk,jc2) + ztrans
+                  END DO
+                  !                                                     ! Ice salinity
+                  !$acc loop seq
+                  DO jk = 1, nlay_i
+                     ztrans              = szv_i(ji,jj,jk,jc1) * zworkv
+                     szv_i(ji,jj,jk,jc1) = szv_i(ji,jj,jk,jc1) - ztrans
+                     szv_i(ji,jj,jk,jc2) = szv_i(ji,jj,jk,jc2) + ztrans
+                  END DO
+                  !
+               ENDIF !IF( jc1 > 0 )
+               !
+            END DO !DO jc = 1, jpl - 1
+
+            !-------------------
+            ! 3) roundoff errors
+            !-------------------
+            ! ==> inlining of `ice_var_roundoff`
+            !$acc loop seq
+            DO jc = 1, jpl
+               ! clem: The transfer between one category to another can lead to very small negative values (-1.e-20)
+               !       because of truncation error ( i.e. 1. - 1. /= 0 )
+               !CALL ice_var_roundoff( a_i, v_i, v_s,       oa_i, a_ip, v_ip, v_il, e_s, e_i, szv_i, lptidx )
+               a_i(ji,jj,jc) = MAX(a_i(ji,jj,jc), 0._wp)
+               v_i(ji,jj,jc) = MAX(v_i(ji,jj,jc), 0._wp)
+               v_s(ji,jj,jc) = MAX(v_s(ji,jj,jc), 0._wp)
+               oa_i(ji,jj,jc) = MAX(oa_i(ji,jj,jc), 0._wp)
+               !$acc loop seq
+               DO jk=1, nlay_i
+                  e_i(ji,jj,jk,jc) = MAX(e_i(ji,jj,jk,jc), 0._wp)
+               END DO
+               !$acc loop seq
+               DO jk=1, nlay_s
+                  e_s(ji,jj,jk,jc) = MAX(e_s(ji,jj,jk,jc), 0._wp)
+               END DO
+               !
+               !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
+               !   a_ip(ji,jj,jc) = MAX(a_ip(ji,jj,jc), 0._wp)
+               !   v_ip(ji,jj,jc) = MAX(v_ip(ji,jj,jc), 0._wp)
+               !   IF( ln_pnd_lids ) THEN
+               !      v_il(ji,jj,jc) = MAX(v_il(ji,jj,jc), 0._wp)
+               !   ENDIF
+               !ENDIF
+               !
+               !$acc loop seq
+               DO jk=1, nlay_i
+                  szv_i(ji,jj,jk,jc) = MAX(szv_i(ji,jj,jk,jc), 0._wp)
+               END DO
+            END DO
+            !! ----- END roundoff error ------
+
+            ! at_i must be <= rn_amax
+            !
+            zAt = 0._wp
+            !$acc loop seq
+            DO jc = 1, jpl
+               zAt = zAt + a_i(ji,jj,jc)
+            END DO
+
+            IF ( zAt > rn_amax ) THEN
+               !$acc loop seq
+               DO jc  = 1, jpl
+                  a_i(ji,jj,jc) = a_i(ji,jj,jc) * rn_amax / zAt
+               END DO
+            ENDIF
+
+            !-------------------------------------------------------------------------------
+            ! 4) Update ice thickness and temperature
+            !-------------------------------------------------------------------------------
+            !$acc loop seq
+            DO jc = 1, jpl
+               IF ( a_i(ji,jj,jc) >= epsi20 ) THEN
+                  h_i (ji,jj,jc) =  v_i(ji,jj,jc) / a_i(ji,jj,jc)
+                  t_su(ji,jj,jc) =  zaTsfn(jc)    / a_i(ji,jj,jc)
+               ELSE
+                  h_i (ji,jj,jc) = 0._wp
+                  t_su(ji,jj,jc) = rt0
+               ENDIF
+            END DO
+
+            !!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> END OF INLINING OF `itd_shiftice` <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

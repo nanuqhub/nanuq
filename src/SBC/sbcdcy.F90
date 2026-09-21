@@ -36,7 +36,7 @@ MODULE sbcdcy
    PUBLIC   sbc_dcy_param  ! routine used here and called by warm-layer parameterization (sbcblk_skin_coare*)
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: sbcdcy.F90 13483 2020-09-17 08:24:00Z smasson $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------

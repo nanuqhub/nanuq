@@ -1,0 +1,19 @@
+      !+++++++++++++ start `include "icedyn_rhg_bbm_elmexpl.h90"` +++++++++++++
+      zml  = z1md * zxpC                          !   => `zml = (1-d)*exp(-C*(1-A))`
+      zE   = rn_E0 * zml                          ! elasticity [Pa] `E = E0*(1-d)*exp[-C*(1-A)]`
+      zc0  = zml*zml                              !   => `zc0 = [(1-d)*exp(-C*(1-A))]^2`
+      zeta = rn_eta0 * zc0 * zc0 * zml            ! viscosity [Pa.s]  => `zeta = rn_eta0 * [ (1-d)*exp(-C*(1-A)) ]^5
+      zL = MAX( zeta / MAX( zE, epsi20 ) , pdt )  ! lambda [s]
+      !
+      z1_sigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
+      ! As opposed to Olason et al 2022, for which we would simply have `zPmax = pPmax_p`,
+      ! we want Pmax to be (pPmax_p) when PURE compression but decreases as shearing becomes
+      ! increasingly important w.r.t to compression:
+      zCohe = rn_c_ref * zSclH      ! `C * h` cohesion scaled to the local `Δx` * h
+      zecc  = ABS(zPmax) / MAX(zCohe,epsi20) ! eccentricity of the "Pmax" ellipse that crosses the `sigma_II` axis right at the cohesion value
+      zc0   = zecc * zsigII * z1_sigI
+      zPmax = zPmax / SQRT( 1._wp + zc0*zc0 ) ! Effective `P_max * h`  (for sigI<0)
+      !
+      zc0 = MERGE( 1._wp, 0._wp,  zsigI<-epsi20 )
+      zPtld = -zc0 * MIN( zPmax*z1_sigI , 1._wp )
+      !+++++++++++++  end `include "icedyn_rhg_bbm_elmexpl.h90"`  +++++++++++++

@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+
+<file_definition type="one_file" name="./@expname@_@freq@_@startdate@_@enddate@" sync_freq="1d" min_digits="4">
+
+  <file_group id="6h" output_freq="6h"  output_level="10" >  <!-- 6h files -->
+
+    <file id="file31" name_suffix="_icemod" description="ice variables" enabled=".true." >
+
+      <!-- general -->
+      <field field_ref="iceconc"      name="siconc-t"  operation="instant" freq_op="6h"                                        />
+      <field field_ref="iceconc-f"    name="siconc-f"  operation="instant" freq_op="6h"                                        />
+      <field field_ref="icevolu"      name="sivolu-t"  operation="instant" freq_op="6h"  valid_min="0." valid_max="5."         />
+      <field field_ref="icesalt"                       operation="instant" freq_op="6h"                                        />
+      <field field_ref="icethic"      name="sithic-t"  operation="instant" freq_op="6h"                                        />
+      <field field_ref="icethic-f"    name="sithic-f"  operation="instant" freq_op="6h"                                        />
+      <field field_ref="icetemp"                       operation="instant" freq_op="6h"                                        />
+      <!-- snow -->
+      <field field_ref="snwthic"                       operation="instant" freq_op="6h"                                        />
+      <field field_ref="snwtemp"                       operation="instant" freq_op="6h"                                        />
+      <field field_ref="icettop"                       operation="instant" freq_op="6h"                                        />
+      <!-- -->
+      <!-- rheology -->
+      <!-- Traditional C-grid location: -->
+      <field field_ref="icedmgt"     name="damage-t"   operation="instant" freq_op="6h"  valid_min="0."      valid_max="1."     />
+      <field field_ref="icedmgf"     name="damage-f"   operation="instant" freq_op="6h"  valid_min="0."      valid_max="1."     />
+      <field field_ref="icedivt"     name="sidive-t"   operation="instant" freq_op="6h"  valid_min="-0.5e-5" valid_max="0.5e-5" />
+      <field field_ref="icedeft"     name="sidefo-t"   operation="instant" freq_op="6h"  valid_min="0."      valid_max="1.e-5"  />
+      <field field_ref="iceshet"     name="simxshr-t"  operation="instant" freq_op="6h"  valid_min="0."      valid_max="1.e-5"  />
+      <!-- momentum -->
+      <field field_ref="uice"        name="u_ice-u"    operation="instant" freq_op="6h"  valid_min="-0.5" valid_max="0.5" />
+      <field field_ref="vice"        name="v_ice-v"    operation="instant" freq_op="6h"  valid_min="-0.5" valid_max="0.5" />
+      <!-- -->
+      <!-- Ocean forcing -->
+      <field field_ref="ssu_m"                         operation="instant" freq_op="6h"  valid_min="-1.5" valid_max="1.5" />
+      <field field_ref="ssv_m"                         operation="instant" freq_op="6h"  valid_min="-1.5" valid_max="1.5" />
+      <field field_ref="sst_s"                         operation="instant" freq_op="6h"                                   />
+      <field field_ref="sss_s"                         operation="instant" freq_op="6h"                                   />
+      <field field_ref="ssh_m"                         operation="instant" freq_op="6h"                                   />
+      <field field_ref="mld_m"                         operation="instant" freq_op="6h"                                   />
+      <field field_ref="dsst_s"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="dsss_s"                        operation="instant" freq_op="6h"                                   />
+      <!-- -->
+      <!-- Internal stress tensor in T-centric cell -->
+      <field field_ref="ice_sig11"   name="s11-t"      operation="instant" freq_op="6h" valid_min="-5.e4" valid_max="1.e4" />
+      <field field_ref="ice_sig22"   name="s22-t"      operation="instant" freq_op="6h" valid_min="-5.e4" valid_max="1.e4" />
+      <field field_ref="ice_sig12"   name="s12-f"      operation="instant" freq_op="6h" valid_min="-5.e4" valid_max="5.e4" />
+      <field field_ref="normstr"     name="sI-t"       operation="instant" freq_op="6h" valid_min="-5.e4" valid_max="1.e4" />
+      <field field_ref="sheastr"     name="sII-t"      operation="instant" freq_op="6h" valid_min="0."    valid_max="3.e4" />
+      <!-- -->
+      <!-- Ridges -->
+      <field field_ref="rdgc"                          operation="instant" freq_op="6h"                                    />
+      <!-- -->
+      <!-- Category fields -->
+      <field field_ref="iceconc_cat"                   operation="instant" freq_op="6h"                                    />
+      <field field_ref="icethic_cat"                   operation="instant" freq_op="6h"                                    />
+      <field field_ref="iceage_cat"                    operation="instant" freq_op="6h"                                    />
+      <!-- -->
+    </file>
+
+
+
+    <!-- *** Mainly for DEBUGGING purposes *** -->
+
+    <file id="file32" name_suffix="_fatm" description="surface atmospheric forcing as read (and 'on-the-fly' interpolated)" enabled=".true." >
+      <field field_ref="iceconc"      name="siconc-t"  operation="instant" freq_op="6h"                                  />
+      <!-- 10m wind speed module @T -->
+      <field field_ref="wspd"                         operation="instant" freq_op="6h"                                   />
+      <!-- 10m wind speed vector @T -->
+      <field field_ref="wnd_x"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="wnd_y"                        operation="instant" freq_op="6h"                                   />
+      <!-- Air-Sea wind stress module @T over open ocean -->
+      <field field_ref="taum_oce"                     operation="instant" freq_op="6h"                                   />
+      <!-- Air-Sea wind stress vector @T over open ocean -->
+      <field field_ref="utau_oce"                     operation="instant" freq_op="6h"                                   />
+      <field field_ref="vtau_oce"                     operation="instant" freq_op="6h"                                   />
+      <!-- -->
+      <!-- IF `sn_loc_vct_tau='T'` (final `utau` & `vtau` defined @ T): -->
+      <!-- Air/Ice-Sea stress vector @T over open ocean -->
+      <!-- <field field_ref="utau"      name="utau_t"      operation="instant" freq_op="6h"                            /> -->
+      <!-- <field field_ref="vtau"      name="vtau_t"      operation="instant" freq_op="6h"                            /> -->
+      <!-- -->
+      <!-- IF `sn_loc_vct_tau='C'` (final `utau` & `vtau` defined @ U & V, respectively): -->
+      <!-- Air/Ice-Sea stress vector @T over open ocean -->
+      <field field_ref="taum"              operation="instant" freq_op="6h"                                   />
+      <field field_ref="utau_u"            operation="instant" freq_op="6h"                                   />
+      <field field_ref="vtau_v"            operation="instant" freq_op="6h"                                   />
+      <!--
+          <field field_ref="taum_oa3"                      operation="instant" freq_op="6h"                          />
+          <field field_ref="utau_oa3"  name="utau_oa3_u"   operation="instant" freq_op="6h"                          />
+          <field field_ref="vtau_oa3"  name="vtau_oa3_v"   operation="instant" freq_op="6h"                          />
+      -->
+      <!-- -->
+      <!-- SBC -->
+      <field field_ref="Cd_oce"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="Ch_oce"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="Ce_oce"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="dt_ice_air_zu"                 operation="instant" freq_op="6h"                                   />
+      <field field_ref="dt_ice_air_zt"                 operation="instant" freq_op="6h"                                   />
+      <field field_ref="Cd_ice"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="Ch_ice"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="Ce_ice"                        operation="instant" freq_op="6h"                                   />
+      <field field_ref="evap_oce"                      operation="instant" freq_op="6h"                                   />
+      <field field_ref="qns_oce"                       operation="instant" freq_op="6h"                                   />
+      <field field_ref="emp"                           operation="instant" freq_op="6h"                                   />
+      <field field_ref="qns"                           operation="instant" freq_op="6h"                                   />
+      <field field_ref="qsr"                           operation="instant" freq_op="6h"                                   />
+      <!-- -->
+    </file>
+
+
+  </file_group>
+
+</file_definition>

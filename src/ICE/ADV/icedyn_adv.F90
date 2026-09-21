@@ -52,7 +52,7 @@ MODULE icedyn_adv
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icedyn_adv.F90 13472 2020-09-16 13:05:19Z smasson $
    !! Software governed by the CeCILL licence     (./LICENSE)
    !!----------------------------------------------------------------------
@@ -126,23 +126,26 @@ CONTAINS
       CASE( np_advUMx )                ! ULTIMATE-MACHO scheme !
          !                             !-----------------------!
          IF(lwpv) WRITE(numout,'("  *** advects GENERIC fields @T with UMX, order = ",i1," kt=",i)') nn_UMx, kt
-         CALL ice_dyn_adv_umx( nn_UMx, kt, sudy_u, svdx_v, h_i, h_s, h_ip, &
-            &                          ato_i, v_i, v_s, sv_i, oa_i, a_i, a_ip, v_ip, v_il, e_s, e_i, szv_i )
+         !CALL ice_dyn_adv_umx( nn_UMx, kt, sudy_u, svdx_v, h_i, h_s, h_ip, &
+         !   &                          ato_i, v_i, v_s, oa_i, a_i, a_ip, v_ip, v_il, e_s, e_i, szv_i )
+         CALL ice_dyn_adv_umx( nn_UMx, kt, sudy_u, svdx_v, h_i, h_s, ato_i, v_i, v_s, oa_i, a_i, e_s, e_i, szv_i, rdgc )
          !
          !                             !-----------------------!
       CASE( np_advPRA )                ! PRATHER scheme        !
          !                             !-----------------------!
          IF(lwpv) WRITE(numout,'("  *** advects GENERIC fields @T with Prather, kt=",i)') kt
          !
-         CALL ice_dyn_adv_pra(         kt, xmskt, sudy_u, svdx_v, h_i, h_s, h_ip, &
-            &                          ato_i, v_i, v_s, sv_i, oa_i, a_i, a_ip, v_ip, v_il, e_s, e_i, szv_i )
+         !CALL ice_dyn_adv_pra(         kt, xmskt, sudy_u, svdx_v, h_i, h_s, h_ip, &
+         !   &                          ato_i, v_i, v_s, oa_i, a_i, a_ip, v_ip, v_il, e_s, e_i, szv_i )
+         CALL ice_dyn_adv_pra(         kt, xmskt, sudy_u, svdx_v, h_i, h_s, ato_i, v_i, v_s, oa_i, a_i, e_s, e_i, szv_i, rdgc )
          !
          !                             !-----------------------!
       CASE( np_advWNx )                ! WENOX scheme          !
          !                             !-----------------------!
          IF(lwpv) WRITE(numout,'("  *** advects GENERIC fields @T with WENO",i1,", kt=",i)') nn_WNx, kt
-         CALL ice_dyn_adv_wnx(         kt, sudy_u, svdx_v, klbct, h_i, h_s, h_ip, &
-            &                          ato_i, v_i, v_s, sv_i, oa_i, a_i, a_ip, v_ip, v_il, e_s, e_i, szv_i )
+         !CALL ice_dyn_adv_wnx(         kt, sudy_u, svdx_v, klbct, h_i, h_s, h_ip, &
+         !   &                          ato_i, v_i, v_s, oa_i, a_i, a_ip, v_ip, v_il, e_s, e_i, szv_i )
+         CALL ice_dyn_adv_wnx(         kt, sudy_u, svdx_v, klbct, h_i, h_s, ato_i, v_i, v_s, oa_i, a_i, e_s, e_i, szv_i, rdgc )
          !
       END SELECT
 
@@ -202,7 +205,7 @@ CONTAINS
             !
          END SELECT
 
-         IF( .NOT. ln_pureADV2D )  CALL cap_1md( at_i, af_i, dmdt, dmdf )   ! Mind that they are `at_i` & `af_i` prior to advection...
+         IF( ln_rhg_brittle .AND. .NOT. ln_pureADV2D )  CALL cap_1md( at_i, af_i, dmdt, dmdf )   ! Mind that they are `at_i` & `af_i` prior to advection...
 
       END IF !IF( ln_damage .AND. nn_d_adv >= 1 ) THEN
 
@@ -211,7 +214,6 @@ CONTAINS
       !------------
       !diag_trp_ei(:,:) = SUM(SUM( e_i (:,:,1:nlay_i,:) - e_i_b (:,:,1:nlay_i,:), dim=4 ), dim=3 ) * r1_Dt_ice
       !diag_trp_es(:,:) = SUM(SUM( e_s (:,:,1:nlay_s,:) - e_s_b (:,:,1:nlay_s,:), dim=4 ), dim=3 ) * r1_Dt_ice
-      !diag_trp_sv(:,:) = SUM(     sv_i(:,:,:)          - sv_i_b(:,:,:)                  , dim=3 ) * r1_Dt_ice
       !diag_trp_vi(:,:) = SUM(     v_i (:,:,:)          - v_i_b (:,:,:)                  , dim=3 ) * r1_Dt_ice
       !diag_trp_vs(:,:) = SUM(     v_s (:,:,:)          - v_s_b (:,:,:)                  , dim=3 ) * r1_Dt_ice
       !IF( iom_use('icemtrp') )   CALL iom_put( 'icemtrp' ,  diag_trp_vi * rhoi          )   ! ice mass transport
@@ -275,9 +277,9 @@ CONTAINS
       IF( ln_adv_UMx ) THEN
          ioptio = ioptio + 1
          nice_adv = np_advUMx
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'ice_dyn_adv_init: UMX advection has not been adapted yet for GPU!' )
-# endif
+#endif
       ENDIF
       IF( ln_adv_WNx ) THEN
          IF(     nn_WNx == 5 ) THEN
@@ -325,7 +327,7 @@ CONTAINS
             nice_d_adv = np_d_advWNx
          ENDIF
 
-      END IF
+      END IF !IF( ln_damage )
 
       !$acc update device ( nn_UMx, nn_WNx, cn_weno_wght )
 

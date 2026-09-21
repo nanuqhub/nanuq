@@ -146,6 +146,7 @@ CONTAINS
             zq_zu = MAX( zq_zt ,    0._wp )   !               "
 
             !! ITERATION BLOCK
+            !$acc loop seq
             DO jit = 1, nbit
                !
                zdt = zt_zu - zSST   ! Updating air/sea differences

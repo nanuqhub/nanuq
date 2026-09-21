@@ -27,7 +27,7 @@ MODULE icecor
    PUBLIC   ice_cor   ! called by icestp.F90
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2025)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -42,12 +42,12 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER, INTENT(in) ::   kt    ! number of iteration
       INTEGER, INTENT(in) ::   kn    ! 1 = after dyn ; 2 = after thermo
-      !
+      !!----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk, jl   ! dummy loop indices
-      REAL(wp) ::   zsal, zdum, zrhoi_dt
+      REAL(wp) ::   zsal, zdum, zrhoi_dt, zA, zz1, zz2
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_cor')
-      !$acc data present( a_i, h_i, v_i, sv_i, sss_s, sfx_res, szv_i )
+      !$acc data present( a_i, h_i, v_i, sss_s, sfx_res, szv_i )
 
       zrhoi_dt = rhoi * r1_Dt_ice
 
@@ -67,20 +67,17 @@ CONTAINS
          DO ji=Nis0-1, Nie0+1
             !$acc loop seq
             DO jl = 1, jpl
-               IF( a_i(ji,jj,jl) >= epsi20 ) THEN
-                  h_i(ji,jj,jl) = v_i(ji,jj,jl) / a_i(ji,jj,jl)
-               ELSE
-                  h_i(ji,jj,jl) = 0._wp
-               ENDIF
+               zA = a_i(ji,jj,jl)
+               h_i(ji,jj,jl) = MERGE( v_i(ji,jj,jl) / MAX( zA, epsi20 )  ,  0._wp  ,  zA >= epsi20 )
                !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
                !   IF( h_i(ji,jj,jl) < rn_himin )  a_ip(ji,jj,jl) = a_ip(ji,jj,jl) * h_i(ji,jj,jl) / rn_himin
                !ENDIF
-               IF( h_i(ji,jj,jl) < rn_himin )     a_i (ji,jj,jl) = a_i (ji,jj,jl) * h_i(ji,jj,jl) / rn_himin
+               a_i(ji,jj,jl) = MERGE( zA * h_i(ji,jj,jl) / rn_himin  ,  zA  ,  h_i(ji,jj,jl) < rn_himin )
             END DO
          END DO
       END DO
       !$acc end parallel loop
-      !
+
       !                             !-----------------------------------------------------
       !                             !  ice concentration should not exceed amax          !
       !                             !-----------------------------------------------------
@@ -95,7 +92,9 @@ CONTAINS
             END DO
             !$acc loop seq
             DO jl = 1, jpl
-               IF( at_i(ji,jj) > rn_amax )   a_i(ji,jj,jl) = a_i(ji,jj,jl) * rn_amax / at_i(ji,jj)
+               zA = a_i(ji,jj,jl)
+               a_i(ji,jj,jl) = MERGE( zA * rn_amax / MAX( at_i(ji,jj), epsi20 )  ,  zA  ,  at_i(ji,jj) > rn_amax )
+               !IF( at_i(ji,jj) > rn_amax )   a_i(ji,jj,jl) = a_i(ji,jj,jl) * rn_amax / at_i(ji,jj)
             END DO
             !
          END DO
@@ -110,39 +109,28 @@ CONTAINS
       !                             !-----------------------------------------------------
       !                             !  salinity must stay in bounds [Simin,Simax]        !
       !                             !-----------------------------------------------------
-      IF ( nn_icesal == 2 ) THEN
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-1, Nje0+1
+         DO ji=Nis0-1, Nie0+1
+            zz1 = rn_sinew * sss_s(ji,jj)
+            !$acc loop seq
+            DO jl = 1, jpl
+               zdum = v_i(ji,jj,jl) * r1_nlay_i
+               zz2 = zz1 * zdum
+               zdum = rn_simin * zdum
                !$acc loop seq
-               DO jl = 1, jpl
-                  zsal = sv_i(ji,jj,jl)
-                  sv_i(ji,jj,jl) = MIN( MAX( rn_simin*v_i(ji,jj,jl) , zsal ) , rn_sinew*sss_s(ji,jj)*v_i(ji,jj,jl)  )
-                  IF( kn /= 0 ) & ! no ice-ocean exchanges if kn=0 (for bdy for instance) otherwise conservation diags will fail
-                     &   sfx_res(ji,jj) = sfx_res(ji,jj) - ( sv_i(ji,jj,jl) - zsal ) * zrhoi_dt   ! associated salt flux
+               DO jk=1, nlay_i
+                  zsal = szv_i(ji,jj,jk,jl)
+                  !szv_i(ji,jj,jk,jl) = MIN( MAX( rn_simin * zdum , zsal ) , rn_sinew * sss_s(ji,jj) * zdum )
+                  szv_i(ji,jj,jk,jl) = MIN( MAX( zdum , zsal ) , zz2 )
+                  ! no ice-ocean exchanges if kn=0 (for bdy for instance) otherwise conservation diags will fail
+                  sfx_res(ji,jj) = sfx_res(ji,jj) - MERGE( 0._wp,  ( szv_i(ji,jj,jk,jl) - zsal ) * zrhoi_dt,  kn==0 )
                END DO
             END DO
          END DO
-         !$acc end parallel loop
-      ELSEIF ( nn_icesal == 4 ) THEN
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0-1, Nje0+1
-            DO ji=Nis0-1, Nie0+1
-               !$acc loop seq
-               DO jl = 1, jpl
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     zsal = szv_i(ji,jj,jk,jl)
-                     zdum = v_i(ji,jj,jl) * r1_nlay_i
-                     szv_i(ji,jj,jk,jl) = MIN( MAX( rn_simin * zdum , zsal ) , rn_sinew * sss_s(ji,jj) * zdum )
-                     IF( kn /= 0 ) & ! no ice-ocean exchanges if kn=0 (for bdy for instance) otherwise conservation diags will fail
-                        &   sfx_res(ji,jj) = sfx_res(ji,jj) - ( szv_i(ji,jj,jk,jl) - zsal ) * zrhoi_dt   ! associated salt flux
-                  END DO
-               END DO
-            END DO
-         END DO
-         !$acc end parallel loop
-      ENDIF
+      END DO
+      !$acc end parallel loop
+
       !
       IF( kn /= 0 ) THEN   ! no zapsmall if kn=0 (for bdy for instance) because we do not want ice-ocean exchanges (wfx,sfx,hfx)
          !                                                              otherwise conservation diags will fail

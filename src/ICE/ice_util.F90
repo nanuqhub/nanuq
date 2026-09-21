@@ -58,7 +58,7 @@ CONTAINS
    !   !!--------------------------------------
    !   !$acc routine vector
    !   !!--------------------------------------
-   !   !! Returns `px` if `pb  > 0`                                                                                                                            
+   !   !! Returns `px` if `pb  > 0`
    !   !! Returns  `0` if `pb <= 0`
    !   !!--------------------------------------
    !   REAL(wp), INTENT(in) :: pb, px
@@ -69,10 +69,10 @@ CONTAINS
    !   !   pos_or_0 = px
    !   !ENDIF
    !   pos_or_0 = px * ( 1._wp + REAL( pb==0. , wp) )
-   !   !      
+   !   !
    !END FUNCTION pos_or_0
 
-   
+
    SUBROUTINE cap_1md_1g( pA, p1md )
       !!---------------------------------------------------------------------
       !!                   ***  ROUTINE cap_1md  ***
@@ -134,18 +134,71 @@ CONTAINS
       INTEGER :: ji, jj
       !!-------------------------------------------------------------------------------------------
       !$acc data present( pAt, pAf, p1mdt, p1mdf, pSt, pSf )
-      !!
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
+            !            
+            p1mdt(ji,jj) = MERGE( p1mdt(ji,jj) , 1._wp , pAt(ji,jj)>=rAmin_dmg )
+            pSt(ji,jj,1) = MERGE( pSt(ji,jj,1) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
+            pSt(ji,jj,2) = MERGE( pSt(ji,jj,2) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
+            pSf(ji,jj,3) = MERGE( pSf(ji,jj,3) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
             !
-            IF( pAt(ji,jj) < rAmin_dmg ) THEN
+            p1mdf(ji,jj) = MERGE( p1mdf(ji,jj) , 1._wp , pAf(ji,jj)>=rAmin_dmg )
+            pSf(ji,jj,1) = MERGE( pSf(ji,jj,1) , 0._wp , pAf(ji,jj)>=rAmin_sgmh )
+            pSf(ji,jj,2) = MERGE( pSf(ji,jj,2) , 0._wp , pAf(ji,jj)>=rAmin_sgmh )
+            pSt(ji,jj,3) = MERGE( pSt(ji,jj,3) , 0._wp , pAf(ji,jj)>=rAmin_sgmh )
+            !
+         END DO
+      END DO
+      !$acc end parallel loop
+      !$acc end data
+   END SUBROUTINE clean_small_a_all
+
+
+
+   SUBROUTINE lbc_sig_small_a( pAt, pAf,  p1mdt, p1mdf,  pSt, pSf )
+      !!-------------------------------------------------------------------------------------------
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pAt, pAf     ! ice concentration @T and @F
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf ! ice damage @T and @F
+      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pSt          ! T-centric Sigmas [Pa]
+      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pSf          ! F-centric Sigmas [Pa]
+      !!-------------------------------------------------------------------------------------------
+      INTEGER :: ji, jj
+      !!-------------------------------------------------------------------------------------------
+      !$acc data present( pAt, pAf, p1mdt, p1mdf, pSt, pSf )
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-(nn_hls-1), Nje0+(nn_hls-1)
+         DO ji=Nis0-(nn_hls-1), Nie0+(nn_hls-1)
+            !
+            IF( pAt(ji,jj) <= rAmin_dmg ) THEN
                p1mdt(ji,jj) = 1._wp ! => damage=0 where almost no sea-ice left...
-               pSt(ji,jj,1) = 0._wp
-               pSt(ji,jj,2) = 0._wp
-               pSf(ji,jj,3) = 0._wp
+               !
+               ! Only 1 point of low sea-ice content:
+               IF( (pAt(ji-1,jj)>rAmin_dmg).AND.(pAt(ji+1,jj)>rAmin_dmg) ) THEN
+                  !! => use "-" the mean of surrounding points...
+                  pSt(ji,jj,1) = -0.5_wp*( pSt(ji-1,jj,1) + pSt(ji-1,jj,1) )
+                  pSt(ji,jj,2) = -0.5_wp*( pSt(ji-1,jj,2) + pSt(ji-1,jj,2) )
+                  pSf(ji,jj,3) = -0.5_wp*( pSf(ji-1,jj,3) + pSf(ji-1,jj,3) )
+               ENDIF
+               ! Low sea-ice content when going eastward:
+               IF( (pAt(ji-1,jj)>rAmin_dmg).AND.(pAt(ji+1,jj)<=rAmin_dmg) ) THEN
+                  !! => Sigma forced to 0 at `i-1 U-point` thanks to:
+                  pSt(ji,jj,1) = -pSt(ji-1,jj,1)
+                  pSt(ji,jj,2) = -pSt(ji-1,jj,2)
+                  pSf(ji,jj,3) = -pSf(ji-1,jj,3)
+               ENDIF
+               ! Low sea-ice content when going westward:
+               IF( (pAt(ji+1,jj)>rAmin_dmg).AND.(pAt(ji-1,jj)<=rAmin_dmg) ) THEN
+                  !! => Sigma forced to 0 at `i U-point` thanks to:
+                  pSt(ji,jj,1) = -pSt(ji+1,jj,1)
+                  pSt(ji,jj,2) = -pSt(ji+1,jj,2)
+                  pSf(ji,jj,3) = -pSf(ji+1,jj,3)
+               ENDIF
+
+
+               
             ENDIF
-            IF( pAf(ji,jj) < rAmin_dmg ) THEN
+            IF( pAf(ji,jj) <= rAmin_dmg ) THEN
                p1mdf(ji,jj) = 1._wp ! => damage=0 max where almost no sea-ice left...
                pSf(ji,jj,1) = 0._wp
                pSf(ji,jj,2) = 0._wp
@@ -155,10 +208,10 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
-
       !$acc end data
-   END SUBROUTINE clean_small_a_all
+   END SUBROUTINE lbc_sig_small_a
 
+   
 
 
 
@@ -481,10 +534,10 @@ CONTAINS
       REAL(wp) :: zs, zw
       INTEGER :: ji, jj
       !!-------------------------------------------------------------------------------------------
-      !
+      !$acc data present( pmsk, pX )
       zw = 0._wp
       !
-      !$acc parallel loop collapse(2) present( pmsk, pX )
+      !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
             !
@@ -495,8 +548,7 @@ CONTAINS
       END DO
       !$acc end parallel loop
       WRITE(*,'(" *** Mean val of ",a," at kt, kts =",i3.3,", ",i3.3," =>",f)') TRIM(cname), kt, kts, REAL(zw/zs,4)
-      !!
-      !!
+      !$acc end data
    END SUBROUTINE trace_mean_array_dbg
 
 

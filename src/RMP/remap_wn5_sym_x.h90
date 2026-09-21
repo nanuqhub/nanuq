@@ -1,5 +1,11 @@
-   SUBROUTINE rmp_wn5s_x( pmlbc, pe1p, pLW, pOW, pf, pfx, idebug )
+   SUBROUTINE rmp_wn5s_x( pmlbc, pe1p, pLW, pOW, pf, pfx )
       !!----------------------------------------------------------------------
+      ! Normally we should go for:
+      !*acc data present( pmlbc, pe1p, pLW, pOW, pf, pfx ) create( zStncl, zW, zIS, zAl, zF )
+      ! But weno remapping is called in initialization phase by `ice_var_agg()` when all arrays
+      ! are not entered yet in GPU... (hence the existence of `ice_var_agg_gpu()` as well...)
+      ! So:
+      !%acc data present( pmlbc, pe1p, pLW, pOW ) pcopyin( pf ) pcopyout( pfx ) create( zStncl, zW, zIS, zAl, zF )
       !!----------------------------------------------------------------------
       INTEGER(1), DIMENSION(jpi,jpj,nn_hls,4),            INTENT(in)  :: pmlbc ! masks for solid LBCs
       REAL(wp),   DIMENSION(jpi,jpj),                     INTENT(in)  :: pe1p ! `e1t` or `e1f` depending on the point
@@ -7,7 +13,6 @@
       REAL(wp),   DIMENSION(jpi,jpj,kp_wrmp+1),           INTENT(in)  :: pOW   ! array of optima weights for given grid point type
       REAL(wp),   DIMENSION(jpi,jpj),                     INTENT(in)  :: pf    ! field to estimate at i+1/2
       REAL(wp),   DIMENSION(jpi,jpj),                     INTENT(out) :: pfx
-      INTEGER,     OPTIONAL,                              INTENT(in)  :: idebug
       !!----------------------------------------------------------------------
       REAL(wp), DIMENSION(4) :: zStncl, zW, zIS, zAl
       REAL(wp), DIMENSION(6) :: zF
@@ -16,36 +21,23 @@
       REAL(wp) :: zmW, zmE, zmW1, zmW2, zmE1, zmE2, zmE3, zOL
       INTEGER  :: kpw
       INTEGER  :: ji, jj, jp, jf
-      !LOGICAL :: lbla
-      INTEGER :: idbg
       !!----------------------------------------------------------------------
-      idbg=0
-      IF(PRESENT(idebug)) idbg=idebug
-
-      ! Normally we should go for:
-      !*acc data present( pmlbc, pe1p, pLW, pOW, pf, pfx ) create( zStncl, zW, zIS, zAl, zF )
-      ! But weno remapping is called in initialization phase by `ice_var_agg()` when all arrays
-      ! are not entered yet in GPU... (hence the existence of `ice_var_agg_gpu()` as well...)
-      ! So:
-      !%acc data present( pmlbc, pe1p, pLW, pOW ) pcopyin( pf ) pcopyout( pfx ) create( zStncl, zW, zIS, zAl, zF )
-      !
       !$acc data present( pmlbc, pe1p, pLW, pOW, pf, pfx ) create( zStncl, zW, zIS, zAl, zF )
-      
+
       kpw = kp_wrmp    ! order of each of the `kp_wrmp+1` stencils used in the reconstruction
-      
+
       !$acc parallel loop collapse(2) private( zStncl, zW, zIS, zAl, zF )
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
-            
             ! Get the required elements of `pf` for relevant stencils
             ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #           include "remap_wn5_sym_x_stncl.h90"
 
             z1_h = 1._wp / pe1p(ji,jj)
             zrhm = pe1p(ji-1,jj) * z1_h
-            zrhp = pe1p(ji+1,jj) * z1_h                  
-            
+            zrhp = pe1p(ji+1,jj) * z1_h
+
             !! Smoothness indicator
             !$acc loop seq
             DO jp=1, kpw+1
@@ -73,7 +65,7 @@
                ! Compute the alphas => can we use this tau method in the sym context? #fixme
                ! ~~~~~~~~~~~~~~~~~~
                ztau5 = ABS( zIs(1) - zIs(kpw+1) )
-               
+
                zsumAl = 0._wp
                !$acc loop seq
                DO jp=1, kpw+1
@@ -81,7 +73,7 @@
                   zAl(jp) = za
                   zsumAl = zsumAl + za
                END DO
-               
+
                ! Compute the WENO weights
                ! ~~~~~~~~~~~~~~~~~~~~~~~~
                z1_S = 1._wp / MAX( zsumAl, epsi20 )
@@ -89,9 +81,9 @@
                DO jp=1, kpw+1
                   zW(jp) = zAl(jp) * z1_S
                END DO
-               
+
             ENDIF
-               
+
             ! Solution
             ! ~~~~~~~~
             ! centered about i-1/2==i_u-1 (when `ksgn<0`) or i+1/2==i_u (when `ksgn>0`):
@@ -106,7 +98,7 @@
          ENDDO !DO ji=Nis0, Nie0
       ENDDO !DO jj=Njs0, Nje0
       !$acc end parallel loop
-      
+
       !$acc end data
-      
+
    END SUBROUTINE rmp_wn5s_x

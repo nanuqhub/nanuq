@@ -59,7 +59,6 @@ MODULE ice
    !! a_i         |   a_i_1d    |    Ice concentration            |       |
    !! v_i         |      -      |    Ice volume per unit area     | m     |
    !! v_s         |      -      |    Snow volume per unit area    | m     |
-   !! sv_i        |      -      |    Sea ice salt content (3D)    | g/kg.m|
    !! szv_i       |      -      |    Sea ice salt content (4D)    | g/kg.m|
    !! oa_i        |      -      |    Sea ice areal age content    | s     |
    !! e_i         |             |    Ice enthalpy                 | J/m2  |
@@ -79,9 +78,8 @@ MODULE ice
    !! h_s         ! h_s_1d      |    Snow depth                   | m     |
    !! s_i         ! s_i_1d      |    Sea ice bulk salinity        | g/kg  |
    !! sz_i        ! sz_i_1d     |    Sea ice salinity profile     | g/kg  |
-   !! o_i         !      -      |    Sea ice Age                  | s     |
-   !! dmdt        !      -      |    1-Sea ice Damage @T            !       !
-   !! dmdf        !      -      |    1-Sea ice Damage @F            !       !
+   !! dmdt        !      -      |    1-Sea ice Damage @T          !       !
+   !! dmdf        !      -      |    1-Sea ice Damage @F          !       !
    !! t_i         ! t_i_1d      |    Sea ice temperature          | K     |
    !! t_s         ! t_s_1d      |    Snow temperature             | K     |
    !! t_su        ! t_su_1d     |    Sea ice surface temperature  | K     |
@@ -105,9 +103,6 @@ MODULE ice
    !! vt_i        |      -      |    Total ice vol. per unit area | m     |
    !! vt_s        |      -      |    Total snow vol. per unit ar. | m     |
    !! st_i        |      -      |    Total Sea ice salt content   | g/kg.m|
-   !! sm_i        |      -      |    Mean sea ice salinity        | g/kg  |
-   !! tm_i        |      -      |    Mean sea ice temperature     | K     |
-   !! tm_s        |      -      |    Mean snow    temperature     | K     |
    !! et_i        |      -      |    Total ice enthalpy           | J/m2  |
    !! et_s        |      -      |    Total snow enthalpy          | J/m2  |
    !! v_ibr       |      -      |    relative brine volume        | ???   |
@@ -122,6 +117,8 @@ MODULE ice
    !!----------------------------------------------------------------------
    !! * Share Module variables
    !!----------------------------------------------------------------------
+
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   xtmp            !: a temporary 2D array available on the GPU, for kitchen stuff...
 
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) :: weno_lw_t_x, weno_lw_t_y ! WENOX linear  weights for curvilinear T-grid
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   :: weno_ow_t_x, weno_ow_t_y ! WENOX optimal weights for curvilinear T-grid
@@ -138,72 +135,71 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   ht_i_new        !: ice collection thickness accreted in leads
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   fraz_frac       !: fraction of frazil ice accreted at the ice bottom
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   strength        !: ice strength
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   stress1_i, stress2_i, stress12_i   !: 1st, 2nd & diagonal stress tensor element
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   delta_i         !: ice rheology elta factor (Flato & Hibler 95) [s-1]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   divu_i          !: Divergence of the velocity field             [s-1]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   shear_i         !: Shear of the velocity field                  [s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   rdg_conv
    !
+   LOGICAL , PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   ll_ice_present  !: only for thermo, boolean mask for presence of sea-ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   t_bo            !: Sea-Ice bottom temperature [Kelvin]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qlead           !: heat balance of the lead (or of the open ocean)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qsb_ice_bot     !: net downward heat flux from the ice to the ocean
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   fhld            !: heat flux from the lead used for bottom melting
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw         !: mass flux from snow-ocean mass exchange             [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sni     !: mass flux from snow ice growth component of wfx_snw [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sum     !: mass flux from surface melt component of wfx_snw    [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_pnd         !: mass flux from melt pond-ocean mass exchange        [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_spr         !: mass flux from snow precipitation on ice            [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sub         !: mass flux from sublimation of snow/ice              [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sub     !: mass flux from snow sublimation                     [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice_sub     !: mass flux from ice sublimation                      [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw         !: mass flux from snow-ocean mass exchange             [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sni     !: mass flux from snow ice growth component of wfx_snw [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sum     !: mass flux from surface melt component of wfx_snw    [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_pnd         !: mass flux from melt pond-ocean mass exchange        [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_spr         !: mass flux from snow precipitation on ice            [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sub         !: mass flux from sublimation of snow/ice              [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sub     !: mass flux from snow sublimation                     [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice_sub     !: mass flux from ice sublimation                      [kg.m-2.s-1]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_dyn     !: mass flux from dynamical component of wfx_snw       [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_dyn     !: mass flux from dynamical component of wfx_snw       [kg.m-2.s-1]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice         !: mass flux from ice-ocean mass exchange                   [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sni         !: mass flux from snow ice growth component of wfx_ice      [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_opw         !: mass flux from lateral ice growth component of wfx_ice   [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bog         !: mass flux from bottom ice growth component of wfx_ice    [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_dyn         !: mass flux from dynamical ice growth component of wfx_ice [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bom         !: mass flux from bottom melt component of wfx_ice          [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sum         !: mass flux from surface melt component of wfx_ice         [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_lam         !: mass flux from lateral melt component of wfx_ice         [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_res         !: mass flux from residual component of wfx_ice             [kg.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_err_sub     !: mass flux error after sublimation                        [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice         !: mass flux from ice-ocean mass exchange                   [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sni         !: mass flux from snow ice growth component of wfx_ice      [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_opw         !: mass flux from lateral ice growth component of wfx_ice   [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bog         !: mass flux from bottom ice growth component of wfx_ice    [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_dyn         !: mass flux from dynamical ice growth component of wfx_ice [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bom         !: mass flux from bottom melt component of wfx_ice          [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sum         !: mass flux from surface melt component of wfx_ice         [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_lam         !: mass flux from lateral melt component of wfx_ice         [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_res         !: mass flux from residual component of wfx_ice             [kg.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_err_sub     !: mass flux error after sublimation                        [kg.m-2.s-1]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bog         !: salt flux due to ice bottom growth                   [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bom         !: salt flux due to ice bottom melt                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_lam         !: salt flux due to ice lateral melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sum         !: salt flux due to ice surface melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sni         !: salt flux due to snow-ice growth                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_opw         !: salt flux due to growth in open water                [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bri         !: salt flux due to brine rejection                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_dyn         !: salt flux due to porous ridged ice formation         [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_res         !: salt flux due to correction on ice thick. (residual) [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sub         !: salt flux due to ice sublimation                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bog         !: salt flux due to ice bottom growth                   [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bom         !: salt flux due to ice bottom melt                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_lam         !: salt flux due to ice lateral melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sum         !: salt flux due to ice surface melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sni         !: salt flux due to snow-ice growth                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_opw         !: salt flux due to growth in open water                [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bri         !: salt flux due to brine rejection                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_dyn         !: salt flux due to porous ridged ice formation         [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_res         !: salt flux due to correction on ice thick. (residual) [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sub         !: salt flux due to ice sublimation                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bog         !: total heat flux causing bottom ice growth           [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bom         !: total heat flux causing bottom ice melt             [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sum         !: total heat flux causing surface ice melt            [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_opw         !: total heat flux causing open water ice formation    [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dif         !: total heat flux causing Temp change in the ice      [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_snw         !: heat flux for snow melt                             [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_err_dif     !: heat flux remaining due to change in non-solar flux [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_atm_oi       !: heat flux at the interface atm-[oce+ice]            [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_oce_ai       !: heat flux at the interface oce-[atm+ice]            [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bog         !: total heat flux causing bottom ice growth           [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bom         !: total heat flux causing bottom ice melt             [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sum         !: total heat flux causing surface ice melt            [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_opw         !: total heat flux causing open water ice formation    [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dif         !: total heat flux causing Temp change in the ice      [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_snw         !: heat flux for snow melt                             [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_err_dif     !: heat flux remaining due to change in non-solar flux [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_atm_oi       !: heat flux at the interface atm-[oce+ice]            [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_oce_ai       !: heat flux at the interface oce-[atm+ice]            [W.m-2]
 
    ! heat flux associated with ice-atmosphere mass exchange
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sub         !: heat flux for sublimation            [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_spr         !: heat flux of the snow precipitation  [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sub         !: heat flux for sublimation            [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_spr         !: heat flux of the snow precipitation  [W.m-2]
 
    ! heat flux associated with ice-ocean mass exchange
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_thd         !: ice-ocean heat flux from thermo processes (icethd_dh) [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dyn         !: ice-ocean heat flux from ridging                      [W.m-2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_res         !: heat flux due to correction on ice thick. (residual)  [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_thd         !: ice-ocean heat flux from thermo processes (icethd_dh) [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dyn         !: ice-ocean heat flux from ridging                      [W.m-2]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_res         !: heat flux due to correction on ice thick. (residual)  [W.m-2]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qtr_ice_bot     !: transmitted solar radiation under ice
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t1_ice          !: temperature of the first layer          (ln_cndflx=T) [K]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   cnd_ice         !: effective conductivity of the 1st layer (ln_cndflx=T) [W.m-2.K-1]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qtr_ice_bot     !: transmitted solar radiation under ice
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t1_ice          !: temperature of the first layer          (ln_cndflx=T) [K]
+   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   cnd_ice         !: effective conductivity of the 1st layer (ln_cndflx=T) [W.m-2.K-1]
 
    !!----------------------------------------------------------------------
    !! * Ice global state variables
@@ -216,14 +212,12 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   h_s           !: Snow thickness                          (m)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   t_su          !: Sea-Ice Surface Temperature             (K)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   s_i           !: Sea-Ice Bulk salinity                   (g/kg)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   sv_i          !: Sea-Ice Bulk salinity * volume per area (g/kg.m)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   o_i           !: Sea-Ice Age                             (s)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   oa_i          !: Sea-Ice Age times ice area              (s)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ibr         !: brine volume
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   oa_i          !: Sea-Ice Age * ice area                  (s)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ibr         !: brine volume
 
    !! Variables summed over all categories, or associated to all the ice in a single grid cell
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   u_ice, v_ice  !: components of the ice velocity                          (m/s)
-   !#bbm:
+   !
    INTEGER(1), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v !: mask for presence of ice
    REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   uVice, vUice  !: components of the ice velocity in F-centric formalism   (m/s)
    REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   V_ts ! all the "time-splitting" sea-ice velocities u,v@U,V & u,v@V,U
@@ -231,7 +225,12 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   :: dmdt, dmdf    !: `1-d` 1 - ice damage / #bbm
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: SIGMAt !: T-centric vertically-integrated internal stress tensor => (s11@t, s22@t, s12@f) (N/m2*m)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: SIGMAf !: F-centric vertically-integrated internal stress tensor => (s11@f, s22@f, s12@t) (N/m2*m)
-   !#bbm.
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   :: SI1t, SI1f  !: first (normal) invarient of vertically-integrated internal stress tensor (N/m2*m)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   :: SI2t, SI2f  !: second (shear) invarient of vertically-integrated internal stress tensor (N/m2*m)
+   !
+   !!
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   rdgc          !: ridged-ice concentration tracer (-)
+   !!
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   vt_i , vt_s   !: ice and snow total volume per unit area                 (m)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   st_i          !: Total ice salinity content                              (g/kg.m)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   at_i          !: ice total fractional area (ice concentration)
@@ -240,17 +239,13 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   av_i          !: ice total fractional area @V (interpolated)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   ato_i         !: =1-at_i ; total open water fractional area
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   et_i , et_s   !: ice and snow total heat content                         (J/m2)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   tm_i          !: mean ice temperature over all categories                (K)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   tm_s          !: mean snw temperature over all categories                (K)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   vm_ibr        !: brine volume averaged over all categories
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   sm_i          !: mean sea ice salinity averaged over all categories      (g/kg)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   tm_su         !: mean surface temperature over all categories            (K)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_i          !: mean ice  thickness over all categories                 (m)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_s          !: mean snow thickness over all categories                 (m)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_i_f        !: mean ice  thickness @ F                                 (m)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   om_i          !: mean ice age over all categories                        (s)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   xht, xhf      !: mean ice  thickness @ T and @ F points                  (m)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   tau_icebfr    !: ice friction on ocean bottom (landfast param activated)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   icb_mask      !: mask of grounded icebergs if landfast [0-1]
+   INTEGER(1), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   icb_mask      !: mask of grounded icebergs if landfast [0-1]
+   !
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   taux_oi_u     !: x-component of basal water-ice stress as undergone by the ice @ U-points (N/m^2)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   tauy_oi_v     !: y-component of basal water-ice stress as undergone by the ice @ U-points (N/m^2)
 
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   t_s           !: Snow temperatures     [K]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   e_s           !: Snow enthalpy         [J/m2]
@@ -259,26 +254,26 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   sz_i          !: ice salinity          [g/kg]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   szv_i         !: ice salinity content  [g/kg]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_ip          !: melt pond concentration
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ip          !: melt pond volume per grid cell area      [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_ip_frac     !: melt pond fraction (a_ip/a_i)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_ip_eff      !: melt pond effective fraction (not covered up by lid) (a_ip/a_i)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   h_ip          !: melt pond depth                          [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_il          !: melt pond lid volume                     [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   h_il          !: melt pond lid thickness                  [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_ip          !: melt pond concentration
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ip          !: melt pond volume per grid cell area      [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_ip_frac     !: melt pond fraction (a_ip/a_i)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_ip_eff      !: melt pond effective fraction (not covered up by lid) (a_ip/a_i)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   h_ip          !: melt pond depth                          [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_il          !: melt pond lid volume                     [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   h_il          !: melt pond lid thickness                  [m]
 
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   at_ip         !: total melt pond concentration
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_ip         !: mean melt pond depth                     [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   vt_ip         !: total melt pond volume per gridcell area [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_il         !: mean melt pond lid depth                     [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   vt_il         !: total melt pond lid volume per gridcell area [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   at_ip         !: total melt pond concentration
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_ip         !: mean melt pond depth                     [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   vt_ip         !: total melt pond volume per gridcell area [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   hm_il         !: mean melt pond lid depth                     [m]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   vt_il         !: total melt pond lid volume per gridcell area [m]
 
    !!----------------------------------------------------------------------
    !! * Global variables at before time step
    !!----------------------------------------------------------------------
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_s_b, v_i_b, h_s_b, h_i_b !: snow and ice volumes/thickness
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ip_b, v_il_b             !: ponds and lids volumes
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_i_b, sv_i_b              !:
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ip_b, v_il_b             !: ponds and lids volumes
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_i_b                      !:
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   e_s_b                      !: snow heat content
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   e_i_b, szv_i_b             !: ice temperatures and salt
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   u_ice_b, v_ice_b           !: ice velocity
@@ -293,32 +288,32 @@ MODULE ice
    !!----------------------------------------------------------------------
    !! * Ice diagnostics
    !!----------------------------------------------------------------------
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_vi       !: transport of ice volume
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_vs       !: transport of snw volume
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_ei       !: transport of ice enthalpy [W/m2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_es       !: transport of snw enthalpy [W/m2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_sv       !: transport of salt content
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_vi       !: transport of ice volume
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_vs       !: transport of snw volume
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_ei       !: transport of ice enthalpy [W/m2]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_es       !: transport of snw enthalpy [W/m2]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_trp_sv       !: transport of salt content
    !
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_heat         !: snw/ice heat content variation   [W/m2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_sice         !: ice salt content variation   []
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_vice         !: ice volume variation   [m/s]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_vsnw         !: snw volume variation   [m/s]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_aice         !: ice conc.  variation   [s-1]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_vpnd         !: pond volume variation  [m/s]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_heat         !: snw/ice heat content variation   [W/m2]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_sice         !: ice salt content variation   []
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_vice         !: ice volume variation   [m/s]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_vsnw         !: snw volume variation   [m/s]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_aice         !: ice conc.  variation   [s-1]
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_vpnd         !: pond volume variation  [m/s]
    !
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_adv_mass     !: advection of mass (kg/m2/s)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_adv_salt     !: advection of salt (g/m2/s)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_adv_heat     !: advection of heat (W/m2)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_adv_mass     !: advection of mass (kg/m2/s)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_adv_salt     !: advection of salt (g/m2/s)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_adv_heat     !: advection of heat (W/m2)
    !
    !!----------------------------------------------------------------------
    !! * Ice conservation
    !!----------------------------------------------------------------------
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_v            !: conservation of ice volume
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_s            !: conservation of ice salt
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_t            !: conservation of ice heat
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_fv           !: conservation of ice volume
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_fs           !: conservation of ice salt
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_ft           !: conservation of ice heat
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_v            !: conservation of ice volume
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_s            !: conservation of ice salt
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_t            !: conservation of ice heat
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_fv           !: conservation of ice volume
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_fs           !: conservation of ice salt
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   diag_ft           !: conservation of ice heat
    !
    !!----------------------------------------------------------------------
    !! * Ice salinity checks in drainage and flushing
@@ -326,14 +321,13 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   zsneg_drain , zsneg_flush
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   zcfl_drain  , zcfl_flush
    !! * For convergence tests; ztice_cvgerr and ztice_cvgstp are allocated in icethd.F90 depending on whether ln_zdf_chkcvg is enabled
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   ztice_cvgerr, ztice_cvgstp
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   ztice_cvgerr, ztice_cvgstp
    !
    !!----------------------------------------------------------------------
    !! * SIMIP extra diagnostics
    !!----------------------------------------------------------------------
    ! Extra sea ice diagnostics to address the data request
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t_si            !: Temperature at Snow-ice interface (K)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   tm_si           !: mean temperature at the snow-ice interface (K)
+   !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t_si            !: Temperature at Snow-ice interface (K)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qcn_ice_bot     !: Bottom  conduction flux (W/m2)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qcn_ice_top     !: Surface conduction flux (W/m2)
    !
@@ -354,8 +348,18 @@ MODULE ice
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   ::   sudy_u, svdx_v  ! transports (u*dy, v*dx) for T-centric mesh (m^2/s)
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   ::   sudy_v, svdx_u  ! transports (u*dy, v*dx) for F-centric mesh (m^2/s)
 
+
+
+#if defined key_dbgvel
+   !! For debuggin purposes, we want to save the components of the divergence of the vertically-integrated internal stress tensors:
+   REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) :: divSx_t, divSy_t, divSx_f, divSy_f
+   REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) :: ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v  ! T-centric tensor
+   REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) :: ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u  ! F-centric tensor
+#endif
+
+
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -366,23 +370,24 @@ CONTAINS
       !!-----------------------------------------------------------------
       INTEGER :: ice_alloc
       !
-      INTEGER :: ierr(34), ii
+      INTEGER :: ierr(50), ii
       !!-----------------------------------------------------------------
       ierr(:) = 0
 
       ii = 1
-      ALLOCATE( ht_i_new (jpi,jpj) , fraz_frac (jpi,jpj) ,  &
-         &      strength (jpi,jpj) , stress1_i(jpi,jpj) , stress2_i(jpi,jpj) , stress12_i(jpi,jpj), &
-         &      delta_i  (jpi,jpj) , divu_i   (jpi,jpj) , shear_i  (jpi,jpj) , STAT=ierr(ii) )
-# if defined _OPENACC
+      ALLOCATE( ht_i_new(jpi,jpj) , fraz_frac(jpi,jpj) , strength(jpi,jpj),  &
+         &       delta_i(jpi,jpj) ,    divu_i(jpi,jpj) ,  shear_i(jpi,jpj) , STAT=ierr(ii) )
+      ht_i_new(:,:)=0._wp ; fraz_frac(:,:)=0._wp ; strength(:,:)=0._wp
+      delta_i(:,:)=0._wp ;    divu_i(:,:)=0._wp ;  shear_i(:,:)=0._wp
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 2D arrays to memory'
-      PRINT *, '            => ht_i_new, fraz_frac, strength, stress1_i, stress2_i, stress12_i, delta_i, divu_i, shear_i'
-      !$acc enter data copyin( ht_i_new, fraz_frac, strength, stress1_i, stress2_i, stress12_i, delta_i, divu_i, shear_i  )
-# endif
+      PRINT *, '            => ht_i_new, fraz_frac, strength, delta_i, divu_i, shear_i'
+      !$acc enter data copyin( ht_i_new, fraz_frac, strength, delta_i, divu_i, shear_i  )
+#endif
 
       !LOLOfixme: make it inside a `ln_icethd` flag here?
       ii = ii + 1
-      ALLOCATE( t_bo       (jpi,jpj) , wfx_snw_sni(jpi,jpj) ,                                                &
+      ALLOCATE( ll_ice_present(jpi,jpj), t_bo     (jpi,jpj) , wfx_snw_sni(jpi,jpj) , &
          &      wfx_snw    (jpi,jpj) , wfx_snw_dyn(jpi,jpj) , wfx_snw_sum(jpi,jpj) , wfx_snw_sub(jpi,jpj) ,  &
          &      wfx_ice    (jpi,jpj) , wfx_sub    (jpi,jpj) , wfx_ice_sub(jpi,jpj) , wfx_lam    (jpi,jpj) ,  &
          &      wfx_pnd    (jpi,jpj) ,                                                                       &
@@ -397,6 +402,7 @@ CONTAINS
          &      hfx_opw    (jpi,jpj) , hfx_thd   (jpi,jpj) , hfx_dyn(jpi,jpj) , hfx_spr(jpi,jpj) ,     &
          &      hfx_err_dif(jpi,jpj) , wfx_err_sub(jpi,jpj)                   , STAT=ierr(ii) )
 
+      ll_ice_present(:,:) = .false.
       t_bo(:,:)=0._wp ; wfx_snw_sni(:,:)=0._wp
       wfx_snw(:,:)=0._wp ; wfx_snw_dyn(:,:)=0._wp ; wfx_snw_sum(:,:)=0._wp ; wfx_snw_sub(:,:)=0._wp
       wfx_ice(:,:)=0._wp ; wfx_sub(:,:)=0._wp ; wfx_ice_sub(:,:)=0._wp ; wfx_lam(:,:)=0._wp
@@ -413,10 +419,10 @@ CONTAINS
       hfx_err_dif(:,:)=0._wp ; wfx_err_sub(:,:)=0._wp
 
 
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 2D thermo-only arrays to memory'
-      PRINT *, '            => t_bo, wfx_snw_sni, wfx_snw, wfx_snw_dyn, wfx_snw_sum, wfx_snw_sub, wfx_ice, wfx_sub, wfx_ice_sub'
-      !$acc enter data copyin( t_bo, wfx_snw_sni, wfx_snw, wfx_snw_dyn, wfx_snw_sum, wfx_snw_sub, wfx_ice, wfx_sub, wfx_ice_sub )
+      PRINT *, '            => ll_ice_present, t_bo, wfx_snw_sni, wfx_snw, wfx_snw_dyn, wfx_snw_sum, wfx_snw_sub, wfx_ice, wfx_sub, wfx_ice_sub'
+      !$acc enter data copyin( ll_ice_present, t_bo, wfx_snw_sni, wfx_snw, wfx_snw_dyn, wfx_snw_sum, wfx_snw_sub, wfx_ice, wfx_sub, wfx_ice_sub )
       PRINT *, '            => wfx_lam, wfx_pnd, wfx_bog, wfx_dyn, wfx_bom, wfx_sum, wfx_res, wfx_sni, wfx_opw, wfx_spr'
       !$acc enter data copyin( wfx_lam, wfx_pnd, wfx_bog, wfx_dyn, wfx_bom, wfx_sum, wfx_res, wfx_sni, wfx_opw, wfx_spr )
       PRINT *, '            => qsb_ice_bot, qlead, sfx_res, sfx_bri, sfx_dyn, sfx_sub, sfx_lam, sfx_bog, sfx_bom, sfx_sum'
@@ -425,7 +431,7 @@ CONTAINS
       !$acc enter data copyin( sfx_sni, sfx_opw, hfx_res, hfx_snw, hfx_sub, qt_atm_oi, qt_oce_ai, fhld, hfx_sum, hfx_bom )
       PRINT *, '            => hfx_bog, hfx_dif, hfx_opw, hfx_thd, hfx_dyn, hfx_spr, hfx_err_dif, wfx_err_sub'
       !$acc enter data copyin( hfx_bog, hfx_dif, hfx_opw, hfx_thd, hfx_dyn, hfx_spr, hfx_err_dif, wfx_err_sub )
-# endif
+#endif
       !LOLOfixme.
 
       ! * Ice global state variables
@@ -433,74 +439,93 @@ CONTAINS
       ALLOCATE( qtr_ice_bot(jpi,jpj,jpl) , cnd_ice(jpi,jpj,jpl) , t1_ice(jpi,jpj,jpl) ,  &
          &      h_i        (jpi,jpj,jpl) , a_i    (jpi,jpj,jpl) , v_i   (jpi,jpj,jpl) ,  &
          &      v_s        (jpi,jpj,jpl) , h_s    (jpi,jpj,jpl) , t_su  (jpi,jpj,jpl) ,  &
-         &      s_i        (jpi,jpj,jpl) , sv_i   (jpi,jpj,jpl) , o_i   (jpi,jpj,jpl) ,  &
-         &      oa_i       (jpi,jpj,jpl) , v_ibr   (jpi,jpj,jpl) , STAT=ierr(ii) )
-# if defined _OPENACC
+         &      s_i        (jpi,jpj,jpl) , oa_i   (jpi,jpj,jpl) ,   STAT=ierr(ii) )
+      ! v_ibr(jpi,jpj,jpl)
+      qtr_ice_bot(:,:,:)=0._wp ; cnd_ice(:,:,:)=0._wp ; t1_ice(:,:,:)=0._wp
+      h_i        (:,:,:)=0._wp ; a_i    (:,:,:)=0._wp ; v_i   (:,:,:)=0._wp
+      v_s        (:,:,:)=0._wp ; h_s    (:,:,:)=0._wp ; t_su  (:,:,:)=0._wp
+      s_i        (:,:,:)=0._wp ; oa_i   (:,:,:)=0._wp ; !v_ibr   (:,:,:)=0._wp
+      !
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 3D arrays to memory'
-      PRINT *, '            => qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, sv_i, o_i, oa_i'
-      !$acc enter data copyin( qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, sv_i, o_i, oa_i )
+      PRINT *, '            => qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i'
+      !$acc enter data copyin( qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i )
       !!   --> ignored for now: v_ibr
-# endif
+#endif
 
       ii = ii + 1
       ALLOCATE( u_ice(jpi,jpj) , v_ice(jpi,jpj) , uVice(jpi,jpj), vUice(jpi,jpj), SIGMAt(jpi,jpj,3), &
+         &      SI1t(jpi,jpj)  , SI2t(jpi,jpj)  , &
          &      vt_i (jpi,jpj) , vt_s (jpi,jpj) , st_i(jpi,jpj) , at_i(jpi,jpj) , ato_i(jpi,jpj) ,   &
-         &      et_i (jpi,jpj) , et_s (jpi,jpj) , tm_i(jpi,jpj) , tm_s(jpi,jpj) ,  &
-         &      sm_i (jpi,jpj) , tm_su(jpi,jpj) , hm_i(jpi,jpj) , hm_s(jpi,jpj) ,  &
-         &      om_i (jpi,jpj) , vm_ibr(jpi,jpj) , tau_icebfr(jpi,jpj), icb_mask(jpi,jpj), &
+         &      et_i (jpi,jpj) , et_s (jpi,jpj) , tm_su(jpi,jpj) ,   &  !tm_si(jpi,jpj) ,
+         &      tau_icebfr(jpi,jpj), icb_mask(jpi,jpj), &
+         &      taux_oi_u(jpi,jpj) , tauy_oi_v(jpi,jpj) , &
          &      af_i(jpi,jpj),  au_i(jpi,jpj),  av_i(jpi,jpj),   STAT=ierr(ii) )
-# if defined _OPENACC
+      !
+      u_ice(:,:)=0._wp ; v_ice(:,:)=0._wp ; uVice(:,:)=0._wp ; vUice(:,:)=0._wp ; SIGMAt(:,:,:)=0._wp
+      SI1t(:,:)=0._wp  ;  SI2t(:,:)=0._wp
+      vt_i (:,:)=0._wp ; vt_s (:,:)=0._wp ; st_i(:,:)=0._wp ; at_i(:,:)=0._wp ; ato_i(:,:)=0._wp
+      et_i (:,:)=0._wp ; et_s (:,:)=0._wp
+      tm_su(:,:)=0._wp ; !tm_si(:,:)=0._wp
+      tau_icebfr(:,:)=0._wp ; icb_mask(:,:)=0
+      taux_oi_u(:,:)=0._wp ; tauy_oi_v(:,:)=0._wp
+      af_i(:,:)=0._wp ;  au_i(:,:)=0._wp ;  av_i(:,:)=0._wp
+      !
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 2D arrays to memory'
-      PRINT *, '            => u_ice, v_ice, uVice, vUice, SIGMAt'
-      !$acc enter data copyin( u_ice, v_ice, uVice, vUice, SIGMAt )
-      PRINT *, '            => vt_i, vt_s, st_i, at_i, ato_i, et_i, et_s, tm_i, tm_s, sm_i, tm_su, hm_i, hm_s, om_i, af_i, au_i, av_i'
-      !$acc enter data copyin( vt_i, vt_s, st_i, at_i, ato_i, et_i, et_s, tm_i, tm_s, sm_i, tm_su, hm_i, hm_s, om_i, af_i, au_i, av_i )
+      PRINT *, '            => u_ice, v_ice, uVice, vUice, SIGMAt, vt_i, vt_s, st_i, at_i, ato_i'
+      !$acc enter data copyin( u_ice, v_ice, uVice, vUice, SIGMAt, vt_i, vt_s, st_i, at_i, ato_i )
+      PRINT *, '            => SI1t, SI2t'
+      !$acc enter data copyin( SI1t, SI2t )
+      PRINT *, '            => et_i, et_s, tm_su, taux_oi_u, tauy_oi_v, af_i, au_i, av_i'
+      !$acc enter data copyin( et_i, et_s, tm_su, taux_oi_u, tauy_oi_v, af_i, au_i, av_i )
       !! --> ignored for now: vm_ibr, tau_icebfr, icb_mask
-# endif
+#endif
 
       ii = ii + 1
       ALLOCATE( t_s(jpi,jpj,nlay_s,jpl) , e_s(jpi,jpj,nlay_s,jpl) , STAT=ierr(ii) )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 4D snow arrays to memory'
       PRINT *, '            => t_s, e_s'
       !$acc enter data copyin( t_s, e_s )
-# endif
+#endif
 
       ii = ii + 1
       ALLOCATE( t_i(jpi,jpj,nlay_i,jpl) , e_i(jpi,jpj,nlay_i,jpl) , szv_i(jpi,jpj,nlay_i,jpl) , sz_i(jpi,jpj,nlay_i,jpl) , STAT=ierr(ii) )
-# if defined _OPENACC
+      t_i(:,:,:,:)=0._wp ; e_i(:,:,:,:)=0._wp ; szv_i(:,:,:,:)=0._wp ; sz_i(:,:,:,:)=0._wp
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 4D ice arrays to memory'
       PRINT *, '            => t_i, e_i, szv_i, sz_i'
       !$acc enter data copyin( t_i, e_i, szv_i, sz_i )
-# endif
+#endif
 
-      ii = ii + 1
-      ALLOCATE( a_ip(jpi,jpj,jpl) , v_ip(jpi,jpj,jpl) , a_ip_frac(jpi,jpj,jpl) , h_ip(jpi,jpj,jpl),  &
-         &      v_il(jpi,jpj,jpl) , h_il(jpi,jpj,jpl) , a_ip_eff (jpi,jpj,jpl) , STAT = ierr(ii) )
-
-      ii = ii + 1
-      ALLOCATE( at_ip(jpi,jpj) , hm_ip(jpi,jpj) , vt_ip(jpi,jpj) , hm_il(jpi,jpj) , vt_il(jpi,jpj) , STAT = ierr(ii) )
+      !ii = ii + 1
+      !ALLOCATE( a_ip(jpi,jpj,jpl) , v_ip(jpi,jpj,jpl) , a_ip_frac(jpi,jpj,jpl) , h_ip(jpi,jpj,jpl),  &
+      !   &      v_il(jpi,jpj,jpl) , h_il(jpi,jpj,jpl) , a_ip_eff (jpi,jpj,jpl), v_il_b(jpi,jpj,jpl), STAT = ierr(ii) )
+      !a_ip(:,:,:)=0._wp ; v_ip(:,:,:)=0._wp ; a_ip_frac(:,:,:)=0._wp ; h_ip(:,:,:)=0._wp
+      !v_il(:,:,:)=0._wp ; h_il(:,:,:)=0._wp ; a_ip_eff (:,:,:)=0._wp
+      !ii = ii + 1
+      !ALLOCATE( at_ip(jpi,jpj) , hm_ip(jpi,jpj) , vt_ip(jpi,jpj) , hm_il(jpi,jpj) , vt_il(jpi,jpj) , v_ip_b(jpi,jpj,jpl) , STAT = ierr(ii) )
 
       ! * Old values of global variables
       ii = ii + 1
       ALLOCATE( v_s_b (jpi,jpj,jpl) , v_i_b (jpi,jpj,jpl) , h_s_b(jpi,jpj,jpl)        , h_i_b(jpi,jpj,jpl),         &
-         &      v_ip_b(jpi,jpj,jpl) , v_il_b(jpi,jpj,jpl) , szv_i_b (jpi,jpj,nlay_i,jpl),                           &
-         &      a_i_b (jpi,jpj,jpl) , sv_i_b(jpi,jpj,jpl) , e_i_b(jpi,jpj,nlay_i,jpl) , e_s_b(jpi,jpj,nlay_s,jpl) , &
+         &      szv_i_b (jpi,jpj,nlay_i,jpl),                           &
+         &      a_i_b (jpi,jpj,jpl) , e_i_b(jpi,jpj,nlay_i,jpl) , e_s_b(jpi,jpj,nlay_s,jpl) , &
          &      STAT=ierr(ii) )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 3D/4D arrays to memory'
-      PRINT *, '            => v_s_b, v_i_b, h_s_b, h_i_b, szv_i_b, a_i_b, sv_i_b, e_i_b, e_s_b'
-      !$acc enter data copyin( v_s_b, v_i_b, h_s_b, h_i_b, szv_i_b, a_i_b, sv_i_b, e_i_b, e_s_b )
-      !!   --> ignored for now: v_ip_b, v_il_b
-# endif
+      PRINT *, '            => v_s_b, v_i_b, h_s_b, h_i_b, szv_i_b, a_i_b, e_i_b, e_s_b'
+      !$acc enter data copyin( v_s_b, v_i_b, h_s_b, h_i_b, szv_i_b, a_i_b, e_i_b, e_s_b )
+#endif
 
       ii = ii + 1
       ALLOCATE( u_ice_b(jpi,jpj) , v_ice_b(jpi,jpj) , at_i_b(jpi,jpj) , STAT=ierr(ii) )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 2D arrays to memory'
       PRINT *, '            => u_ice_b, v_ice_b, at_i_b'
       !$acc enter data copyin( u_ice_b, v_ice_b, at_i_b )
-# endif
+#endif
 
 
       ! * Ice thickness distribution variables
@@ -508,46 +533,64 @@ CONTAINS
       ALLOCATE( hi_max(0:jpl), hi_mean(jpl),  STAT=ierr(ii) )
 
       ! * Ice diagnostics
-      ii = ii + 1
-      ALLOCATE( diag_trp_vi(jpi,jpj) , diag_trp_vs (jpi,jpj) , diag_trp_ei(jpi,jpj),                      &
-         &      diag_trp_es(jpi,jpj) , diag_trp_sv (jpi,jpj) , diag_heat  (jpi,jpj),                      &
-         &      diag_sice  (jpi,jpj) , diag_vice   (jpi,jpj) , diag_vsnw  (jpi,jpj), diag_aice(jpi,jpj), diag_vpnd(jpi,jpj),  &
-         &      diag_adv_mass(jpi,jpj), diag_adv_salt(jpi,jpj), diag_adv_heat(jpi,jpj), STAT=ierr(ii) )
+      !ii = ii + 1
+      !ALLOCATE( diag_trp_vi(jpi,jpj) , diag_trp_vs (jpi,jpj) , diag_trp_ei(jpi,jpj),                      &
+      !   &      diag_trp_es(jpi,jpj) , diag_trp_sv (jpi,jpj) , diag_heat  (jpi,jpj),                      &
+      !   &      diag_sice  (jpi,jpj) , diag_vice   (jpi,jpj) , diag_vsnw  (jpi,jpj), diag_aice(jpi,jpj), diag_vpnd(jpi,jpj),  &
+      !   &      diag_adv_mass(jpi,jpj), diag_adv_salt(jpi,jpj), diag_adv_heat(jpi,jpj), STAT=ierr(ii) )
 
       ! * Ice conservation
-      ii = ii + 1
-      ALLOCATE( diag_v (jpi,jpj) , diag_s (jpi,jpj) , diag_t (jpi,jpj),   &
-         &      diag_fv(jpi,jpj) , diag_fs(jpi,jpj) , diag_ft(jpi,jpj), STAT=ierr(ii) )
-
-      ! * SIMIP diagnostics
-      ii = ii + 1
-      ALLOCATE( t_si(jpi,jpj,jpl) , tm_si(jpi,jpj) , qcn_ice_bot(jpi,jpj,jpl) , qcn_ice_top(jpi,jpj,jpl) , STAT = ierr(ii) )
-      tm_si(:,:) = 0._wp
-# if defined _OPENACC
-      PRINT *, ' * info GPU: ice_alloc() => adding arrays to memory'
-      PRINT *, '            => t_si, tm_si, qcn_ice_bot, qcn_ice_top'
-      !$acc enter data copyin( t_si, tm_si, qcn_ice_bot, qcn_ice_top )
-# endif
+      !ii = ii + 1
+      !ALLOCATE( diag_v (jpi,jpj) , diag_s (jpi,jpj) , diag_t (jpi,jpj),   &
+      !   &      diag_fv(jpi,jpj) , diag_fs(jpi,jpj) , diag_ft(jpi,jpj), STAT=ierr(ii) )
 
       ii = ii + 1
-      ALLOCATE( kmsk_ice_t(jpi,jpj), kmsk_ice_f(jpi,jpj), kmsk_ice_u(jpi,jpj), kmsk_ice_v(jpi,jpj), &
-         &           V_oce(jpi,jpj,4), hm_i_f(jpi,jpj),  STAT = ierr(ii) ) ! Uu_oce, Vv_oce, Uv_oce & Vu_oce
-# if defined _OPENACC
+      ALLOCATE( qcn_ice_bot(jpi,jpj,jpl) , qcn_ice_top(jpi,jpj,jpl) , STAT = ierr(ii) )  ! t_si(jpi,jpj,jpl) ,
+      !t_si(:,:,:) = 0._wp
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding arrays to memory'
-      PRINT *, '            => kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v, V_oce, hm_i_f'
-      !$acc enter data copyin( kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v, V_oce, hm_i_f )
-# endif
+      PRINT *, '            => qcn_ice_bot, qcn_ice_top'
+      !$acc enter data copyin( qcn_ice_bot, qcn_ice_top )
+#endif
+
+      ii = ii + 1
+      ALLOCATE( xtmp(jpi,jpj), kmsk_ice_t(jpi,jpj), kmsk_ice_f(jpi,jpj), kmsk_ice_u(jpi,jpj), kmsk_ice_v(jpi,jpj), &
+         &           V_oce(jpi,jpj,4), xht(jpi,jpj), xhf(jpi,jpj),  STAT = ierr(ii) ) ! Uu_oce, Vv_oce, Uv_oce & Vu_oce
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: ice_alloc() => adding arrays to memory'
+      PRINT *, '            => xtmp, kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v, V_oce, xht, xhf'
+      !$acc enter data copyin( xtmp, kmsk_ice_t, kmsk_ice_f, kmsk_ice_u, kmsk_ice_v, V_oce, xht, xhf )
+#endif
 
       ! * damage tracers, and components of internal stress tensor at both T- and F-points:
       IF( ln_damage ) THEN
          ii = ii + 1
-         ALLOCATE( V_ts(jpi,jpj,4), dmdt(jpi,jpj), dmdf(jpi,jpj), SIGMAf(jpi,jpj,3),    STAT = ierr(ii) )
-# if defined _OPENACC
+         ALLOCATE(   V_ts(jpi,jpj,4), dmdt(jpi,jpj), dmdf(jpi,jpj), SIGMAf(jpi,jpj,3),   &
+            &        SI1f(jpi,jpj)  , SI2f(jpi,jpj)  , &
+            &      sudy_v(jpi,jpj), svdx_u(jpi,jpj),       STAT = ierr(ii) )
+         V_ts(:,:,:)= 0._wp ; dmdt(:,:)=0._wp ;  dmdf(:,:)=0._wp ;  SIGMAf(:,:,:)=0._wp
+         SI1f(:,:)=0._wp  ;  SI2f(:,:)=0._wp
+         sudy_v(:,:)=0._wp ;  svdx_u(:,:)=0._wp
+#if defined _OPENACC || defined _OPENMP
          PRINT *, ' * info GPU: ice_alloc() => adding brittle-reology-specific 2D arrays to memory'
-         PRINT *, '            => dmdt, dmdf, SIGMAf, V_ts'
-         !$acc enter data copyin( dmdt, dmdf, SIGMAf, V_ts )
-# endif
+         PRINT *, '             => dmdt, dmdf, SIGMAf, V_ts, sudy_v, svdx_u'
+         !$acc enter data copyin( dmdt, dmdf, SIGMAf, V_ts, sudy_v, svdx_u )
+         PRINT *, '            => SI1f, SI2f'
+         !$acc enter data copyin( SI1f, SI2f )         
+#endif
       END IF
+
+      ! * "ridged-ice" fraction tracer stuff:
+      !IF( ln_rdgtrc ) THEN
+      ii = ii + 1
+      ALLOCATE( rdgc(jpi,jpj) )
+      rdgc(:,:) = 0._wp
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: ice_alloc() => adding ridged-ice concentration" tracer 2D array to memory'
+      PRINT *, '            => rdgc'
+      !$acc enter data copyin( rdgc )
+#endif
+      !END IF
 
       !LOLOfixme: make it inside a `ln_icethd` flag here?
       ii = ii + 1
@@ -556,32 +599,44 @@ CONTAINS
          &      dh_i_sub(jpi,jpj), dh_i_bog(jpi,jpj), dh_snowice(jpi,jpj), &
          &      eh_i_old(jpi,jpj,0:nlay_i+1), h_i_old(jpi,jpj,0:nlay_i+1), &
          &      dh_i_sum_2d(jpi,jpj,jpl), dh_s_sum_2d(jpi,jpj,jpl),  STAT = ierr(ii) )
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding thermo-only arrays to memory'
       PRINT *, '            => s_i_new, dh_i_itm, dh_s_tot, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, eh_i_old, h_i_old, dh_i_sum_2d, dh_s_sum_2d'
       !$acc enter data copyin( s_i_new, dh_i_itm, dh_s_tot, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, eh_i_old, h_i_old, dh_i_sum_2d, dh_s_sum_2d )
-# endif
+#endif
       !LOLO.
 
       ii = ii + 1
-      ALLOCATE( sudy_u(jpi,jpj), svdx_v(jpi,jpj),   STAT = ierr(2) )
+      ALLOCATE( sudy_u(jpi,jpj), svdx_v(jpi,jpj),   STAT = ierr(ii) )
       sudy_u(:,:) = 0._wp ;  svdx_v(:,:) = 0._wp
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding advection transport arrays'
       PRINT *, '            => sudy_u, svdx_v'
       !$acc enter data copyin( sudy_u, svdx_v )
-# endif
+#endif
 
-      IF( ln_damage ) THEN
-         ii = ii + 1
-         ALLOCATE( sudy_v(jpi,jpj), svdx_u(jpi,jpj),   STAT = ierr(2) )
-         sudy_v(:,:) = 0._wp ;  svdx_u(:,:) = 0._wp
-# if defined _OPENACC
-         PRINT *, ' * info GPU: ice_alloc() => adding advection transport arrays'
-         PRINT *, '            => sudy_v, svdx_u'
-         !$acc enter data copyin( sudy_v, svdx_u )
-# endif
-      ENDIF
+
+      !! ARRAYS for debugging only:
+      !! **************************
+#if defined key_dbgvel
+      ii = ii + 1
+      ALLOCATE( divSx_t(jpi,jpj), divSy_t(jpi,jpj), divSx_f(jpi,jpj), divSy_f(jpi,jpj), &
+         &      ds11t_dx_u(jpi,jpj), ds12f_dy_u(jpi,jpj), ds22t_dy_v(jpi,jpj), ds12f_dx_v(jpi,jpj), &
+         &      ds11f_dx_v(jpi,jpj), ds12t_dy_v(jpi,jpj), ds22f_dy_u(jpi,jpj), ds12t_dx_u(jpi,jpj), &
+         &      STAT = ierr(ii) )
+      divSx_t(:,:)=0._wp ;  divSy_t(:,:)=0._wp ;  divSx_f(:,:)=0._wp ;  divSy_f(:,:)=0._wp
+      ds11t_dx_u(:,:)=0._wp ; ds12f_dy_u(:,:)=0._wp ; ds22t_dy_v(:,:)=0._wp ; ds12f_dx_v(:,:)=0._wp
+      ds11f_dx_v(:,:)=0._wp ; ds12t_dy_v(:,:)=0._wp ; ds22f_dy_u(:,:)=0._wp ; ds12t_dx_u(:,:)=0._wp
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: ice_alloc() => adding debugging arrays of `div(sigma*h)`'
+      PRINT *, '            => divSx_t, divSy_t, divSx_f, divSy_f'
+      PRINT *, '            => ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v'
+      PRINT *, '            => ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u'
+      !$acc enter data copyin( divSx_t, divSy_t, divSx_f, divSy_f )
+      !$acc enter data copyin( ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v )
+      !$acc enter data copyin( ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u )
+#endif
+#endif
 
 
       ice_alloc = MAXVAL( ierr(:) )

@@ -14,7 +14,7 @@ MODULE remap_classic
    USE in_out_manager, ONLY: numout, lwp, numoni
 
    USE lbclnk         ! lateral boundary conditions (or mpp links)
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE lbclnk_gpu
 #endif
 
@@ -57,6 +57,8 @@ MODULE remap_classic
 
    PUBLIC do_Voce
 
+   PUBLIC do_rmpVecT2UV
+
    !!----------------------------------------------------------------------
 
 CONTAINS
@@ -76,8 +78,6 @@ CONTAINS
       !!
       rmpT2F_default(:,:) = 0._wp
       !!
-      !%acc data copyin( pxt, xmskt, xmskf, e1e2t, r1_e1e2f) create(rmpT2F_default)
-      !%acc parallel loop
       DO jj=Njs0-1, Nje0
          DO ji=Nis0-1, Nie0
             !!
@@ -109,8 +109,6 @@ CONTAINS
             !!
          END DO
       END DO
-      !%acc end parallel loop
-      !%acc end data
       !!
       IF(PRESENT(lbcl)) THEN
          IF( lbcl ) CALL lbc_lnk( 'rmpT2F_default@icedyn_rhg_bbm', rmpT2F_default, 'F', 1._wp )
@@ -134,10 +132,6 @@ CONTAINS
       !!
       rmpT2F_spcmsk(:,:) = 0._wp
       !!
-      PRINT *, 'LOLO: `rmpT2F_spcmsk`: Njs0-1, Nje0, Nis0-1, Nie0=',Njs0-1, Nje0, Nis0-1, Nie0
-
-      !%acc data copyin( pxt, pmt, pmf, e1e2t, r1_e1e2f) create(rmpT2F_spcmsk)
-      !%acc parallel loop
       DO jj=Njs0-1, Nje0
          DO ji=Nis0-1, Nie0
             !!
@@ -169,8 +163,6 @@ CONTAINS
             !!
          END DO
       END DO
-      !%acc end parallel loop
-      !%acc end data
       !!
       IF(PRESENT(lbcl)) THEN
          IF( lbcl ) CALL lbc_lnk( 'rmpT2F_spcmsk@icedyn_rhg_bbm', rmpT2F_spcmsk, 'F', 1._wp )
@@ -191,9 +183,7 @@ CONTAINS
       !
       km = MIN(nn_hls  ,kh)
       kp = MIN(nn_hls-1,kh)
-
-      !%acc data copyin( pxt, xmskt, xmskf, e1e2t, r1_e1e2f) create(rmpT2Fnm)
-      !%acc parallel loop
+      !
       DO jj=Njs0-km, Nje0+kp
          DO ji=Nis0-km, Nie0+kp
             !!
@@ -211,8 +201,6 @@ CONTAINS
             !!
          END DO
       END DO
-      !%acc end parallel loop
-      !%acc end data
       !!
    END FUNCTION rmpT2Fnm
 
@@ -230,8 +218,6 @@ CONTAINS
       km = MIN(nn_hls-1,kh)
       kp = MIN(nn_hls  ,kh)
       !
-      !%acc data copyin( pxt, xmskt, xmskf, e1e2t, r1_e1e2f) create(rmpF2Tnm)
-      !%acc parallel loop
       DO jj=Njs0-km, Nje0+kp
          DO ji=Nis0-km, Nie0+kp
             !!
@@ -249,8 +235,6 @@ CONTAINS
             !!
          END DO
       END DO
-      !%acc end parallel loop
-      !%acc end data
       !!
    END FUNCTION rmpF2Tnm
 
@@ -371,9 +355,7 @@ CONTAINS
       IF( PRESENT( lconserv ) ) lcnsrv = lconserv
       !!
       rmpF2T_default(:,:) = 0._wp
-
-      !%acc data copyin( pxf, xmskf, xmskt, e1e2f, r1_e1e2t) create(rmpF2T_default)
-      !%acc parallel loop
+      !
       DO jj=Njs0, Nje0+1
          DO ji=Nis0, Nie0+1
             !!
@@ -404,8 +386,6 @@ CONTAINS
             rmpF2T_default(ji,jj) = ( zf1 + zf2 + zf3 + zf4 ) * zfc / zs
          END DO
       END DO
-      !%acc end parallel loop
-      !%acc end data
       !!
       IF(PRESENT(lbcl)) THEN
          IF( lbcl ) CALL lbc_lnk( 'rmpF2T_default@icedyn_rhg_bbm', rmpF2T_default, 'T', 1._wp )
@@ -468,17 +448,19 @@ CONTAINS
 
 
    SUBROUTINE do_rmpU2V( pxu,  pxv,  lbcl, lconserv )
+      !---------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pxu
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pxv
       LOGICAL,            OPTIONAL, INTENT(in) :: lbcl, lconserv
-      !!
+      !---------------------------------------------------------------
       INTEGER  :: ji, jj, i1, j1, i2, j2, i3, j3, i4, j4
       REAL(wp) :: zt1, zt2, zt3, zt4, zs, zfc, zm, zz
       LOGICAL  :: lcnsrv
-      !
+      !---------------------------------------------------------------
+      !$acc data present(pxu,pxv,umask,e1e2u,r1_e1e2v)
       IF( PRESENT( lconserv ) ) lcnsrv = lconserv
       !
-      !$acc parallel loop collapse(2) present(pxu, pxv, umask, e1e2u, r1_e1e2v)
+      !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0
          DO ji=Nis0, Nie0+1
             !!
@@ -513,8 +495,13 @@ CONTAINS
       !$acc end parallel loop
       !!
       IF(PRESENT(lbcl)) THEN
-         IF( lbcl ) CALL lbc_lnk( 'do_rmpU2V@icedyn_rhg_bbm', pxv, 'V', 1._wp )
+#if defined _OPENACC || defined _OPENMP
+         IF( lbcl ) CALL lbc_lnk_gpu( 'do_rmpU2V', pxv )
+#else
+         IF( lbcl ) CALL lbc_lnk( 'do_rmpU2V', pxv, 'V', 1._wp )
+#endif
       END IF
+      !$acc end data
       !!
    END SUBROUTINE do_rmpU2V
 
@@ -571,18 +558,20 @@ CONTAINS
    END FUNCTION rmpV2U_default
 
    SUBROUTINE do_rmpV2U( pxv, pxu,  lbcl, lconserv )
+      !---------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pxv
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pxu
       LOGICAL,            OPTIONAL, INTENT(in)  :: lbcl, lconserv
-      !!
+      !---------------------------------------------------------------
       INTEGER  :: ji, jj, i1, j1, i2, j2, i3, j3, i4, j4
       REAL(wp) :: zt1, zt2, zt3, zt4, zs, zfc, zm, zz
       LOGICAL  :: lcnsrv
-      !
+      !---------------------------------------------------------------
+      !$acc data present(pxv,pxu,vmask,e1e2v,r1_e1e2u)
       lcnsrv = .FALSE.
       IF( PRESENT( lconserv ) ) lcnsrv = lconserv
       !
-      !$acc parallel loop collapse(2) present(pxv, pxu, vmask, e1e2v, r1_e1e2u)
+      !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0+1
          DO ji=Nis0-1, Nie0
             !!
@@ -617,11 +606,16 @@ CONTAINS
       !$acc end parallel loop
       !
       IF(PRESENT(lbcl)) THEN
-         IF( lbcl ) CALL lbc_lnk( 'do_rmpV2U@icedyn_rhg_bbm', pxu, 'U', 1._wp )
+#if defined _OPENACC || defined _OPENMP
+         IF( lbcl ) CALL lbc_lnk_gpu( 'do_rmpV2U', pxu )
+#else
+         IF( lbcl ) CALL lbc_lnk( 'do_rmpV2U', pxu, 'U', 1._wp )
+#endif
       END IF
       !
+      !$acc end data
+      !
    END SUBROUTINE do_rmpV2U
-
 
 
 
@@ -706,21 +700,13 @@ CONTAINS
       !$acc data present( pum, pvm, pVoce, umask, vmask )
 
       !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+
             pVoce(ji,jj,1) = pum(ji,jj)
             pVoce(ji,jj,2) = pvm(ji,jj)
-            pVoce(ji,jj,3) = 0._wp
-            pVoce(ji,jj,4) = 0._wp
-         END DO
-      END DO
-      !$acc end parallel loop
 
-      !! U 2 V:
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0
-         DO ji=Nis0, Nie0+1
-            !!
+            !! U 2 V:
             i1 = ji   ; j1 = jj
             i2 = ji   ; j2 = jj+1
             i3 = ji-1 ; j3 = jj+1
@@ -739,16 +725,8 @@ CONTAINS
             zs  = MAX( zm , 1.E-12_wp )
             !!
             pVoce(ji,jj,3) = ( zt1 + zt2 + zt3 + zt4 ) * zfc / zs
-            !!
-         END DO
-      END DO
-      !$acc end parallel loop
 
-      !! V 2 U:
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0+1
-         DO ji=Nis0-1, Nie0
-            !!
+            !! V 2 U:
             i1 = ji+1 ; j1 = jj-1
             i2 = ji+1 ; j2 = jj
             i3 = ji   ; j3 = jj
@@ -767,16 +745,16 @@ CONTAINS
             zs  = MAX( zm , 1.E-12_wp )
             !!
             pVoce(ji,jj,4) = ( zt1 + zt2 + zt3 + zt4 ) * zfc / zs
-            !!
-         END DO
-      END DO
+
+         END DO !DO ji=Nis0, Nie0
+      END DO !DO jj=Njs0, Nje0
       !$acc end parallel loop
       !
-# if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       CALL lbc_lnk_gpu( 'do_Voce', pVoce )
-# else
+#else
       CALL lbc_lnk(     'do_Voce', pVoce(:,:,1),'U',-1._wp, pVoce(:,:,2),'V',-1._wp, pVoce(:,:,3),'V',-1._wp, pVoce(:,:,4),'U',-1._wp )
-# endif
+#endif
       !
       !$acc end data
       !
@@ -784,29 +762,23 @@ CONTAINS
 
 
 
-
-
-   SUBROUTINE do_rmpT2F( pxt, pxf,  lbcl, lconserv )
+   SUBROUTINE do_rmpT2F( pxt, pxf,  vmin, vmax, lbcl, lconserv )
       !!-------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pxt
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pxf
+      REAL(wp),           OPTIONAL, INTENT(in)  :: vmin, vmax
       LOGICAL,            OPTIONAL, INTENT(in)  :: lbcl, lconserv
       !!-------------------------------------------------------------------
       INTEGER  :: ji, jj, i1, j1, i2, j2, i3, j3, i4, j4
       REAL(wp) :: zt1, zt2, zt3, zt4, zs, zfc, zm, zz
       LOGICAL  :: lcnsrv
+      REAL(wp) :: zmin=-1.E20_wp, zmax=1.E20_wp
       !!-------------------------------------------------------------------
       !$acc data present( pxt, pxf, xmskt, xmskf, e1e2t, r1_e1e2f )
+      IF( PRESENT( vmin ) ) zmin = vmin
+      IF( PRESENT( vmax ) ) zmax = vmax
       lcnsrv = .FALSE.
       IF( PRESENT( lconserv ) ) lcnsrv = lconserv
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            pxf(ji,jj) = 0._wp
-         END DO
-      END DO
-      !$acc end parallel loop
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0
@@ -817,18 +789,11 @@ CONTAINS
             i3 = ji   ; j3 = jj+1
             i4 = ji+1 ; j4 = jj+1
             !!
-            zt1 = pxt(i1,j1)*xmskt(i1,j1)
-            zt2 = pxt(i2,j2)*xmskt(i2,j2)
-            zt3 = pxt(i3,j3)*xmskt(i3,j3)
-            zt4 = pxt(i4,j4)*xmskt(i4,j4)
-            zfc = xmskf(ji,jj)
-            IF( lcnsrv ) THEN
-               zt1 = zt1 * e1e2t(i1,j1)
-               zt2 = zt2 * e1e2t(i2,j2)
-               zt3 = zt3 * e1e2t(i3,j3)
-               zt4 = zt4 * e1e2t(i4,j4)
-               zfc = zfc * r1_e1e2f(ji,jj)
-            END IF
+            zt1 = pxt(i1,j1)*xmskt(i1,j1) * MERGE( e1e2t(i1,j1)    ,  1._wp  ,  lcnsrv)
+            zt2 = pxt(i2,j2)*xmskt(i2,j2) * MERGE( e1e2t(i2,j2)    ,  1._wp  ,  lcnsrv)
+            zt3 = pxt(i3,j3)*xmskt(i3,j3) * MERGE( e1e2t(i3,j3)    ,  1._wp  ,  lcnsrv)
+            zt4 = pxt(i4,j4)*xmskt(i4,j4) * MERGE( e1e2t(i4,j4)    ,  1._wp  ,  lcnsrv)
+            zfc = xmskf(ji,jj)            * MERGE( r1_e1e2f(ji,jj) ,  1._wp  ,  lcnsrv)
             !!
             zm = xmskt(i1,j1) + xmskt(i2,j2) + xmskt(i3,j3) + xmskt(i4,j4)
             zz = MIN( zm , 1._wp ) ! => `1` if at least a surrounding wet T-point, `0` otherwize
@@ -836,21 +801,21 @@ CONTAINS
             !!
             zs  = MAX( zm , 1.E-12_wp )
             !!
-            pxf(ji,jj) = ( zt1 + zt2 + zt3 + zt4 ) * zfc / zs
+            zz = ( zt1 + zt2 + zt3 + zt4 ) * zfc / zs
+            pxf(ji,jj) = MIN( MAX( zz , zmin ) , zmax )
             !!
          END DO
       END DO
       !$acc end parallel loop
 
-      IF(PRESENT(lbcl)) THEN         
-# if defined _OPENACC
-         IF( lbcl ) CALL lbc_lnk_gpu( 'do_rmpT2F@icedyn_rhg_bbm', pxf )      
-# else
-         IF( lbcl ) CALL lbc_lnk(     'do_rmpT2F@icedyn_rhg_bbm', pxf, 'F', 1._wp )      
-# endif
+      IF(PRESENT(lbcl)) THEN
+#if defined _OPENACC || defined _OPENMP
+         IF( lbcl ) CALL lbc_lnk_gpu( 'do_rmpT2F@icedyn_rhg_bbm', pxf )
+#else
+         IF( lbcl ) CALL lbc_lnk(     'do_rmpT2F@icedyn_rhg_bbm', pxf, 'F', 1._wp )
+#endif
       END IF
       !$acc end data
-      !!
    END SUBROUTINE do_rmpT2F
 
    SUBROUTINE do_rmpF2T( pxf, pxt, lbcl, lconserv )
@@ -884,18 +849,11 @@ CONTAINS
             i3 = ji-1 ; j3 = jj-1
             i4 = ji   ; j4 = jj-1
             !!
-            zf1 = pxf(i1,j1)*xmskf(i1,j1)
-            zf2 = pxf(i2,j2)*xmskf(i2,j2)
-            zf3 = pxf(i3,j3)*xmskf(i3,j3)
-            zf4 = pxf(i4,j4)*xmskf(i4,j4)
-            zfc = xmskt(ji,jj)
-            IF( lcnsrv ) THEN
-               zf1 = zf1 * e1e2f(i1,j1)
-               zf2 = zf2 * e1e2f(i2,j2)
-               zf3 = zf3 * e1e2f(i3,j3)
-               zf4 = zf4 * e1e2f(i4,j4)
-               zfc = zfc * r1_e1e2t(ji,jj)
-            END IF
+            zf1 = pxf(i1,j1)*xmskf(i1,j1) * MERGE( e1e2f(i1,j1)     ,  1._wp  ,  lcnsrv)
+            zf2 = pxf(i2,j2)*xmskf(i2,j2) * MERGE( e1e2f(i2,j2)     ,  1._wp  ,  lcnsrv)
+            zf3 = pxf(i3,j3)*xmskf(i3,j3) * MERGE( e1e2f(i3,j3)     ,  1._wp  ,  lcnsrv)
+            zf4 = pxf(i4,j4)*xmskf(i4,j4) * MERGE( e1e2f(i4,j4)     ,  1._wp  ,  lcnsrv)
+            zfc = xmskt(ji,jj)            * MERGE( r1_e1e2t(ji,jj)  ,  1._wp  ,  lcnsrv)
             !!
             zm = xmskf(i1,j1) + xmskf(i2,j2) + xmskf(i3,j3) + xmskf(i4,j4)
             zz = MIN( zm , 1._wp ) ! => `1` if at least a surrounding wet F-point, `0` otherwize
@@ -908,11 +866,11 @@ CONTAINS
       END DO
       !$acc end parallel loop
       !!
-# if ! defined _OPENACC
+#if ! defined _OPENACC || defined _OPENMP
       IF(PRESENT(lbcl)) THEN
          IF( lbcl ) CALL lbc_lnk( 'pxt@icedyn_rhg_bbm', pxt, 'T', 1._wp )
       END IF
-# endif
+#endif
       !$acc end data
       !!
    END SUBROUTINE do_rmpF2T
@@ -920,27 +878,23 @@ CONTAINS
 
 
 
-   SUBROUTINE do_rmpT2U( pxt, pxu,  lbcl, lconserv )
+   SUBROUTINE do_rmpT2U( pxt, pxu,  vmin, vmax, lbcl, lconserv )
       !!-------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pxt
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pxu
+      REAL(wp),           OPTIONAL, INTENT(in)  :: vmin, vmax
       LOGICAL,            OPTIONAL, INTENT(in)  :: lbcl, lconserv
       !!-------------------------------------------------------------------
       INTEGER  :: ji, jj, i1, j1, i2, j2
       REAL(wp) :: zt1, zt2, zs, zfc, zm, zz
       LOGICAL  :: lcnsrv
+      REAL(wp) :: zmin=-1.E20_wp, zmax=1.E20_wp
       !!-------------------------------------------------------------------
-      !$acc data present( umask, xmskt, e1e2t, r1_e1e2u ) pcopyin( pxt ) pcopyout( pxu )
+      !$acc data present( umask, xmskt, e1e2t, r1_e1e2u, pxt, pxu )
+      IF( PRESENT( vmin ) ) zmin = vmin
+      IF( PRESENT( vmax ) ) zmax = vmax
       lcnsrv = .FALSE.
       IF( PRESENT( lconserv ) ) lcnsrv = lconserv
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            pxu(ji,jj) = 0._wp
-         END DO
-      END DO
-      !$acc end parallel loop
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -949,58 +903,49 @@ CONTAINS
             i1 = ji   ; j1 = jj
             i2 = ji+1 ; j2 = jj
             !!
-            zt1 = pxt(i1,j1)*xmskt(i1,j1)
-            zt2 = pxt(i2,j2)*xmskt(i2,j2)
-            zfc = umask(ji,jj,1)
-            IF( lcnsrv ) THEN
-               zt1 = zt1 * e1e2t(i1,j1)
-               zt2 = zt2 * e1e2t(i2,j2)
-               zfc = zfc * r1_e1e2u(ji,jj)
-            END IF
+            zt1 = pxt(i1,j1)*xmskt(i1,j1) * MERGE( e1e2t(i1,j1)    ,  1._wp  ,  lcnsrv )
+            zt2 = pxt(i2,j2)*xmskt(i2,j2) * MERGE( e1e2t(i2,j2)    ,  1._wp  ,  lcnsrv )
+            zfc = umask(ji,jj,1)          * MERGE( r1_e1e2u(ji,jj) ,  1._wp  ,  lcnsrv )
             !!
             zm = xmskt(i1,j1) + xmskt(i2,j2)
             zz = MIN( zm , 1._wp ) ! => `1` if at least a surrounding wet T-point, `0` otherwize
             zfc = zfc * zz
             !!
-            zs  = MAX( zm , 1.E-12_wp )
+            zs = MAX( zm , 1.E-12_wp )
             !!
-            pxu(ji,jj) = ( zt1 + zt2 ) * zfc / zs
+            zz = ( zt1 + zt2 ) * zfc / zs
+            pxu(ji,jj) = MIN( MAX( zz , zmin ) , zmax )
             !!
          END DO
       END DO
       !$acc end parallel loop
       !!
-# if ! defined _OPENACC
+#if ! defined _OPENACC || defined _OPENMP
       IF(PRESENT(lbcl)) THEN
          IF( lbcl ) CALL lbc_lnk( 'do_rmpT2U', pxu, 'U', 1._wp )
       END IF
-# endif
+#endif
       !$acc end data
-      !!
    END SUBROUTINE do_rmpT2U
 
 
-   SUBROUTINE do_rmpT2V( pxt, pxv,  lbcl, lconserv )
+   SUBROUTINE do_rmpT2V( pxt, pxv,  vmin, vmax, lbcl, lconserv )
       !!-------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pxt
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pxv
+      REAL(wp),           OPTIONAL, INTENT(in)  :: vmin, vmax
       LOGICAL,            OPTIONAL, INTENT(in)  :: lbcl, lconserv
       !!-------------------------------------------------------------------
       INTEGER  :: ji, jj, i1, j1, i2, j2
       REAL(wp) :: zt1, zt2, zs, zfc, zm, zz
       LOGICAL  :: lcnsrv
+      REAL(wp) :: zmin=-1.E20_wp, zmax=1.E20_wp
       !!-------------------------------------------------------------------
-      !$acc data present( vmask, xmskt, e1e2t, r1_e1e2v ) pcopyin( pxt ) pcopyout( pxv )
+      !$acc data present( vmask, xmskt, e1e2t, r1_e1e2v, pxt, pxv )
+      IF( PRESENT( vmin ) ) zmin = vmin
+      IF( PRESENT( vmax ) ) zmax = vmax
       lcnsrv = .FALSE.
       IF( PRESENT( lconserv ) ) lcnsrv = lconserv
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            pxv(ji,jj) = 0._wp
-         END DO
-      END DO
-      !$acc end parallel loop
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls-1
@@ -1009,14 +954,9 @@ CONTAINS
             i1 = ji ; j1 = jj
             i2 = ji ; j2 = jj+1
             !!
-            zt1 = pxt(i1,j1)*xmskt(i1,j1)
-            zt2 = pxt(i2,j2)*xmskt(i2,j2)
-            zfc = vmask(ji,jj,1)
-            IF( lcnsrv ) THEN
-               zt1 = zt1 * e1e2t(i1,j1)
-               zt2 = zt2 * e1e2t(i2,j2)
-               zfc = zfc * r1_e1e2v(ji,jj)
-            END IF
+            zt1 = pxt(i1,j1)*xmskt(i1,j1) * MERGE( e1e2t(i1,j1)    ,  1._wp  ,  lcnsrv )
+            zt2 = pxt(i2,j2)*xmskt(i2,j2) * MERGE( e1e2t(i2,j2)    ,  1._wp  ,  lcnsrv )
+            zfc = vmask(ji,jj,1)          * MERGE( r1_e1e2v(ji,jj) ,  1._wp  ,  lcnsrv )
             !!
             zm = xmskt(i1,j1) + xmskt(i2,j2)
             zz = MIN( zm , 1._wp ) ! => `1` if at least a surrounding wet T-point, `0` otherwize
@@ -1024,20 +964,62 @@ CONTAINS
             !!
             zs  = MAX( zm , 1.E-12_wp )
             !!
-            pxv(ji,jj) = ( zt1 + zt2 ) * zfc / zs
+            zz = ( zt1 + zt2 ) * zfc / zs
+            pxv(ji,jj) = MIN( MAX( zz , zmin ) , zmax )
             !!
          END DO
       END DO
       !$acc end parallel loop
       !!
-# if ! defined _OPENACC
+#if ! defined _OPENACC || defined _OPENMP
       IF(PRESENT(lbcl)) THEN
          IF( lbcl ) CALL lbc_lnk( 'do_rmpT2V', pxv, 'V', 1._wp )
       END IF
-# endif
+#endif
       !$acc end data
-      !!
    END SUBROUTINE do_rmpT2V
+
+
+
+
+
+
+   SUBROUTINE do_rmpVecT2UV( pxt, pyt, pxu, pyv,  lbcl )
+      !!-------------------------------------------------------------------
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pxt, pyt
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pxu, pyv
+      LOGICAL,            OPTIONAL, INTENT(in)  :: lbcl
+      !!-------------------------------------------------------------------
+      INTEGER  :: ji, jj
+      REAL(wp) :: zmsk
+      !!-------------------------------------------------------------------
+      !$acc data present( pxt, pyt, pxu, pyv, umask, xmskt )
+
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-nn_hls, Nje0+nn_hls-1
+         DO ji=Nis0-nn_hls, Nie0+nn_hls-1
+            zmsk = xmskt(ji,jj)
+            pxu(ji,jj) = 0.5_wp*( pxt(ji,jj) + pxt(ji+1,jj) ) * ( 2._wp - umask(ji,jj,1) )*MAX( zmsk, xmskt(ji+1,jj) )
+            pyv(ji,jj) = 0.5_wp*( pyt(ji,jj) + pyt(ji,jj+1) ) * ( 2._wp - vmask(ji,jj,1) )*MAX( zmsk, xmskt(ji,jj+1) )
+         END DO
+      END DO
+      !$acc end parallel loop
+
+#if ! defined _OPENACC || defined _OPENMP
+      IF(PRESENT(lbcl)) THEN
+         IF( lbcl ) CALL lbc_lnk( 'do_rmpVecT2UV', pxu, 'U', 1._wp )
+      END IF
+#endif
+      !$acc end data
+
+   END SUBROUTINE do_rmpVecT2UV
+
+
+
+
+
+
+
 
 
 

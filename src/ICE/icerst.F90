@@ -19,6 +19,10 @@ MODULE icerst
    USE iceistate      ! sea-ice: initial state
    USE icectl         ! sea-ice: control
    !
+   USE remap_classic, ONLY: rmpU2V, rmpV2U
+   !
+   USE icedyn_rhg_tools, ONLY: update_invariants_Egrid
+   !
    USE in_out_manager ! I/O manager
    USE iom            ! I/O manager library
    USE lib_mpp        ! MPP library
@@ -32,7 +36,7 @@ MODULE icerst
    PUBLIC   ice_rst_read    ! called by ice_init
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: icerst.F90 14239 2020-12-23 08:57:16Z smasson $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -192,46 +196,82 @@ CONTAINS
       !CALL iom_rstput( iter, nitrst, numriw, 'nn*fsbc', REAL( nn*fsbc, wp ) )      ! time-step
       CALL iom_rstput( iter, nitrst, numriw, 'kt_ice' , REAL( iter   , wp ) )      ! date
 
-      IF(.NOT.lwxios) CALL iom_delay_rst( 'WRITE', 'ICE', numriw )   ! save only ice delayed global communication variables
+      !IF(.NOT.lwxios) CALL iom_delay_rst( 'WRITE', 'ICE', numriw )   ! save only ice delayed global communication variables
+      CALL iom_delay_rst( 'WRITE', numriw, iter )   ! save all delayed global communication variables
 
       ! Prognostic variables
-      !$acc update self( v_i, v_s, sv_i, a_i, t_su, u_ice, v_ice, uVice, vUice, oa_i )
+      !$acc update self( v_i, v_s, a_i, t_su, u_ice, v_ice, uVice, vUice, SIGMAt )
       CALL iom_rstput( iter, nitrst, numriw, 'v_i', v_i )
       CALL iom_rstput( iter, nitrst, numriw, 'v_s', v_s )
-      CALL iom_rstput( iter, nitrst, numriw, 'sv_i' , sv_i  )
       CALL iom_rstput( iter, nitrst, numriw, 'a_i', a_i )
       CALL iom_rstput( iter, nitrst, numriw, 't_su' , t_su  )
       CALL iom_rstput( iter, nitrst, numriw, 'u_ice', u_ice )
       CALL iom_rstput( iter, nitrst, numriw, 'v_ice', v_ice )
-      CALL iom_rstput( iter, nitrst, numriw, 'uVice', uVice )
-      CALL iom_rstput( iter, nitrst, numriw, 'vUice', vUice )
-      CALL iom_rstput( iter, nitrst, numriw, 'oa_i' , oa_i  )
+      ! Used by EVP & BBM:
+      CALL iom_rstput( iter, nitrst, numriw, 'sgm11t' , SIGMAt(:,:,1) )
+      CALL iom_rstput( iter, nitrst, numriw, 'sgm22t' , SIGMAt(:,:,2) )
+      CALL iom_rstput( iter, nitrst, numriw, 'sgm12f' , SIGMAt(:,:,3) )
+
+      ! Brittle rheology / E-grid:
+      IF( ln_damage ) THEN
+         !$acc update self( dmdt, dmdf, SIGMAf, uVice, vUice, V_ts )
+         CALL iom_rstput( iter, nitrst, numriw, 'dmdt' , dmdt  )
+         CALL iom_rstput( iter, nitrst, numriw, 'dmdf' , dmdf  )
+         !
+         CALL iom_rstput( iter, nitrst, numriw, 'sgm11f' , SIGMAf(:,:,1) )
+         CALL iom_rstput( iter, nitrst, numriw, 'sgm22f' , SIGMAf(:,:,2) )
+         CALL iom_rstput( iter, nitrst, numriw, 'sgm12t' , SIGMAf(:,:,3) )
+         !
+         CALL iom_rstput( iter, nitrst, numriw, 'uVice' , uVice )
+         CALL iom_rstput( iter, nitrst, numriw, 'vUice' , vUice )
+         !
+         CALL iom_rstput( iter, nitrst, numriw, 'Uu_sub' , V_ts(:,:,1) )
+         CALL iom_rstput( iter, nitrst, numriw, 'Uv_sub' , V_ts(:,:,3) )
+         CALL iom_rstput( iter, nitrst, numriw, 'Vv_sub' , V_ts(:,:,2) )
+         CALL iom_rstput( iter, nitrst, numriw, 'Vu_sub' , V_ts(:,:,4) )
+      ENDIF !IF( ln_damage )
+
       !CALL iom_rstput( iter, nitrst, numriw, 'a_ip' , a_ip  )
       !CALL iom_rstput( iter, nitrst, numriw, 'v_ip' , v_ip  )
       !CALL iom_rstput( iter, nitrst, numriw, 'v_il' , v_il  )
-      !
-      ! Snow enthalpy
-      !$acc update self( e_s )
-      DO jk = 1, nlay_s
-         WRITE(zchar1,'(I2.2)') jk
-         znam = 'e_s'//'_l'//zchar1
-         z3d(:,:,:) = e_s(:,:,jk,:)
-         CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
-      END DO
-      ! Ice enthalpy
-      !$acc update self( e_i )
-      DO jk = 1, nlay_i
-         WRITE(zchar1,'(I2.2)') jk
-         znam = 'e_i'//'_l'//zchar1
-         z3d(:,:,:) = e_i(:,:,jk,:)
-         CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
-      END DO
-      !! fields needed for Met Office (Jules) coupling
-      !IF( ln_cpl_atm ) THEN
-      !   CALL iom_rstput( iter, nitrst, numriw, 'cnd_ice', cnd_ice )
-      !   CALL iom_rstput( iter, nitrst, numriw, 't1_ice' , t1_ice )
-      !ENDIF
-      !
+      IF( ln_rdgtrc ) THEN
+         !$acc update self( rdgc )
+         CALL iom_rstput( iter, nitrst, numriw, 'rdgc' , rdgc  )
+      ENDIF
+
+      IF( ln_icethd ) THEN
+         !
+         IF( ln_age ) THEN
+            !$acc update self( oa_i )
+            CALL iom_rstput( iter, nitrst, numriw, 'oa_i' , oa_i  )
+         ENDIF
+         !
+         ! Snow enthalpy
+         !$acc update self( e_s )
+         DO jk = 1, nlay_s
+            WRITE(zchar1,'(I2.2)') jk
+            znam = 'e_s'//'_l'//zchar1
+            z3d(:,:,:) = e_s(:,:,jk,:)
+            CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
+         END DO
+         ! Ice enthalpy
+         !$acc update self( e_i )
+         DO jk = 1, nlay_i
+            WRITE(zchar1,'(I2.2)') jk
+            znam = 'e_i'//'_l'//zchar1
+            z3d(:,:,:) = e_i(:,:,jk,:)
+            CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
+         END DO
+         ! Salt  content
+         !$acc update self( szv_i )
+         DO jk = 1, nlay_i
+            WRITE(zchar1,'(I2.2)') jk
+            znam = 'szv_i'//'_l'//zchar1
+            z3d(:,:,:) = szv_i(:,:,jk,:)
+            CALL iom_rstput( iter, nitrst, numriw, znam , z3d )
+         END DO
+
+      ENDIF
 
       ! close restart file
       ! ------------------
@@ -257,7 +297,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER           ::   ji, jj, jk
       LOGICAL           ::   llok
-      INTEGER           ::   id0, id1, id2, id3, id4, id5   ! local integer
+      INTEGER           ::   id0, id1, id2, id3, id4, id5, id6, id7, id8, id9, id10, id11, id12, id13, id14
       CHARACTER(len=25) ::   znam
       CHARACTER(len=2)  ::   zchar, zchar1
       REAL(wp)          ::   ziter
@@ -286,14 +326,14 @@ CONTAINS
       ENDIF
 
       ! test if v_i exists
-      id0 = iom_varid( numrir, 'v_i' , ldstop = .FALSE. )
+      id0 = iom_varid( 'ice_rst_read',numrir, 'v_i' , ldstop = .FALSE. )
 
       !                    ! ------------------------------ !
       IF( id0 > 0 ) THEN   ! == case of a normal restart == !
          !                 ! ------------------------------ !
          ! Time info
-         !CALL iom_get( numrir, 'nn*fsbc', zfice )
-         CALL iom_get( numrir, 'kt_ice' , ziter )
+         !CALL iom_get( 'ice_rst_read', numrir, 'nn*fsbc', zfice )
+         CALL iom_get( 'ice_rst_read', numrir, 'kt_ice' , ziter )
          IF(lwp) WRITE(numout,*) '   read ice restart file at time step    : ', ziter
          IF(lwp) WRITE(numout,*) '   in any case we force it to nit000 - 1 : ', nit000 - 1
 
@@ -307,65 +347,179 @@ CONTAINS
          !   &                   '   verify the file or rerun with the value 0 for the',         &
          !   &                   '   control of time parameter  nrstdt' )
 
-         ! --- mandatory fields --- !
-         CALL iom_get( numrir, jpdom_auto, 'v_i',   v_i   )
-         CALL iom_get( numrir, jpdom_auto, 'v_s',   v_s   )
-         CALL iom_get( numrir, jpdom_auto, 'sv_i',  sv_i  )
-         CALL iom_get( numrir, jpdom_auto, 'a_i',   a_i   )
-         CALL iom_get( numrir, jpdom_auto, 't_su' , t_su  )
-         CALL iom_get( numrir, jpdom_auto, 'u_ice', u_ice, cd_type = 'U', psgn = -1._wp )
-         CALL iom_get( numrir, jpdom_auto, 'v_ice', v_ice, cd_type = 'V', psgn = -1._wp )
-         CALL iom_get( numrir, jpdom_auto, 'uVice', uVice, cd_type = 'V', psgn = -1._wp )
-         CALL iom_get( numrir, jpdom_auto, 'vUice', vUice, cd_type = 'U', psgn = -1._wp )
 
-         ! Snow enthalpy
-         DO jk = 1, nlay_s
-            WRITE(zchar1,'(I2.2)') jk
-            znam = 'e_s'//'_l'//zchar1
-            CALL iom_get( numrir, jpdom_auto, znam , z3d )
-            e_s(:,:,jk,:) = z3d(:,:,:)
-         END DO
-         ! Ice enthalpy
-         DO jk = 1, nlay_i
-            WRITE(zchar1,'(I2.2)') jk
-            znam = 'e_i'//'_l'//zchar1
-            CALL iom_get( numrir, jpdom_auto, znam , z3d )
-            e_i(:,:,jk,:) = z3d(:,:,:)
-         END DO
+
+         ! --- mandatory fields --- !
+         CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'v_i',   v_i   )
+         CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'v_s',   v_s   )
+         CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'a_i',   a_i   )
+         CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 't_su' , t_su  )
+         CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'u_ice', u_ice, cd_type = 'U', psgn = -1._wp )
+         CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'v_ice', v_ice, cd_type = 'V', psgn = -1._wp )
+
+         ! Used by EVP & BBM:
+         id1 = iom_varid( 'ice_rst_read',numrir, 'sgm11t' , ldstop = .FALSE. )
+         id2 = iom_varid( 'ice_rst_read',numrir, 'sgm22t' , ldstop = .FALSE. )
+         id3 = iom_varid( 'ice_rst_read',numrir, 'sgm12f' , ldstop = .FALSE. )
+         IF( MIN( id1, id2, id3 ) > 0 ) THEN      ! fields exist
+#if defined key_verbose
+            IF(lwp) PRINT *, 'LOLO/restart: filling `SIGMAt` with `sgm11t`, `sgm22t`, sgm12f` of restarts!'
+#endif
+            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm11t', SIGMAt(:,:,1), cd_type = 'T' )
+            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm22t', SIGMAt(:,:,2), cd_type = 'T' )
+            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm12f', SIGMAt(:,:,3), cd_type = 'F' )
+         ELSE
+            IF(lwp) WRITE(numout,*)
+            IF(lwp) WRITE(numout,*) '   ==>>> did not find the T-centric stress tensor in restart file => set to 0'
+            SIGMAt(:,:,:) =  0._wp
+         ENDIF
+
+
+
+         IF( ln_damage ) THEN
+            !
+            ! Brittle rheology / E-grid:
+            !
+            id4 = iom_varid( 'ice_rst_read',numrir, 'sgm11f' , ldstop = .FALSE. )
+            id5 = iom_varid( 'ice_rst_read',numrir, 'sgm22f' , ldstop = .FALSE. )
+            id6 = iom_varid( 'ice_rst_read',numrir, 'sgm12t' , ldstop = .FALSE. )
+            !
+            id7 = iom_varid( 'ice_rst_read',numrir, 'uVice' , ldstop = .FALSE. )
+            id8 = iom_varid( 'ice_rst_read',numrir, 'vUice' , ldstop = .FALSE. )
+            !
+            id9  = iom_varid( 'ice_rst_read',numrir, 'dmdt' , ldstop = .FALSE. )
+            id10 = iom_varid( 'ice_rst_read',numrir, 'dmdf' , ldstop = .FALSE. )
+            !
+            id11 = iom_varid( 'ice_rst_read',numrir, 'Uu_sub' , ldstop = .FALSE. )
+            id12 = iom_varid( 'ice_rst_read',numrir, 'Uv_sub' , ldstop = .FALSE. )
+            id13 = iom_varid( 'ice_rst_read',numrir, 'Vv_sub' , ldstop = .FALSE. )
+            id14 = iom_varid( 'ice_rst_read',numrir, 'Vu_sub' , ldstop = .FALSE. )
+
+            IF( MIN( id9, id10 ) > 0 ) THEN      ! fields exist
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'dmdt' , dmdt , cd_type = 'T' )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'dmdf' , dmdf , cd_type = 'F' )
+            ELSE                                     ! start rheology from rest
+               IF(lwp) WRITE(numout,*)
+               IF(lwp) WRITE(numout,*) '   ==>>>   previous run without damage tracer, set damage @T and @F to 0'
+               dmdt(:,:) = 1._wp
+               dmdf(:,:) = 1._wp
+            ENDIF
+
+            IF( MIN( id4, id5, id6 ) > 0 ) THEN      ! fields exist
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm11f', SIGMAf(:,:,1), cd_type = 'F' )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm22f', SIGMAf(:,:,2), cd_type = 'F' )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm12t', SIGMAf(:,:,3), cd_type = 'T' )
+            ELSE
+               IF(lwp) WRITE(numout,*)
+               IF(lwp) WRITE(numout,*) '   ==>>> did not find the F-centric stress tensor in restart file => set to 0'
+               SIGMAf(:,:,:) =  0._wp
+            ENDIF
+
+            IF( MIN( id7, id8 ) > 0 ) THEN      ! fields exist
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'uVice' , uVice , cd_type = 'V', psgn = -1._wp )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'vUice' , vUice , cd_type = 'U', psgn = -1._wp )
+            ELSE                                     ! start rheology from rest
+               IF(lwp) WRITE(numout,*)
+               IF(lwp) WRITE(numout,*) '   ==>>>   previous run without F-centric velocities, interpolating them from T-centric ones'
+               uVice(:,:) = rmpU2V( u_ice )
+               vUice(:,:) = rmpV2U( v_ice )
+               CALL lbc_lnk( 'ice_rst_read',  uVice,'V',-1._wp, vUice,'U',-1._wp )
+            ENDIF
+
+            IF( MIN( id11, id12, id13, id14 ) > 0 ) THEN      ! fields exist
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'Uu_sub' , V_ts(:,:,1) , cd_type = 'U', psgn = -1._wp )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'Uv_sub' , V_ts(:,:,3) , cd_type = 'V', psgn = -1._wp )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'Vv_sub' , V_ts(:,:,2) , cd_type = 'V', psgn = -1._wp )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'Vu_sub' , V_ts(:,:,4) , cd_type = 'U', psgn = -1._wp )
+            ELSE
+               IF(lwp) WRITE(numout,*)
+               IF(lwp) WRITE(numout,*) '   ==>>>   previous run without BBM rheology, fill sub-ts velocities'
+               V_ts(:,:,1) = u_ice(:,:)
+               V_ts(:,:,3) = uVice(:,:)
+               V_ts(:,:,2) = v_ice(:,:)
+               V_ts(:,:,4) = vUice(:,:)
+            ENDIF
+            !
+            CALL update_invariants_Egrid( SIGMAt, SIGMAf,  SI1t, SI2t, SI1f, SI2f )
+            !
+         ENDIF !IF( ln_damage )
+
+
+
+         IF( ln_icethd ) THEN
+
+            ! Snow enthalpy
+            DO jk = 1, nlay_s
+               WRITE(zchar1,'(I2.2)') jk
+               znam = 'e_s'//'_l'//zchar1
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, znam , z3d )
+               e_s(:,:,jk,:) = z3d(:,:,:)
+            END DO
+            ! Ice enthalpy
+            DO jk = 1, nlay_i
+               WRITE(zchar1,'(I2.2)') jk
+               znam = 'e_i'//'_l'//zchar1
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, znam , z3d )
+               e_i(:,:,jk,:) = z3d(:,:,:)
+            END DO
+            ! Salt content:
+            DO jk = 1, nlay_i
+               WRITE(zchar1,'(I2.2)') jk
+               znam = 'szv_i'//'_l'//zchar1
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, znam , z3d )
+               szv_i(:,:,jk,:) = z3d(:,:,:)
+            END DO
+            !
+            IF( ln_age ) THEN
+               ! ice age
+               id1 = iom_varid( 'ice_rst_read',numrir, 'oa_i' , ldstop = .FALSE. )
+               IF( id1 > 0 ) THEN                       ! fields exist
+                  CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'oa_i', oa_i )
+               ELSE                                     ! start from rest
+                  IF(lwp) WRITE(numout,*) '   ==>>   previous run without `ice age` output then set it to zero'
+                  oa_i(:,:,:) = 0._wp
+               ENDIF
+            ENDIF
+            !
+         ENDIF
+
          ! -- optional fields -- !
-         ! ice age
-         id1 = iom_varid( numrir, 'oa_i' , ldstop = .FALSE. )
-         IF( id1 > 0 ) THEN                       ! fields exist
-            CALL iom_get( numrir, jpdom_auto, 'oa_i', oa_i )
-         ELSE                                     ! start from rest
-            IF(lwp) WRITE(numout,*) '   ==>>   previous run without ice age output then set it to zero'
-            oa_i(:,:,:) = 0._wp
+
+         IF( ln_rdgtrc ) THEN
+            ! ridged-ice fracion
+            id1 = iom_varid( 'ice_rst_read',numrir, 'rdgc' , ldstop = .FALSE. )
+            IF( id1 > 0 ) THEN                       ! fields exist
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'rdgc', rdgc )
+            ELSE                                     ! start from rest
+               IF(lwp) WRITE(numout,*) '   ==>>   previous run without `ridged-ice fraction` output then set it to zero'
+               rdgc(:,:) = 0._wp
+            ENDIF
          ENDIF
          ! melt ponds
-         id2 = iom_varid( numrir, 'a_ip' , ldstop = .FALSE. )
-         IF( id2 > 0 ) THEN                       ! fields exist
-            CALL iom_get( numrir, jpdom_auto, 'a_ip' , a_ip )
-            CALL iom_get( numrir, jpdom_auto, 'v_ip' , v_ip )
-         ELSE                                     ! start from rest
-            IF(lwp) WRITE(numout,*) '   ==>>   previous run without melt ponds output then set it to zero'
-            a_ip(:,:,:) = 0._wp
-            v_ip(:,:,:) = 0._wp
-         ENDIF
-         ! melt pond lids
-         id3 = iom_varid( numrir, 'v_il' , ldstop = .FALSE. )
-         IF( id3 > 0 ) THEN
-            CALL iom_get( numrir, jpdom_auto, 'v_il', v_il)
-         ELSE
-            IF(lwp) WRITE(numout,*) '   ==>>   previous run without melt ponds lids output then set it to zero'
-            v_il(:,:,:) = 0._wp
-         ENDIF
+         !id2 = iom_varid( 'ice_rst_read',numrir, 'a_ip' , ldstop = .FALSE. )
+         !IF( id2 > 0 ) THEN                       ! fields exist
+         !   CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'a_ip' , a_ip )
+         !   CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'v_ip' , v_ip )
+         !ELSE                                     ! start from rest
+         !   IF(lwp) WRITE(numout,*) '   ==>>   previous run without melt ponds output then set it to zero'
+         !   a_ip(:,:,:) = 0._wp
+         !   v_ip(:,:,:) = 0._wp
+         !ENDIF
+         !! melt pond lids
+         !id3 = iom_varid( 'ice_rst_read',numrir, 'v_il' , ldstop = .FALSE. )
+         !IF( id3 > 0 ) THEN
+         !   CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'v_il', v_il)
+         !ELSE
+         !   IF(lwp) WRITE(numout,*) '   ==>>   previous run without melt ponds lids output then set it to zero'
+         !   v_il(:,:,:) = 0._wp
+         !ENDIF
          ! fields needed for Met Office (Jules) coupling
          IF( ln_cpl_atm ) THEN
-            id4 = iom_varid( numrir, 'cnd_ice' , ldstop = .FALSE. )
-            id5 = iom_varid( numrir, 't1_ice'  , ldstop = .FALSE. )
+            id4 = iom_varid( 'ice_rst_read',numrir, 'cnd_ice' , ldstop = .FALSE. )
+            id5 = iom_varid( 'ice_rst_read',numrir, 't1_ice'  , ldstop = .FALSE. )
             IF( id4 > 0 .AND. id5 > 0 ) THEN         ! fields exist
-               CALL iom_get( numrir, jpdom_auto, 'cnd_ice', cnd_ice )
-               CALL iom_get( numrir, jpdom_auto, 't1_ice' , t1_ice  )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'cnd_ice', cnd_ice )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 't1_ice' , t1_ice  )
             ELSE                                     ! start from rest
                IF(lwp) WRITE(numout,*) '   ==>>   previous run without conductivity output then set it to zero'
                cnd_ice(:,:,:) = 0._wp
@@ -373,7 +527,9 @@ CONTAINS
             ENDIF
          ENDIF
 
-         IF(.NOT.lrxios) CALL iom_delay_rst( 'READ', 'ICE', numrir )   ! read only ice delayed global communication variables
+
+         CALL iom_delay_rst( 'READ', numrir )   ! read all delayed global communication variables (if not already done)
+
          !                 ! ---------------------------------- !
       ELSE                 ! == case of a simplified restart == !
          !                 ! ---------------------------------- !

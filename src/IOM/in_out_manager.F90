@@ -14,6 +14,11 @@ MODULE in_out_manager
    USE par_oce       ! ocean parameter
    USE nc4interface  ! NetCDF4 interface
 
+   USE dom_oce  , ONLY :  narea
+#if defined _TRDBG || defined _ABLDBG
+   USE par_ice  , ONLY :   jpl
+#endif
+
    IMPLICIT NONE
    PUBLIC
 
@@ -34,7 +39,7 @@ MODULE in_out_manager
    INTEGER       ::   nn_write         !: model standard output frequency
    INTEGER       ::   nn_stock         !: restart file frequency
    INTEGER, DIMENSION(10) :: nn_stocklist  !: restart dump times
-   LOGICAL       ::   ln_mskland       !: mask land points in NetCDF outputs (costly: + ~15%)
+   LOGICAL       ::   ln_mskland       !: mask land points in NetCDF outputs
    LOGICAL       ::   ln_cfmeta        !: output additional data to netCDF files required for compliance with the CF metadata standard
    LOGICAL       ::   ln_clobber       !: clobber (overwrite) an existing file
    INTEGER       ::   nn_chunksz       !: chunksize (bytes) for NetCDF file (works only with iom_nf90 routines)
@@ -42,15 +47,14 @@ MODULE in_out_manager
    INTEGER       ::   nn_wxios         !: write resart using xios 0 - no, 1 - single, 2 - multiple file output
    INTEGER       ::   nn_no            !: Assimilation cycle
 
-#if defined key_netcdf4
    !!----------------------------------------------------------------------
-   !!                   namnc4 namelist parameters                         (key_netcdf4)
+   !!                   namnc4 namelist parameters
    !!----------------------------------------------------------------------
    ! The following four values determine the partitioning of the output fields
    ! into netcdf4 chunks. They are unrelated to the nn_chunk_sz setting which is
    ! for runtime optimisation. The individual netcdf4 chunks can be optionally
    ! gzipped (recommended) leading to significant reductions in I/O volumes
-   !                         !!!**  variables only used with iom_nf90 routines and key_netcdf4 **
+   !                         !!!**  variables only used with iom_nf90 routines **
    INTEGER ::   nn_nchunks_i   !: number of chunks required in the i-dimension
    INTEGER ::   nn_nchunks_j   !: number of chunks required in the j-dimension
    INTEGER ::   nn_nchunks_k   !: number of chunks required in the k-dimension
@@ -58,11 +62,8 @@ MODULE in_out_manager
    LOGICAL ::   ln_nc4zip      !: netcdf4 usage: (T) chunk and compress output using the HDF5 sublayers of netcdf4
    !                           !                 (F) ignore chunking request and use the netcdf4 library
    !                           !                     to produce netcdf3-compatible files
-#endif
 
-   !$AGRIF_DO_NOT_TREAT
    TYPE(snc4_ctl)     :: snc4set        !: netcdf4 chunking control structure (always needed for decision making)
-   !$AGRIF_END_DO_NOT_TREAT
 
 
    !! conversion of DOCTOR norm namelist name into model name
@@ -101,6 +102,9 @@ MODULE in_out_manager
    TYPE :: sn_ctl                !: structure for control over output selection
       LOGICAL :: l_runstat = .FALSE.  !: Produce/do not produce nanuq.stat file (T/F)
       LOGICAL :: l_trcstat = .FALSE.  !: Produce/do not produce tracer.stat file (T/F)
+      LOGICAL :: l_obsstat = .FALSE.  !: Produce/do not produce obs.stat file (T/F)
+      LOGICAL :: l_lsb_sum = .FALSE.  !: Include/do not include in the {run,tracer,obs}.stat records a test value that is sensitive
+      !  to a change in the two least-significant bytes of any of the tested values
       LOGICAL :: l_oceout  = .FALSE.  !: Produce all nanuq.outputs    (T) or just one (F)
       LOGICAL :: l_layout  = .FALSE.  !: Produce all layout_nanuq.dat files (T) or just one (F)
       LOGICAL :: l_prtctl  = .FALSE.  !: Produce/do not produce mpp.output_XXXX files (T/F)
@@ -116,6 +120,7 @@ MODULE in_out_manager
    END TYPE sn_ctl
    TYPE(sn_ctl), SAVE :: sn_cfctl     !: run control structure for selective output, must have SAVE for default init. of sn_ctl
    LOGICAL ::   ln_timing        !: run control for timing
+   INTEGER ::   nn_npfchk        !: North Pole Folding duplicated line control
    LOGICAL ::   ln_diacfl        !: flag whether to create CFL diagnostics
    INTEGER ::   nn_ictls         !: Start i indice for the SUM control
    INTEGER ::   nn_ictle         !: End   i indice for the SUM control
@@ -128,7 +133,6 @@ MODULE in_out_manager
    !!                        logical units
    !!----------------------------------------------------------------------
    INTEGER ::   numstp          =   -1      !: logical unit for time step
-   INTEGER ::   numtime         =   -1      !: logical unit for timing
    INTEGER ::   numout          =    6      !: logical unit for output print; Set to stdout to ensure any
    INTEGER ::   numnul          =   -1      !: logical unit for /dev/null
    !                                     !  early output can be collected; do not change
@@ -136,17 +140,23 @@ MODULE in_out_manager
    INTEGER ::   numoni          =   -1      !: logical unit for Output Namelist Ice
    INTEGER ::   numevo_ice      =   -1      !: logical unit for ice variables (temp. evolution)
    INTEGER ::   numrun          =   -1      !: logical unit for run statistics
+   INTEGER ::   numobsstat      =   -1      !: logical unit for obs statistics
    INTEGER ::   numdct_in       =   -1      !: logical unit for transports computing
    INTEGER ::   numdct_vol      =   -1      !: logical unit for volume transports output
    INTEGER ::   numdct_heat     =   -1      !: logical unit for heat   transports output
    INTEGER ::   numdct_salt     =   -1      !: logical unit for salt   transports output
-   INTEGER ::   numfl           =   -1      !: logical unit for floats ascii output
-   INTEGER ::   numflo          =   -1      !: logical unit for floats ascii output
    !
    CHARACTER(LEN=:), ALLOCATABLE :: numnam_ref      !: character buffer for reference namelist
    CHARACTER(LEN=:), ALLOCATABLE :: numnam_cfg      !: character buffer for configuration specific namelist
    CHARACTER(LEN=:), ALLOCATABLE :: numnam_ice_ref  !: character buffer for ice reference namelist
    CHARACTER(LEN=:), ALLOCATABLE :: numnam_ice_cfg  !: character buffer for ice configuration specific namelist
+
+#if defined _TRDBG || defined _ABLDBG
+   INTEGER            ::   numdbg =   12  ! file ID of the debug file to write to
+   INTEGER, PARAMETER ::   kprc_dbg = 35  ! # of proc domain to follow (starting at 1!)
+   INTEGER, PARAMETER ::   kdi = 10
+   INTEGER, PARAMETER ::   kdj = 10
+#endif
 
    !!----------------------------------------------------------------------
    !!                          Run control
@@ -176,13 +186,210 @@ MODULE in_out_manager
    CHARACTER(LEN=lc) ::   cr_sedrst_cxt     !: context name used in xios to read SEDIMENT restart
    CHARACTER(LEN=lc) ::   cw_sedrst_cxt     !: context name used in xios to write SEDIMENT restart file
 
-   
+
+   PUBLIC   l_is_it_a_nan
+   PUBLIC   l_is_it_a_inf
+   PUBLIC   test4inf
+   PUBLIC   test4nan
+
+   INTERFACE test4inf
+      MODULE PROCEDURE test4inf_2d, test4inf_3d
+   END INTERFACE test4inf
+
+
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: in_out_manager.F90 14553 2021-02-26 17:01:43Z gsamson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!=====================================================================
 
+CONTAINS
 
+   SUBROUTINE test4inf_2d( cstr, px )
+      !!-------------------------------------------------------------------
+      CHARACTER(len=22),        INTENT(in) :: cstr
+      REAL(wp), DIMENSION(:,:), INTENT(in) :: px
+      !!-------------------------------------------------------------------
+      INTEGER ::   ji, jj, jl, icpt, Nx, Ny
+      !!-------------------------------------------------------------------
+      Nx = SIZE(px,1)
+      Ny = SIZE(px,2)
+      !$acc data present( px )
+      icpt = 0
+      !$acc parallel loop collapse(2)
+      DO jj=1, Ny
+         DO ji=1, Nx
+            IF( px(ji,jj) > HUGE(px(ji,jj)) ) THEN
+               !PRINT *, ' *** Infinite value for at ji,jj=',ji,jj, cstr
+               icpt = icpt + 1
+            ENDIF
+         END DO
+      END DO
+      !$acc end parallel loop
+
+      IF( icpt > 0 ) THEN
+         PRINT *, ' *** Infinite value for: ', cstr, icpt
+         STOP
+      ENDIF
+      !$acc end data
+   END SUBROUTINE test4inf_2d
+
+   SUBROUTINE test4inf_3d( cstr, px )
+      !!-------------------------------------------------------------------
+      CHARACTER(len=22),          INTENT(in) :: cstr
+      REAL(wp), DIMENSION(:,:,:), INTENT(in) :: px
+      !!-------------------------------------------------------------------
+      INTEGER ::   ji, jj, jl, icpt, Nx, Ny, Nz
+      !!-------------------------------------------------------------------
+      Nx = SIZE(px,1)
+      Ny = SIZE(px,2)
+      Nz = SIZE(px,3)
+      !$acc data present( px )
+      icpt = 0
+      !$acc parallel loop collapse(2)
+      DO jj=1, Ny
+         DO ji=1, Nx
+            !$acc loop seq
+            DO jl=1, Nz
+               IF( px(ji,jj,jl) > HUGE(px(ji,jj,jl)) ) THEN
+                  !PRINT *, ' *** Infinite value for at ji,jj=',ji,jj, cstr
+                  icpt = icpt + 1
+               ENDIF
+            END DO
+         END DO
+      END DO
+      !$acc end parallel loop
+
+      IF( icpt > 0 ) THEN
+         PRINT *, ' *** Infinite value for: ', cstr, icpt
+         STOP
+      ENDIF
+      !$acc end data
+   END SUBROUTINE test4inf_3d
+
+
+   SUBROUTINE test4nan( cstr, px,  kkt, lStop )
+      !!-------------------------------------------------------------------
+      CHARACTER(len=22),        INTENT(in) :: cstr
+      REAL(wp), DIMENSION(:,:), INTENT(in) :: px
+      INTEGER, OPTIONAL,        INTENT(in) :: kkt
+      LOGICAL, OPTIONAL,        INTENT(in) :: lStop
+      !!-------------------------------------------------------------------
+      INTEGER ::   Nx, Ny, ji, jj, icpt
+      LOGICAL ::   l_stop=.TRUE.
+      !!-------------------------------------------------------------------
+      Nx = SIZE(px,1)
+      Ny = SIZE(px,2)
+      IF(PRESENT(lStop)) l_stop = lStop
+      !!
+      !$acc data present( px )
+      icpt = 0
+      !$acc parallel loop collapse(2)
+      DO jj=1, Ny
+         DO ji=1, Nx
+            IF( px(ji,jj) /= px(ji,jj) )  icpt = icpt + 1
+         END DO
+      END DO
+      !$acc end parallel loop
+      IF( icpt > 0 ) THEN
+         PRINT *, ''
+         PRINT *, ' *** NaN value for: ', TRIM(cstr), ', # occurences =', icpt
+         IF( PRESENT(kkt) ) PRINT *, '   => at kt =', kkt
+         IF( l_stop ) THEN
+            PRINT *, '      ==> CALLING `STOP` on proc domain #', narea
+            STOP
+         ELSE
+            PRINT *, '      ==> *** WARNING *** on proc domain #', narea
+         ENDIF
+      ENDIF
+      !$acc end data
+   END SUBROUTINE test4nan
+
+
+   FUNCTION l_is_it_a_nan( px )
+      !!-------------------------------------------------------------------
+      LOGICAL              :: l_is_it_a_nan
+      REAL(wp), INTENT(in) :: px
+      !!-------------------------------------------------------------------
+      l_is_it_a_nan = ( px /= px )
+   END FUNCTION l_is_it_a_nan
+
+
+   FUNCTION l_is_it_a_inf( px )
+      !!-------------------------------------------------------------------
+      LOGICAL              :: l_is_it_a_inf
+      REAL(wp), INTENT(in) :: px
+      !!-------------------------------------------------------------------
+      l_is_it_a_inf = ( px > HUGE(px) )
+   END FUNCTION l_is_it_a_inf
+
+
+#if defined _TRDBG || defined _ABLDBG
+
+   SUBROUTINE TRDBG( cnrtn, cnarr, pX,  pX2, pX3, pX4 )
+      !-----------------------------------------------------------
+      CHARACTER(len=*)          , INTENT(in) :: cnrtn, cnarr
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pX
+      REAL(wp), DIMENSION(jpi,jpj), OPTIONAL, INTENT(in) :: pX2, pX3, pX4
+      !-----------------------------------------------------------
+      LOGICAL :: l2, l3, l4
+      !-----------------------------------------------------------
+      IF( narea-1 == kprc_dbg ) THEN
+         !
+         l2 = ( PRESENT(pX2) )
+         l3 = ( PRESENT(pX3) )
+         l4 = ( PRESENT(pX4) )
+         !
+         IF(    l4) THEN
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj), pX4(kdi,kdj)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f," ",f," ",f," ",f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj), pX4(kdi,kdj)
+         ELSEIF(l3) THEN
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f," ",f," ",f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj), pX2(kdi,kdj), pX3(kdi,kdj)
+         ELSEIF(l2) THEN
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj), pX2(kdi,kdj)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f," ",f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj), pX2(kdi,kdj)
+         ELSE
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', pX(kdi,kdj)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f)') TRIM(cnrtn), TRIM(cnarr), pX(kdi,kdj)
+         ENDIF
+         !
+      ENDIF
+      !
+   END SUBROUTINE TRDBG
+
+   SUBROUTINE TRDBG_3D( cnrtn, cnarr, pX,  pX2, pX3, pX4 )
+      !-----------------------------------------------------------
+      CHARACTER(len=*)                          , INTENT(in) :: cnrtn, cnarr
+      REAL(wp), DIMENSION(jpi,jpj,jpl),           INTENT(in) :: pX
+      REAL(wp), DIMENSION(jpi,jpj,jpl), OPTIONAL, INTENT(in) :: pX2, pX3, pX4
+      !-----------------------------------------------------------
+      LOGICAL :: l2, l3, l4
+      !-----------------------------------------------------------
+      IF( narea == kprc_dbg ) THEN
+         !
+         l2 = ( PRESENT(pX2) )
+         l3 = ( PRESENT(pX3) )
+         l4 = ( PRESENT(pX4) )
+         !
+         IF(    l4) THEN
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp), SUM(pX4(kdi,kdj,:))/REAL(jpl,wp)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f," ",f," ",f," ",f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp), SUM(pX4(kdi,kdj,:))/REAL(jpl,wp)
+         ELSEIF(l3) THEN
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f," ",f," ",f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp), SUM(pX3(kdi,kdj,:))/REAL(jpl,wp)
+         ELSEIF(l2) THEN
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f," ",f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp), SUM(pX2(kdi,kdj,:))/REAL(jpl,wp)
+         ELSE
+            !WRITE(numdbg,*) '* `'//TRIM(cnrtn)//'`: '//TRIM(cnarr)//' => ', SUM(pX(kdi,kdj,:))/REAL(jpl,wp)
+            WRITE(numdbg,'("* `",a,"`:",a," =>"," ",f)') TRIM(cnrtn), TRIM(cnarr), SUM(pX(kdi,kdj,:))/REAL(jpl,wp)
+         ENDIF
+         !
+      ENDIF
+      !
+   END SUBROUTINE TRDBG_3D
+
+#endif
 
 END MODULE in_out_manager

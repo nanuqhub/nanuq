@@ -1,0 +1,11 @@
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0-1, Nje0+1
+            DO ji=Nis0-1, Nie0+1
+               !$acc loop seq
+               DO jl = 1, jpl
+                  zA = a_i(ji,jj,jl)
+                  h_i(ji,jj,jl) = MERGE( v_i(ji,jj,jl) / MAX( zA, epsi20 )  ,  0._wp  ,  zA >= epsi20 )
+               END DO
+            END DO
+         END DO
+         !$acc end parallel loop

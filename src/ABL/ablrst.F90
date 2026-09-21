@@ -26,7 +26,7 @@ MODULE ablrst
    PUBLIC   abl_rst_read    ! called by abl_init
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0, Brodeau (2026)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ABL 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -173,8 +173,8 @@ CONTAINS
       ENDIF
 
       ! Time info
-      !CALL iom_get( numrar, 'nn*fsbc', zfabl )
-      CALL iom_get( numrar, 'kt_abl' , ziter )
+      !CALL iom_get( 'abl_rst_read', numrar, 'nn*fsbc', zfabl )
+      CALL iom_get( 'abl_rst_read', numrar, 'kt_abl' , ziter )
       IF(lwp) WRITE(numout,*) '   read abl restart file at time step    : ', ziter
       IF(lwp) WRITE(numout,*) '   in any case we force it to nit000 - 1 : ', nit000 - 1
 
@@ -189,15 +189,15 @@ CONTAINS
       !   &                   '   control of time parameter  nrstdt' )
 
       ! --- mandatory fields --- !
-      CALL iom_get( numrar, jpdom_auto,   'u_abl',   u_abl(:,:,:,nt_n      ), cd_type = 'T', psgn = -1._wp )
-      CALL iom_get( numrar, jpdom_auto,   'v_abl',   v_abl(:,:,:,nt_n      ), cd_type = 'T', psgn = -1._wp )
-      CALL iom_get( numrar, jpdom_auto,   't_abl',  tq_abl(:,:,:,nt_n,jp_ta) ) !, kfill = jpfillcopy )
-      CALL iom_get( numrar, jpdom_auto,   'q_abl',  tq_abl(:,:,:,nt_n,jp_qa) )
-      CALL iom_get( numrar, jpdom_auto, 'tke_abl', tke_abl(:,:,:,nt_n      ) )
-      CALL iom_get( numrar, jpdom_auto, 'avm_abl', avm_abl(:,:,:           ) ) !, kfill = jpfillcopy )
-      CALL iom_get( numrar, jpdom_auto, 'avt_abl', avt_abl(:,:,:           ) )
-      CALL iom_get( numrar, jpdom_auto,'mxld_abl',mxld_abl(:,:,:           ) ) !, kfill = jpfillcopy )
-      CALL iom_get( numrar, jpdom_auto,    'pblh',    pblh(:,:             ), kfill = jpfillcopy )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto,   'u_abl',   u_abl(:,:,:,nt_n      ), cd_type = 'T', psgn = -1._wp )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto,   'v_abl',   v_abl(:,:,:,nt_n      ), cd_type = 'T', psgn = -1._wp )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto,   't_abl',  tq_abl(:,:,:,nt_n,jp_ta) ) !, kfill = jpfillcopy )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto,   'q_abl',  tq_abl(:,:,:,nt_n,jp_qa) )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto, 'tke_abl', tke_abl(:,:,:,nt_n      ) )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto, 'avm_abl', avm_abl(:,:,:           ) ) !, kfill = jpfillcopy )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto, 'avt_abl', avt_abl(:,:,:           ) )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto,'mxld_abl',mxld_abl(:,:,:           ) ) !, kfill = jpfillcopy )
+      CALL iom_get( 'abl_rst_read', numrar, jpdom_auto,    'pblh',    pblh(:,:             ), kfill = jpfillcopy )
 
    END SUBROUTINE abl_rst_read
 

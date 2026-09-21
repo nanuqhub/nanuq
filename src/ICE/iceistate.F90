@@ -57,7 +57,7 @@ MODULE iceistate
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! NEMO/ICE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL licence (modipsl/doc/NEMO_CeCILL.txt)
    !!----------------------------------------------------------------------
@@ -79,7 +79,7 @@ CONTAINS
       !!                3) Fill in space-dependent arrays for state variables
       !!                4) snow-ice mass computation
       !!
-      !! ** Notes   : o_i, t_su, t_s, t_i, sz_i must be filled everywhere, even
+      !! ** Notes   : t_su, t_s, t_i, sz_i must be filled everywhere, even
       !!              where there is no ice
       !!--------------------------------------------------------------------
       INTEGER, INTENT(in) :: kt            ! time step
@@ -118,7 +118,7 @@ CONTAINS
                   !
                   t1_ice(ji,jj,jl) = t_i (ji,jj,1,jl)        ! temp for coupled runs
                   !
-                  a_ip_eff(ji,jj,jl) = 0._wp   ! melt pond effective fraction
+                  !a_ip_eff(ji,jj,jl) = 0._wp   ! melt pond effective fraction
                END DO
             END DO
             !
@@ -138,8 +138,11 @@ CONTAINS
                      e_i(ji,jj,jk,jl) = 0._wp
                      t_i(ji,jj,jk,jl) = rt0 * xmskt(ji,jj) ! ice temp
                      ! salt
+                     sz_i(ji,jj,jk,jl) = rn_simin * xmskt(ji,jj)
+                  END DO
+                  DO jk=1, nlay_i
+                     ! salt
                      szv_i(ji,jj,jk,jl) = 0._wp
-                     sz_i (ji,jj,jk,jl) = rn_simin * xmskt(ji,jj)
                   END DO
                END DO
             END DO
@@ -163,29 +166,27 @@ CONTAINS
                a_i (ji,jj,jl) = 0._wp
                v_i (ji,jj,jl) = 0._wp
                v_s (ji,jj,jl) = 0._wp
-               sv_i(ji,jj,jl) = 0._wp
                oa_i(ji,jj,jl) = 0._wp
                h_i (ji,jj,jl) = 0._wp
                h_s (ji,jj,jl) = 0._wp
                s_i (ji,jj,jl) = 0._wp
-               o_i (ji,jj,jl) = 0._wp
                t_su(ji,jj,jl) = rt0 * xmskt(ji,jj)
                !
             END DO
          END DO
 
-         IF( ln_icethd ) THEN
-            DO jj=Njs0-nn_hls, Nje0+nn_hls
-               DO ji=Nis0-nn_hls, Nie0+nn_hls
-                  ! melt ponds
-                  a_ip(ji,jj,jl) = 0._wp
-                  v_ip(ji,jj,jl) = 0._wp
-                  v_il(ji,jj,jl) = 0._wp
-                  h_ip(ji,jj,jl) = 0._wp
-                  h_il(ji,jj,jl) = 0._wp
-               END DO
-            END DO
-         ENDIF
+         !IF( ln_icethd ) THEN
+         !   DO jj=Njs0-nn_hls, Nje0+nn_hls
+         !      DO ji=Nis0-nn_hls, Nie0+nn_hls
+         !         ! melt ponds
+         !         a_ip(ji,jj,jl) = 0._wp
+         !         v_ip(ji,jj,jl) = 0._wp
+         !         v_il(ji,jj,jl) = 0._wp
+         !         h_ip(ji,jj,jl) = 0._wp
+         !         h_il(ji,jj,jl) = 0._wp
+         !      END DO
+         !   END DO
+         !ENDIF
          !
       ENDDO
       !
@@ -220,44 +221,44 @@ CONTAINS
             !    if fields do not exist then set them to the values present in the namelist (except for temperatures)
             !
             ! ice salinity
-            IF( TRIM(si(jp_smi)%clrootname) == 'NOT USED' ) &
+            IF( TRIM(si(jp_smi)%clrootname) == 'NOT_USED' ) &
                &     si(jp_smi)%fnow(:,:,1) = ( rn_smi_ini_n * zmsk + rn_smi_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
             !
             ! temperatures
-            IF    ( TRIM(si(jp_tmi)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tsu)%clrootname) == 'NOT USED' .AND. &
-               &    TRIM(si(jp_tms)%clrootname) == 'NOT USED' ) THEN
+            IF    ( TRIM(si(jp_tmi)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tsu)%clrootname) == 'NOT_USED' .AND. &
+               &    TRIM(si(jp_tms)%clrootname) == 'NOT_USED' ) THEN
                si(jp_tmi)%fnow(:,:,1) = ( rn_tmi_ini_n * zmsk + rn_tmi_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
                si(jp_tsu)%fnow(:,:,1) = ( rn_tsu_ini_n * zmsk + rn_tsu_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
                si(jp_tms)%fnow(:,:,1) = ( rn_tms_ini_n * zmsk + rn_tms_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
             ENDIF
-            IF( TRIM(si(jp_tmi)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tms)%clrootname) /= 'NOT USED' ) & ! if T_s is read and not T_i, set T_i = (T_s + T_freeze)/2
+            IF( TRIM(si(jp_tmi)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tms)%clrootname) /= 'NOT_USED' ) & ! if T_s is read and not T_i, set T_i = (T_s + T_freeze)/2
                &     si(jp_tmi)%fnow(:,:,1) = 0.5_wp * ( si(jp_tms)%fnow(:,:,1) + 271.15 )
-            IF( TRIM(si(jp_tmi)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tsu)%clrootname) /= 'NOT USED' ) & ! if T_su is read and not T_i, set T_i = (T_su + T_freeze)/2
+            IF( TRIM(si(jp_tmi)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tsu)%clrootname) /= 'NOT_USED' ) & ! if T_su is read and not T_i, set T_i = (T_su + T_freeze)/2
                &     si(jp_tmi)%fnow(:,:,1) = 0.5_wp * ( si(jp_tsu)%fnow(:,:,1) + 271.15 )
-            IF( TRIM(si(jp_tsu)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tms)%clrootname) /= 'NOT USED' ) & ! if T_s is read and not T_su, set T_su = T_s
+            IF( TRIM(si(jp_tsu)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tms)%clrootname) /= 'NOT_USED' ) & ! if T_s is read and not T_su, set T_su = T_s
                &     si(jp_tsu)%fnow(:,:,1) = si(jp_tms)%fnow(:,:,1)
-            IF( TRIM(si(jp_tsu)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tmi)%clrootname) /= 'NOT USED' ) & ! if T_i is read and not T_su, set T_su = T_i
+            IF( TRIM(si(jp_tsu)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tmi)%clrootname) /= 'NOT_USED' ) & ! if T_i is read and not T_su, set T_su = T_i
                &     si(jp_tsu)%fnow(:,:,1) = si(jp_tmi)%fnow(:,:,1)
-            IF( TRIM(si(jp_tms)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tsu)%clrootname) /= 'NOT USED' ) & ! if T_su is read and not T_s, set T_s = T_su
+            IF( TRIM(si(jp_tms)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tsu)%clrootname) /= 'NOT_USED' ) & ! if T_su is read and not T_s, set T_s = T_su
                &     si(jp_tms)%fnow(:,:,1) = si(jp_tsu)%fnow(:,:,1)
-            IF( TRIM(si(jp_tms)%clrootname) == 'NOT USED' .AND. TRIM(si(jp_tmi)%clrootname) /= 'NOT USED' ) & ! if T_i is read and not T_s, set T_s = T_i
+            IF( TRIM(si(jp_tms)%clrootname) == 'NOT_USED' .AND. TRIM(si(jp_tmi)%clrootname) /= 'NOT_USED' ) & ! if T_i is read and not T_s, set T_s = T_i
                &     si(jp_tms)%fnow(:,:,1) = si(jp_tmi)%fnow(:,:,1)
             !
             ! pond concentration
-            IF( TRIM(si(jp_apd)%clrootname) == 'NOT USED' ) &
+            IF( TRIM(si(jp_apd)%clrootname) == 'NOT_USED' ) &
                &     si(jp_apd)%fnow(:,:,1) = ( rn_apd_ini_n * zmsk + rn_apd_ini_s * (1._wp - zmsk) ) * xmskt(:,:) & ! rn_apd = pond fraction => rn_apnd * a_i = pond conc.
                &                              * si(jp_ati)%fnow(:,:,1)
             !
             ! pond depth
-            IF( TRIM(si(jp_hpd)%clrootname) == 'NOT USED' ) &
+            IF( TRIM(si(jp_hpd)%clrootname) == 'NOT_USED' ) &
                &     si(jp_hpd)%fnow(:,:,1) = ( rn_hpd_ini_n * zmsk + rn_hpd_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
             !
             ! pond lid depth
-            IF( TRIM(si(jp_hld)%clrootname) == 'NOT USED' ) &
+            IF( TRIM(si(jp_hld)%clrootname) == 'NOT_USED' ) &
                &     si(jp_hld)%fnow(:,:,1) = ( rn_hld_ini_n * zmsk + rn_hld_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
             !
             ! ice damage
-            IF( TRIM(si(jp_dmg)%clrootname) == 'NOT USED' ) &
+            IF( TRIM(si(jp_dmg)%clrootname) == 'NOT_USED' ) &
                &     si(jp_dmg)%fnow(:,:,1) = ( rn_dmg_ini_n * zmsk + rn_dmg_ini_s * (1._wp - zmsk) ) * xmskt(:,:)
             !
             zsm_i_ini(:,:) = si(jp_smi)%fnow(:,:,1) * xmskt(:,:)
@@ -335,8 +336,8 @@ CONTAINS
                &                h_i    (:,jj,:)   ,   h_s    (:,jj,:)   ,   a_i    (:,jj,:) ,                     & ! =>> out
                &              ztm_i_ini(:,jj)     , ztm_s_ini(:,jj)     , zt_su_ini(:,jj)   , zsm_i_ini(:,jj)   , & ! <<= in
                &              zapnd_ini(:,jj)     , zhpnd_ini(:,jj)     , zhlid_ini(:,jj)   ,                     & ! <<= in
-               &                t_i    (:,jj,1,:) ,   t_s    (:,jj,1,:) ,   t_su   (:,jj,:) ,       s_i(:,jj,:) , & ! =>> out
-               &                a_ip   (:,jj,:)   ,   h_ip   (:,jj,:)   ,   h_il   (:,jj,:) )                       ! =>> out
+               &                t_i    (:,jj,1,:) ,   t_s    (:,jj,1,:) ,   t_su   (:,jj,:) ,       s_i(:,jj,:) )  !, & ! =>> out
+            !&                a_ip   (:,jj,:)   ,   h_ip   (:,jj,:)   ,   h_il   (:,jj,:) )                       ! =>> out
          ENDDO
          DO jl = 1, jpl
             DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -373,7 +374,7 @@ CONTAINS
                   END DO
                END DO
             END DO
-            CALL ice_var_salprof ! for sz_i
+            CALL ice_var_salprof( sz_i ) ! fill `sz_i`
          ENDIF
 
          DO jl = 1, jpl
@@ -381,7 +382,6 @@ CONTAINS
                DO ji=Nis0-nn_hls, Nie0+nn_hls
                   v_i (ji,jj,jl) = h_i(ji,jj,jl) * a_i(ji,jj,jl)
                   v_s (ji,jj,jl) = h_s(ji,jj,jl) * a_i(ji,jj,jl)
-                  sv_i(ji,jj,jl) = s_i(ji,jj,jl) * v_i(ji,jj,jl)
                END DO
             END DO
          END DO
@@ -402,27 +402,27 @@ CONTAINS
                DO jj=Njs0-nn_hls, Nje0+nn_hls
                   DO ji=Nis0-nn_hls, Nie0+nn_hls
                      DO jk=1, nlay_i
-                        ! salt
-                        szv_i(ji,jj,jk,jl) = sz_i(ji,jj,jk,jl) * v_i(ji,jj,jl) * r1_nlay_i
                         ! heat
                         ztmelts          = - rTmlt * sz_i(ji,jj,jk,jl) + rt0 ! melting temperature in K
                         e_i(ji,jj,jk,jl) = zswitch(ji,jj) * v_i(ji,jj,jl) * r1_nlay_i * &
                            &               rhoi * (  rcpi  * ( ztmelts - t_i(ji,jj,jk,jl) ) + &
                            &                         rLfus * ( 1._wp - (ztmelts-rt0) / MIN( (t_i(ji,jj,jk,jl)-rt0), -epsi20 ) ) &
                            &                       - rcp   * ( ztmelts - rt0 ) )
+                        ! salt
+                        szv_i(ji,jj,jk,jl) = sz_i(ji,jj,jk,jl) * v_i(ji,jj,jl) * r1_nlay_i
                      END DO
                   END DO
                END DO
             END DO
             !
             ! Melt ponds
-            WHERE( a_i(:,:,:) > epsi10 )
-               a_ip_eff(:,:,:) = a_ip(:,:,:) / a_i(:,:,:)
-            ELSEWHERE
-               a_ip_eff(:,:,:) = 0._wp
-            END WHERE
-            v_ip(:,:,:) = h_ip(:,:,:) * a_ip(:,:,:)
-            v_il(:,:,:) = h_il(:,:,:) * a_ip(:,:,:)
+            !WHERE( a_i(:,:,:) > epsi10 )
+            !   a_ip_eff(:,:,:) = a_ip(:,:,:) / a_i(:,:,:)
+            !ELSEWHERE
+            !   a_ip_eff(:,:,:) = 0._wp
+            !END WHERE
+            !v_ip(:,:,:) = h_ip(:,:,:) * a_ip(:,:,:)
+            !v_il(:,:,:) = h_il(:,:,:) * a_ip(:,:,:)
             !
          ENDIF
 
@@ -450,8 +450,9 @@ CONTAINS
       !----------------------------------------------------------
       ! 4) Adjust ssh and vertical scale factors to snow-ice mass
       !----------------------------------------------------------
-      IF( ln_icethd ) THEN 
-         snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i + rhow * ( v_ip + v_il ), dim=3  )   ! snow+ice mass
+      IF( ln_icethd ) THEN
+         !snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i + rhow * ( v_ip + v_il ), dim=3  )   ! snow+ice mass
+         snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i                         , dim=3  )   ! snow+ice mass
       ELSE
          snwice_mass  (:,:) = xmskt(:,:) * SUM( rhos * v_s + rhoi * v_i                         , dim=3  )   ! snow+ice mass
       ENDIF

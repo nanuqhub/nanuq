@@ -1,14 +1,14 @@
-# if defined SINGLE_PRECISION
+#if defined SINGLE_PRECISION
 #    define PRECISION sp
 #    define SENDROUTINE mppsend_sp
 #    define RECVROUTINE mpprecv_sp
 #    define MPI_TYPE MPI_REAL
-# else
+#else
 #    define PRECISION dp
 #    define SENDROUTINE mppsend_dp
 #    define RECVROUTINE mpprecv_dp
 #    define MPI_TYPE MPI_DOUBLE_PRECISION
-# endif
+#endif
 
    SUBROUTINE ROUTINE_LNK( pt2d, cd_type, psgn, kextj)
       !!---------------------------------------------------------------------
@@ -48,13 +48,13 @@
      &            znorthloc_e(jpimax, 1-kextj:ipj+kextj)       ,       &
      &          znorthgloio_e(jpimax, 1-kextj:ipj+kextj,ndim_rank_north)    )
       !
-# if defined SINGLE_PRECISION
+#if defined SINGLE_PRECISION
       ztab_e(:,:)      = 0._sp
       znorthloc_e(:,:) = 0._sp
-# else
+#else
       ztab_e(:,:)      = 0._dp
       znorthloc_e(:,:) = 0._dp
-# endif
+#endif
       !
       ij = 1 - kextj
       ! put the last ipj+2*kextj lines of pt2d into znorthloc_e 

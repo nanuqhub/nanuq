@@ -1,0 +1,62 @@
+# ADASTRA / brodeau CRAY with craype-accel-amd-gfx90a
+
+%NCDF_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_cray_gpu_par
+%HDF5_HOME           /lus/home/CT1/hmg2840/brodeau/opt/hdf5_netcdf4_cray_gpu_par
+%XIOS_HOME           /lus/home/CT1/hmg2840/brodeau/src/xios-trunk_cray_gpu
+%OASIS_HOME
+
+%NCDF_INC            -I%NCDF_HOME/include
+%NCDF_LIB            -L%NCDF_HOME/lib -lnetcdff -lnetcdf -L%HDF5_HOME/lib -lhdf5_hl -lhdf5 -lhdf5 -L/usr/lib64 -lz -lcurl -lstdc++
+%XIOS_INC            -I%XIOS_HOME/inc
+%XIOS_LIB            -L%XIOS_HOME/lib -lxios
+
+%FC                  /opt/cray/pe/craype/2.7.35/bin/ftn
+
+%BASE_FFLAGS         -s integer32 -s real64  -ef -e0 -ez -craype-verbose
+
+%PROD_FFLAGS         -O3
+
+%DEV_FFLAGS          -O0 -g
+
+
+
+# OpenMP:
+# ~~~~~~~ 
+%GPU_BASE_FLAGS      -h omp -fopenmp -eo
+%GPU_PROD_FLAGS
+%GPU_DEV_FLAGS
+%GPU_FPP_FLAGS       -D_OPENMP
+%GPU_LD_FLAGS        -h omp -fopenmp
+
+
+
+
+# Production with GPU:   ==> `amdgcn-gfx90a` !!!
+# ~~~~~~~~~~~~~~~~~~~~
+%FPPFLAGS            -P  -traditional %GPU_FPP_FLAGS -D_TRDBG
+%FCFLAGS             %BASE_FFLAGS %PROD_FFLAGS %GPU_BASE_FLAGS %GPU_PROD_FLAGS
+%LDFLAGS            %GPU_LD_FLAGS -lstdc++
+#
+# Debug with GPU:
+# ~~~~~~~~~~~~~~
+#%FPPFLAGS            -P  -traditional %GPU_FPP_FLAGS -D_TRDBG
+#%FCFLAGS             %BASE_FFLAGS %DEV_FFLAGS %GPU_BASE_FLAGS %GPU_DEV_FLAGS
+#%LDFLAGS            %GPU_LD_FLAGS -lstdc++
+
+
+%FFLAGS              %FCFLAGS
+
+%CPP	             cpp
+
+%LD                  /opt/cray/pe/craype/2.7.35/bin/ftn
+
+%AR                  ar
+%ARFLAGS             curv
+
+%MK                  make
+
+%USER_INC            %XIOS_INC %NCDF_INC
+%USER_LIB            %XIOS_LIB %NCDF_LIB
+
+%CC                  /opt/cray/pe/craype/2.7.35/bin/cc
+%CFLAGS              -O3

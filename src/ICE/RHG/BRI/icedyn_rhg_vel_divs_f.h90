@@ -1,0 +1,23 @@
+               ! *** F-centric cell:
+               !                              !--- ds11/dx + ds12/dy
+               zds11_dx = ( pSf(ji,jj,1)  *e2f2(ji,jj)   - pSf(ji-1,jj,1)*e2f2(ji-1,jj) ) * r1_e2v(ji,jj) ! @ V, needs to be * by `r1_e1e2v` !
+               zds12_dy = ( pSf(ji,jj+1,3)*e1t2(ji,jj+1) - pSf(ji,jj,3)  *e1t2(ji,jj)   ) * r1_e1v(ji,jj) !     "     "     "     "     "
+               !
+               zdivSx_f = ( zds11_dx + zds12_dy ) * r1_e1e2v(ji,jj)
+
+               !                              !--- ds22/dy + ds12/dx
+               zds22_dy = ( pSf(ji,jj,2)  *e1f2(ji,jj)   - pSf(ji,jj-1,2)*e1f2(ji,jj-1) ) * r1_e1u(ji,jj) ! @ U, needs to be * by `r1_e1e2v` !
+               zds12_dx = ( pSf(ji+1,jj,3)*e2t2(ji+1,jj) - pSf(ji,jj,3)  *e2t2(ji,jj)   ) * r1_e2u(ji,jj) !     "     "     "     "     "
+               !
+               zdivSy_f = ( zds22_dy + zds12_dx ) * r1_e1e2u(ji,jj)
+
+#if defined key_dbgvel
+               !------ for debugging only / CPP key `key_dbgvel` -------
+               divSx_f(ji,jj) = zdivSx_f
+               divSy_f(ji,jj) = zdivSy_f
+               ds11f_dx_v(ji,jj) = zds11_dx * r1_e1e2v(ji,jj)
+               ds12t_dy_v(ji,jj) = zds12_dy * r1_e1e2v(ji,jj)
+               ds22f_dy_u(ji,jj) = zds22_dy * r1_e1e2u(ji,jj)
+               ds12t_dx_u(ji,jj) = zds12_dx * r1_e1e2u(ji,jj)
+               !--------------------------------------------------------
+#endif

@@ -56,13 +56,13 @@ MODULE diawri
    INTEGER, SAVE, ALLOCATABLE, DIMENSION(:) :: ndex_hA, ndex_A ! ABL
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: diawri.F90 14239 2020-12-23 08:57:16Z smasson $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
-# if defined key_xios
+#if defined key_xios
    !!----------------------------------------------------------------------
    !!   'key_xios'                                        use IOM library
    !!----------------------------------------------------------------------
@@ -90,7 +90,7 @@ CONTAINS
       !
       ! Output the initial state and forcings
       IF( ninist == 1 ) THEN
-         CALL dia_wri_state( Kmm, 'output.init' )
+         CALL dia_wri_state( Kmm, 'nanuq_output.init' )
          ninist = 0
       ENDIF
       !
@@ -145,7 +145,7 @@ CONTAINS
       !
       ! Output the initial state and forcings
       IF( ninist == 1 ) THEN
-         CALL dia_wri_state( Kmm, 'output.init' )
+         CALL dia_wri_state( Kmm, 'nanuq_output.init' )
          ninist = 0
       ENDIF
       !
@@ -416,8 +416,8 @@ CONTAINS
       !!      ocean state in case of abnormal end of a simulation
       !!
       !! ** Method  :   NetCDF files using ioipsl
-      !!      File 'output.init.nc'  is created if ninist = 1 (namelist)
-      !!      File 'output.abort.nc' is created in case of abnormal job end
+      !!      File 'nanuq_output.init.nc'  is created if ninist = 1 (namelist)
+      !!      File 'nanuq_output.abort.nc' is created in case of abnormal job end
       !!----------------------------------------------------------------------
       INTEGER           , INTENT( in ) ::   Kmm              ! ocean time levelindex
       CHARACTER (len=* ), INTENT( in ) ::   cdfile_name      ! name of the file created

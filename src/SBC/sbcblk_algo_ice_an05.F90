@@ -324,7 +324,7 @@ CONTAINS
       REAL(wp) :: zta, zx, zpsi_u, zpsi_s, zstab
       !!----------------------------------------------------------------------------------
       DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1            !
+         DO ji=Nis0-1, Nie0+1
             zta = pzeta(ji,jj)
             !
             ! Unstable stratification:
@@ -371,7 +371,7 @@ CONTAINS
       REAL(wp) :: zta, zx, zpsi_u, zpsi_s, zstab
       !!----------------------------------------------------------------------------------
       DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1            !
+         DO ji=Nis0-1, Nie0+1
             zta = pzeta(ji,jj)
             !
             ! Unstable stratification:

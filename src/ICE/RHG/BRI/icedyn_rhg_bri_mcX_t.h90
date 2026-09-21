@@ -1,0 +1,9 @@
+            zTd = 0.5_wp*( zTd_t + TimeDamagePropag( res_grd_loc_f(jif,jjf), p1mdf(jif,jjf), pxpCf(jif,jjf) ) )
+            zCh = 0.5_wp*( zSc_t + pScHf(jif,jjf) )*rn_c_ref
+            zs11 = psgmf(jif,jjf,1) ; zs22 = psgmf(jif,jjf,2) ; zs12 = psgmt(jif,jjf,3)
+            zrr = 0.5_wp * (zs11 - zs22)
+            zI1 = 0.5_wp * (zs11 + zs22)      ! @F
+            zI2 = SQRT( zrr*zrr + zs12*zs12 ) ! @F
+            zI1 = 0.5_wp*( zI1_t + zI1 )
+            zI2 = 0.5_wp*( zI2_t + zI2 )
+            !! => increment

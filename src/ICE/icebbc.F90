@@ -9,7 +9,7 @@ MODULE icebbc
    USE phycst,  ONLY : rho0
    USE dom_oce, ONLY : umask, vmask
    USE par_ice, ONLY : rn_Cd_io
-   USE ice            ! sea-ice: variables
+   USE ice,     ONLY : V_oce, u_ice, v_ice, uVice, vUice
    USE remap_classic, ONLY : rmpU2V, rmpV2U
    USE in_out_manager ! I/O manager
    USE timing         ! Timing
@@ -41,7 +41,7 @@ CONTAINS
       LOGICAL :: lEgrid
       !!-------------------------------------------------------------------
       !$acc data present( V_oce(:,:,1:4), u_ice, v_ice, uVice, vUice, ptx_oi_u, pty_oi_v )
-      
+
       lEgrid = ( PRESENT(ptx_oi_v) .AND. PRESENT(pty_oi_u) )
       IF( ln_timing )   CALL timing_start('ice_bbc_tau')
       !
@@ -67,7 +67,7 @@ CONTAINS
             zt1 = zUi - zUo
             zt2 = vUice(ji,jj) - V_oce(ji,jj,4)
             zTauO = zrhoco * SQRT( zt1*zt1 + zt2*zt2 )
-            ptx_oi_u = zTauO * ( zUo - zUi )
+            ptx_oi_u(ji,jj) = zTauO * ( zUo - zUi )
 
             !! Y-component of stress at V-points:
             zVi = v_ice(ji,jj)
@@ -75,7 +75,7 @@ CONTAINS
             zt1 = zVi - zVo
             zt2 = uVice(ji,jj) - V_oce(ji,jj,3)
             zTauO = zrhoco * SQRT( zt1*zt1 + zt2*zt2 )
-            pty_oi_v = zTauO * ( zVo - zVi )
+            pty_oi_v(ji,jj) = zTauO * ( zVo - zVi )
 
          ENDDO
       ENDDO
@@ -91,7 +91,7 @@ CONTAINS
                zt1   = zUi - zUo
                zt2   = v_ice(ji,jj) - V_oce(ji,jj,2)
                zTauO = zrhoco * SQRT( zt1*zt1 + zt2*zt2 )
-               ptx_oi_v = zTauO * ( zUo - zUi )
+               ptx_oi_v(ji,jj) = zTauO * ( zUo - zUi )
 
                !! Y-component of stress at U-points:
                zVi  = vUice(ji,jj)
@@ -99,7 +99,7 @@ CONTAINS
                zt1 = zVi - zVo
                zt2 = u_ice(ji,jj) - V_oce(ji,jj,1)
                zTauO = zrhoco * SQRT( zt1*zt1 + zt2*zt2 )
-               pty_oi_u = zTauO * ( zVo - zVi )
+               pty_oi_u(ji,jj) = zTauO * ( zVo - zVi )
 
             ENDDO
          ENDDO

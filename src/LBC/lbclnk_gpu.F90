@@ -628,20 +628,12 @@ CONTAINS
       INTEGER  :: ji, jk, jh, jc
       !!----------------------------------------------------------------------
       !$acc data present(pv4)
-      !PRINT *, ''; !PRINT *, ''
-      !PRINT *, 'LOLO NS lbc:      jpj = ', jpj
       !$acc loop seq
       DO jh = 1, nn_hls
-         !PRINT *, 'LOLO NS lbc: jh =', jh
          jc = 2*nn_hls - jh
          !$acc parallel loop collapse(2)
          DO jk = 1, 4
             DO ji = 1, jpi
-               !IF( ji==10 .AND. jk==4 ) THEN
-               !PRINT *, 'LOLO NS lbc: j receiver, sender =', jh, jpj-jc
-               !PRINT *, 'LOLO NS lbc: j receiver, sender =', jpj-jh+1, jc+1
-               !PRINT *, ''
-               !ENDIF
                pv4(ji,    jh  ,jk) = pv4(ji,jpj-jc  ,jk)
                pv4(ji,jpj-jh+1,jk) = pv4(ji,    jc+1,jk)
             END DO
@@ -914,6 +906,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf2d)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -938,6 +931,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_1f2d_r8
    !
    SUBROUTINE fill_halo_0_2f2d_r8( cdname, pf1, pf2 )
@@ -947,6 +941,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -975,6 +970,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_2f2d_r8
    !
    SUBROUTINE fill_halo_0_3f2d_r8( cdname, pf1, pf2, pf3 )
@@ -984,6 +980,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2,pf3)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -1016,6 +1013,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_3f2d_r8
    !
    SUBROUTINE fill_halo_0_4f2d_r8( cdname, pf1, pf2, pf3, pf4 )
@@ -1025,6 +1023,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2,pf3,pf4)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -1061,6 +1060,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_4f2d_r8
    !
    SUBROUTINE fill_halo_0_5f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5 )
@@ -1070,6 +1070,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2,pf3,pf4,pf5)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -1110,6 +1111,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_5f2d_r8
    !
    SUBROUTINE fill_halo_0_6f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6 )
@@ -1119,6 +1121,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2,pf3,pf4,pf5,pf6)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -1163,6 +1166,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_6f2d_r8
    !
    SUBROUTINE fill_halo_0_7f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7 )
@@ -1172,6 +1176,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2,pf3,pf4,pf5,pf6,pf7)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -1220,6 +1225,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_7f2d_r8
    !
    SUBROUTINE fill_halo_0_8f2d_r8( cdname, pf1, pf2, pf3, pf4, pf5, pf6, pf7, pf8 )
@@ -1229,6 +1235,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------
+      !$acc data present(pf1,pf2,pf3,pf4,pf5,pf6,pf7,pf8)
       !$acc parallel loop
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          !$acc loop seq
@@ -1281,6 +1288,7 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+      !$acc end data
    END SUBROUTINE fill_halo_0_8f2d_r8
 
 

@@ -1,0 +1,11 @@
+                        !----------------------- start: icedyn_adv_util_pes.h90 ----------------------------------
+                        ! Correct snow volume and heat content
+                        zsum = 0._wp
+                        !$acc loop seq
+                        DO jk = 1,  nlay_s
+                           zdum = pe_s(ji,jj,jk,jl)
+                           zsum = zsum + zdum  ! it's the SUM of `pe_s` before it is multiplied by `zfra` (below)
+                           pe_s(ji,jj,jk,jl) = zdum * zfra
+                        END DO
+                        hfx_res(ji,jj) = hfx_res(ji,jj) - zsum * ( 1._wp - zfra ) * z1_dt ! W.m-2 <0
+                        !------------------------ end: icedyn_adv_util_pes.h90 -----------------------------------

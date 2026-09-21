@@ -6,7 +6,9 @@ MODULE icedyn_adv_pra_adv
    !!----------------------------------------------------------------------
    USE par_oce,  ONLY: jpi, jpj, Nis0, Nie0, Njs0, Nje0, nn_hls
    USE par_kind, ONLY: wp
-   USE par_ice,  ONLY: jpl, ln_damage, epsi20
+   USE par_ice,  ONLY: jpl, epsi20
+   USE in_out_manager, ONLY: ln_timing
+   USE timing
 
    IMPLICIT NONE
    PRIVATE
@@ -20,14 +22,14 @@ MODULE icedyn_adv_pra_adv
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:,:)   ::   sa3d
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:,:,:) ::   sa4d
 
-   ! 2D workspace arrays for advection routines   
+   ! 2D workspace arrays for advection routines
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) ::   zfld, zf0, zbet
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) ::   zfm, zfx, zfy, zfxx, zfyy, zfxy
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) ::   zpm, zpx, zpy, zpxx, zpyy, zpxy
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) ::   zalg, zalg1, zalg1q
-   
+
    !!----------------------------------------------------------------------
-   !! NANUQ_beta
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -45,15 +47,15 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   psx , psy          ! 1st moments
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   psxx, psyy, psxy   ! 2nd moments
       !!---------------------------------------------------------------------
-      IF( MOD( (kt - 1) , 2 ) == 0 ) THEN                           !==  odd ice time step:  adv_x_2d then adv_y_2d  ==!
+      IF( MOD( (kt - 1) , 2 ) == 0 ) THEN                           !==  odd ice time step:  adv_pra_x_2d then adv_pra_y_2d  ==!
          !                                                          !--------------------------------------------!
-         CALL adv_x_2d( pdt, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
-         CALL adv_y_2d( pdt, pV, 0._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_x_2d( pdt, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_y_2d( pdt, pV, 0._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
          !                                                          !--------------------------------------------!
-      ELSE                                                          !== even ice time step:  adv_y_2d then adv_x_2d  ==!
+      ELSE                                                          !== even ice time step:  adv_pra_y_2d then adv_pra_x_2d  ==!
          !                                                          !--------------------------------------------!
-         CALL adv_y_2d( pdt, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
-         CALL adv_x_2d( pdt, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_y_2d( pdt, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_x_2d( pdt, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
          !
       ENDIF
    END SUBROUTINE adv_pra_2d
@@ -71,12 +73,12 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   psx , psy          ! 1st moments
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   psxx, psyy, psxy   ! 2nd moments
       !!---------------------------------------------------------------------
-      IF( MOD( (kt - 1) , 2 ) == 0 ) THEN  !==  odd ice time step:  adv_x_3d then adv_y_3d  ==!
-         CALL adv_x_3d( pdt, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
-         CALL adv_y_3d( pdt, pV, 0._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
-      ELSE                                 !== even ice time step:  adv_y_3d then adv_x_3d  ==!
-         CALL adv_y_3d( pdt, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
-         CALL adv_x_3d( pdt, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
+      IF( MOD( (kt - 1) , 2 ) == 0 ) THEN  !==  odd ice time step:  adv_pra_x_3d then adv_pra_y_3d  ==!
+         CALL adv_pra_x_3d( pdt, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_y_3d( pdt, pV, 0._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
+      ELSE                                 !== even ice time step:  adv_pra_y_3d then adv_pra_x_3d  ==!
+         CALL adv_pra_y_3d( pdt, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_x_3d( pdt, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa3d, pF, psx, psxx, psy, psyy, psxy )
       ENDIF
    END SUBROUTINE adv_pra_3d
 
@@ -94,12 +96,12 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,klay,jpl), INTENT(inout) ::   psx , psy          ! 1st moments
       REAL(wp), DIMENSION(jpi,jpj,klay,jpl), INTENT(inout) ::   psxx, psyy, psxy   ! 2nd moments
       !!---------------------------------------------------------------------
-      IF( MOD( (kt - 1) , 2 ) == 0 ) THEN  !==  odd ice time step:  adv_x_4d then adv_y_4d  ==!
-         CALL adv_x_4d( pdt, klay, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
-         CALL adv_y_4d( pdt, klay, pV, 0._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
-      ELSE                                 !== even ice time step:  adv_y_4d then adv_x_4d  ==!
-         CALL adv_y_4d( pdt, klay, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
-         CALL adv_x_4d( pdt, klay, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
+      IF( MOD( (kt - 1) , 2 ) == 0 ) THEN  !==  odd ice time step:  adv_pra_x_4d then adv_pra_y_4d  ==!
+         CALL adv_pra_x_4d( pdt, klay, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_y_4d( pdt, klay, pV, 0._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
+      ELSE                                 !== even ice time step:  adv_pra_y_4d then adv_pra_x_4d  ==!
+         CALL adv_pra_y_4d( pdt, klay, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
+         CALL adv_pra_x_4d( pdt, klay, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa4d, pF, psx, psxx, psy, psyy, psxy )
       ENDIF
    END SUBROUTINE adv_pra_4d
 
@@ -111,16 +113,16 @@ CONTAINS
 
 
 
-   SUBROUTINE adv_x_2d( pdt, pU, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_x_2d( pdt, pU, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
       !!---------------------------------------------------------------------
-      !!                **  routine adv_x_2d  **
+      !!                **  routine adv_pra_x_2d  **
       !!
       !! ** purpose :   Computes and adds the advection trend to sea-ice
       !!                variable on x axis
       !!---------------------------------------------------------------------
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pU                 ! i-direction ice velocity at U-point [m/s]
-      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_x then adv_y (=1) or the opposite (=0)
+      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_pra_x then adv_pra_y (=1) or the opposite (=0)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pe1e2, p1_e1e2
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pmsk
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   psm                ! area
@@ -137,6 +139,7 @@ CONTAINS
       REAL(wp) ::   zpsx, zpsy, zpsxx, zpsyy, zpsxy
       REAL(wp) ::   zmask, zU, zswitch
       !---------------------------------------------------------------------
+      IF( ln_timing )   CALL timing_start('adv_pra_x_2d')
       !$acc data present( pU, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy, zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
 
       !$acc parallel loop collapse(2)
@@ -154,7 +157,7 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# include "icedyn_adv_pra_adv_x.h90"
+# include "icedyn_adv_pra_x.h90"
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
@@ -171,18 +174,19 @@ CONTAINS
       !$acc end parallel loop
 
       !$acc end data
-   END SUBROUTINE adv_x_2d
+      IF( ln_timing )   CALL timing_stop('adv_pra_x_2d')
+   END SUBROUTINE adv_pra_x_2d
 
-   SUBROUTINE adv_y_2d( pdt, pV, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_y_2d( pdt, pV, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
       !!---------------------------------------------------------------------
-      !!                **  routine adv_y_2d  **
+      !!                **  routine adv_pra_y_2d  **
       !!
       !! ** purpose :   Computes and adds the advection trend to sea-ice
       !!                variable on y axis
       !!---------------------------------------------------------------------
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pV                 ! j-direction ice velocity at V-point [m/s]
-      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_x then adv_y (=1) or the opposite (=0)
+      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_pra_x then adv_pra_y (=1) or the opposite (=0)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pe1e2, p1_e1e2
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pmsk
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   psm                ! area
@@ -199,6 +203,7 @@ CONTAINS
       REAL(wp) ::   zpsx, zpsy, zpsxx, zpsyy, zpsxy
       REAL(wp) ::   zmask, zV, zswitch
       !---------------------------------------------------------------------
+      IF( ln_timing )   CALL timing_start('adv_pra_y_2d')
       !$acc data present( pV, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy, zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
 
       !$acc parallel loop collapse(2)
@@ -216,12 +221,12 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
-# include "icedyn_adv_pra_adv_y.h90"
+# include "icedyn_adv_pra_y.h90"
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0+1
          DO ji=Nis0-1, Nie0+1
-            pF  (ji,jj) = zfld(ji,jj) * p1_e1e2(ji,jj) * 1.E6_wp   ! needs to be in km 
+            pF  (ji,jj) = zfld(ji,jj) * p1_e1e2(ji,jj) * 1.E6_wp   ! needs to be in km
             psm (ji,jj) = zpm (ji,jj)
             psx (ji,jj) = zpx (ji,jj)
             psxx(ji,jj) = zpxx(ji,jj)
@@ -233,20 +238,21 @@ CONTAINS
       !$acc end parallel loop
 
       !$acc end data
-   END SUBROUTINE adv_y_2d
+      IF( ln_timing )   CALL timing_stop('adv_pra_y_2d')
+   END SUBROUTINE adv_pra_y_2d
 
 
 
-   SUBROUTINE adv_x_3d( pdt, pU, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_x_3d( pdt, pU, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
       !!---------------------------------------------------------------------
-      !!                **  routine adv_x_3d  **
+      !!                **  routine adv_pra_x_3d  **
       !!
       !! ** purpose :   Computes and adds the advection trend to sea-ice
       !!                variable on x axis
       !!---------------------------------------------------------------------
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pU                 ! i-direction ice velocity at U-point [m/s]
-      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_x then adv_y (=1) or the opposite (=0)
+      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_pra_x then adv_pra_y (=1) or the opposite (=0)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pe1e2, p1_e1e2
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pmsk
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   psm                ! area
@@ -263,6 +269,7 @@ CONTAINS
       REAL(wp) ::   zpsx, zpsy, zpsxx, zpsyy, zpsxy
       REAL(wp) ::   zmask, zU, zswitch
       !---------------------------------------------------------------------
+      IF( ln_timing )   CALL timing_start('adv_pra_x_3d')
       !$acc data present(pU, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy, zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
 
       !$acc loop seq
@@ -284,7 +291,7 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-#        include "icedyn_adv_pra_adv_x.h90"
+#        include "icedyn_adv_pra_x.h90"
 
          !$acc parallel loop collapse(2)
          DO jj=Njs0-1, Nje0+1
@@ -303,18 +310,19 @@ CONTAINS
       END DO !DO jl = 1, jpl
 
       !$acc end data
-   END SUBROUTINE adv_x_3d
+      IF( ln_timing )   CALL timing_stop('adv_pra_x_3d')
+   END SUBROUTINE adv_pra_x_3d
 
-   SUBROUTINE adv_y_3d( pdt, pV, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_y_3d( pdt, pV, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
       !!---------------------------------------------------------------------
-      !!                **  routine adv_y_3d  **
+      !!                **  routine adv_pra_y_3d  **
       !!
       !! ** purpose :   Computes and adds the advection trend to sea-ice
       !!                variable on y axis
       !!---------------------------------------------------------------------
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pV                 ! j-direction ice velocity at V-point [m/s]
-      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_x then adv_y (=1) or the opposite (=0)
+      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_pra_x then adv_pra_y (=1) or the opposite (=0)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pe1e2, p1_e1e2
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pmsk
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(inout) ::   psm                ! area
@@ -331,6 +339,7 @@ CONTAINS
       REAL(wp) ::   zpsx, zpsy, zpsxx, zpsyy, zpsxy
       REAL(wp) ::   zmask, zV, zswitch
       !---------------------------------------------------------------------
+      IF( ln_timing )   CALL timing_start('adv_pra_y_3d')
       !$acc data present( pV, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy, zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
 
       !$acc loop seq
@@ -352,7 +361,7 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-#        include "icedyn_adv_pra_adv_y.h90"
+#        include "icedyn_adv_pra_y.h90"
 
          !$acc parallel loop collapse(2)
          DO jj=Njs0-1, Nje0+1
@@ -371,11 +380,12 @@ CONTAINS
       END DO !DO jl = 1, jpl
 
       !$acc end data
-   END SUBROUTINE adv_y_3d
+      IF( ln_timing )   CALL timing_stop('adv_pra_y_3d')
+   END SUBROUTINE adv_pra_y_3d
 
-   SUBROUTINE adv_x_4d( pdt, klay, pU, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_x_4d( pdt, klay, pU, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
       !!---------------------------------------------------------------------
-      !!                **  routine adv_x_4d  **
+      !!                **  routine adv_pra_x_4d  **
       !!
       !! ** purpose :   Computes and adds the advection trend to sea-ice
       !!                variable on x axis
@@ -383,7 +393,7 @@ CONTAINS
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step
       INTEGER ,                     INTENT(in   ) ::   klay               ! number of layers
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pU                 ! i-direction ice velocity at U-point [m/s]
-      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_x then adv_y (=1) or the opposite (=0)
+      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_pra_x then adv_pra_y (=1) or the opposite (=0)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pe1e2, p1_e1e2
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pmsk
       REAL(wp), DIMENSION(jpi,jpj,klay,jpl), INTENT(inout) ::   psm                ! area
@@ -400,6 +410,7 @@ CONTAINS
       REAL(wp) ::   zpsx, zpsy, zpsxx, zpsyy, zpsxy
       REAL(wp) ::   zmask, zU, zswitch
       !---------------------------------------------------------------------
+      IF( ln_timing )   CALL timing_start('adv_pra_x_4d')
       !$acc data present( pU, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy, zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
 
       !$acc loop seq
@@ -424,7 +435,7 @@ CONTAINS
             END DO
             !$acc end parallel loop
 
-#           include "icedyn_adv_pra_adv_x.h90"
+#           include "icedyn_adv_pra_x.h90"
 
             !$acc parallel loop collapse(2)
             DO jj=Njs0-1, Nje0+1
@@ -445,11 +456,12 @@ CONTAINS
       END DO !DO jk = 1, klay
 
       !$acc end data
-   END SUBROUTINE adv_x_4d
+      IF( ln_timing )   CALL timing_stop('adv_pra_x_4d')
+   END SUBROUTINE adv_pra_x_4d
 
-   SUBROUTINE adv_y_4d( pdt, klay, pV, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_y_4d( pdt, klay, pV, pcrh, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy )
       !!---------------------------------------------------------------------
-      !!                **  routine adv_y_4d  **
+      !!                **  routine adv_pra_y_4d  **
       !!
       !! ** purpose :   Computes and adds the advection trend to sea-ice
       !!                variable on y axis
@@ -457,7 +469,7 @@ CONTAINS
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step
       INTEGER ,                     INTENT(in   ) ::   klay               ! number of layers
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pV                 ! j-direction ice velocity at V-point [m/s]
-      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_x then adv_y (=1) or the opposite (=0)
+      REAL(wp),                     INTENT(in   ) ::   pcrh               ! call adv_pra_x then adv_pra_y (=1) or the opposite (=0)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pe1e2, p1_e1e2
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in   ) ::   pmsk
       REAL(wp), DIMENSION(jpi,jpj,klay,jpl), INTENT(inout) ::   psm                ! area
@@ -474,6 +486,7 @@ CONTAINS
       REAL(wp) ::   zpsx, zpsy, zpsxx, zpsyy, zpsxy
       REAL(wp) ::   zmask, zV, zswitch
       !---------------------------------------------------------------------
+      IF( ln_timing )   CALL timing_start('adv_pra_y_4d')
       !$acc data present( pV, pe1e2, p1_e1e2, pmsk, psm, pF, psx, psxx, psy, psyy, psxy, zfld, zf0, zbet, zfm, zfx, zfy, zfxx, zfyy, zfxy, zpm, zpx, zpy, zpxx, zpyy, zpxy, zalg, zalg1, zalg1q )
 
       !$acc loop seq
@@ -498,7 +511,7 @@ CONTAINS
             END DO
             !$acc end parallel loop
 
-#           include "icedyn_adv_pra_adv_y.h90"
+#           include "icedyn_adv_pra_y.h90"
 
             !$acc parallel loop collapse(2)
             DO jj=Njs0-1, Nje0+1
@@ -519,6 +532,7 @@ CONTAINS
       END DO !DO jk = 1, klay
 
       !$acc end data
-   END SUBROUTINE adv_y_4d
+      IF( ln_timing )   CALL timing_stop('adv_pra_y_4d')
+   END SUBROUTINE adv_pra_y_4d
 
 END MODULE icedyn_adv_pra_adv

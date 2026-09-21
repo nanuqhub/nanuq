@@ -1,0 +1,58 @@
+               !
+               zmsk = REAL(pm01x(ji,jj),wp)
+               zA   = pAu(ji,jj)
+               zUi  = pV(ji,jj,1)  ! U at u-points!
+               zVi  = pV(ji,jj,4)  ! V at u-points!
+               zM_dt =  pmu_dt(ji,jj)  ! M/dt    [kg m^-2 s^-1]
+               zUo  =  pVoce(ji,jj,1)  ! u ocean current at u-points!
+               !
+               ! i-component of air-ice wind stress at U-point:
+               ztau_ai = ptaux_i_u(ji,jj)
+               !
+               !                 !--- tau_io/(u_oce - zUi)
+               zt1   = zUi - zUo
+               zt2   = zVi - pVoce(ji,jj,4)
+               zTauO = zA * rho0*rn_Cd_io * SQRT( zt1*zt1 + zt2*zt2 )  ! MIND: the actual stress is `zTauO * (zUo - zUi)` !!! [kg m^-2 s^-1]
+               !
+               !                 !--- Coriolis at Uu-points (no interpolation needed here)
+               zcorio =  ff_u(ji,jj) * zVi  ! => [m s^-2]
+               !
+               !                 !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
+               zRHS = zdivSx_t + zA*ztau_ai + ridlzd*zM_dt*pdt*(zcorio + pgrdH(ji,jj,1)) + zTauO*zUo      ! unit is [Pa] == [kg m^-1 s^-2]
+               !
+               pV(ji,jj,1) = ( ( ( zM_dt * zUi + zRHS ) / MAX( epsi20, zM_dt + zTauO ) ) * zmsk           &
+                  &                        + zUo * 0.01_wp                               * (1._wp - zmsk) &
+                  &          ) * REAL(pm00x(ji,jj),wp)               !
+
+!#if defined key_dbgvel
+!               !IF( (glamt(ji,jj)<75.99_wp).AND.(ABS(pV(ji,jj,1))>0.9_wp) ) THEN
+!               !IF( (gphit(ji,jj)>77.27_wp).AND.(glamt(ji,jj)>-60.94_wp).AND.(glamt(ji,jj)<-60.89_wp).AND.(ABS(pV(ji,jj,1))>0.5_wp) ) THEN
+!               IF( narea==narea_dbg .AND. ji==kdi .AND. jj==kdj ) THEN
+!                  IF( ABS(pV(ji,jj,1))>0.4_wp ) THEN
+!                     PRINT *, '     --------------------------'
+!                     PRINT *, '   icedyn_rhg_vel_updtUu.h90   '
+!                     PRINT *, '     --------------------------'
+!                     PRINT *, 'BUGGY `Uu`! kts, narea, ji, jj=', kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => New Uu=', REAL(pV(ji,jj,1),4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => Old Uu=', REAL(zUi,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => zAu =', REAL(zA,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => zRHS =', REAL(zRHS,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' ==> zdivSx_t =', REAL(zdivSx_t,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' ==> zAu*ztau_ai =', REAL(zA*ztau_ai,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' ==> zcorio =', REAL(zcorio*ridlzd,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' ==> grdH =', REAL(pgrdH(ji,jj,1)*ridlzd,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' ==> zTauO*zUo =', REAL(zTauO*zUo,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => zM_dt =', REAL(zM_dt,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     zt1 = 1._wp / MAX( epsi20, zM_dt + zTauO )
+!                     PRINT *, ' => 1/() =', REAL(zt1,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => zmsk =', REAL(zmsk,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => pm00x =', pm00x(ji,jj), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => zUo =', REAL(zUo,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, ' => zM_dt =', REAL(zM_dt,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     !PRINT *, ' => zRHS =', REAL(zRHS,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     !PRINT *, ' => zRHS =', REAL(zRHS,4), kts, INT(narea,2), INT(ji,2), INT(jj,2)
+!                     PRINT *, '     -------------'
+!                     PRINT *, ''
+!                  ENDIF
+!               ENDIF
+!#endif

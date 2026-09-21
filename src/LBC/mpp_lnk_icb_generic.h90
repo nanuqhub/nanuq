@@ -1,14 +1,14 @@
-# if defined SINGLE_PRECISION
+#if defined SINGLE_PRECISION
 #    define PRECISION sp
 #    define SENDROUTINE mppsend_sp
 #    define RECVROUTINE mpprecv_sp
 #    define LBCNORTH mpp_lbc_north_icb_sp
-# else
+#else
 #    define PRECISION dp
 #    define SENDROUTINE mppsend_dp
 #    define RECVROUTINE mpprecv_dp
 #    define LBCNORTH mpp_lbc_north_icb_dp
-# endif
+#endif
 
    SUBROUTINE ROUTINE_LNK( cdname, pt2d, cd_type, psgn, kexti, kextj )
       !!----------------------------------------------------------------------
@@ -59,26 +59,26 @@
          pt2d(  jpi  :jpi+kexti,:) = pt2d(     2     :2+kexti,:)       ! west
          !
       ELSE                                        !* closed
-# if defined SINGLE_PRECISION
+#if defined SINGLE_PRECISION
          IF( .NOT. cd_type == 'F' )   pt2d(  1-kexti   :nn_hls   ,:) = 0._sp    ! east except at F-point
                                       pt2d(jpi-nn_hls+1:jpi+kexti,:) = 0._sp    ! west
-# else
+#else
          IF( .NOT. cd_type == 'F' )   pt2d(  1-kexti   :nn_hls   ,:) = 0._dp    ! east except at F-point
                                       pt2d(jpi-nn_hls+1:jpi+kexti,:) = 0._dp    ! west
-# endif
+#endif
       ENDIF
       !                                      ! North-South boundaries
       IF( l_Jperio ) THEN                         !* cyclic (only with no mpp j-split)
          pt2d(:,1-kextj:     1   ) = pt2d(:,jpj-1-kextj:  jpj-1)       ! north
          pt2d(:,  jpj  :jpj+kextj) = pt2d(:,     2     :2+kextj)       ! south
       ELSE                                        !* closed
-# if defined SINGLE_PRECISION
+#if defined SINGLE_PRECISION
          IF( .NOT. cd_type == 'F' )   pt2d(:,  1-kextj   :nn_hls   ) = 0._sp    ! north except at F-point
                                       pt2d(:,jpj-nn_hls+1:jpj+kextj) = 0._sp    ! south
-# else
+#else
          IF( .NOT. cd_type == 'F' )   pt2d(:,  1-kextj   :nn_hls   ) = 0._dp    ! north except at F-point
                                       pt2d(:,jpj-nn_hls+1:jpj+kextj) = 0._dp    ! south
-# endif
+#endif
       ENDIF
       !
 

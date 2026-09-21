@@ -91,7 +91,7 @@ MODULE oss_nnq
    !                                                                   !:  => basically `sst_m` & `sss_m` corrected when `ln_slab_sst=T`
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: oss_nnq.F90 15372 2021-10-14 15:47:24Z davestorkey $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -116,11 +116,15 @@ CONTAINS
       CALL mpp_sum ( 'oss_nnq_alloc', oss_nnq_alloc )
       IF( oss_nnq_alloc > 0 ) CALL ctl_warn('oss_nnq_alloc: allocation of arrays failed')
       !
-# if defined _OPENACC
+      ssu_m(:,:)=0._wp ; sst_m(:,:)=0._wp ; frq_m(:,:)=0._wp ; e3t_m(:,:)=0._wp
+      ssv_m(:,:)=0._wp ; sss_m(:,:)=0._wp ; ssh_m(:,:)=0._wp ; ssst(:,:)=0._wp
+      sssq(:,:)=0._wp  ; sst_s(:,:)=0._wp ; sss_s(:,:)=0._wp
+      !
+#if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: oss_nnq_alloc() => adding OSS arrays to memory!'
       PRINT *, '             => ssu_m, ssv_m, ssh_m, sst_m, sss_m, frq_m, e3t_m, ssst, sssq, sst_s, sss_s'
       !$acc enter data copyin( ssu_m, ssv_m, ssh_m, sst_m, sss_m, frq_m, e3t_m, ssst, sssq, sst_s, sss_s )
-# endif
+#endif
       !
    END FUNCTION oss_nnq_alloc
 

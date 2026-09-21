@@ -30,12 +30,12 @@ MODULE dom_oce
    INTEGER, PUBLIC, PARAMETER :: iverbose = 2
 
    INTEGER, PUBLIC, SAVE :: jperio    ! => as read into `domain_cfg.nc` file...
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    LOGICAL, PUBLIC, SAVE :: l_1c1g    ! => we use 1 CPU core together with 1 GPU
    LOGICAL, PUBLIC, SAVE :: l_need4ll ! => the ocean domain is not entirely landlocked by solid boundaries
    !                                  !    ==> `lbc_linking` must be used, even when no MPP !
 #endif
-   
+
    !!----------------------------------------------------------------------
    !! time & space domain namelist
    !! ----------------------------
@@ -58,10 +58,6 @@ MODULE dom_oce
    REAL(wp), PUBLIC :: rn_bt_cmax       !: Maximum allowed courant number (used if ln_bt_auto=T)
    REAL(wp), PUBLIC :: rn_bt_alpha      !: Time stepping diffusion parameter
 
-
-   !                                   !!! associated variables
-   REAL(wp), PUBLIC ::   rDt, r1_Dt     !: Current model timestep and reciprocal
-
    !!----------------------------------------------------------------------
    !! space domain parameters
    !!----------------------------------------------------------------------
@@ -83,17 +79,16 @@ MODULE dom_oce
    !                             !: domain MPP decomposition parameters
    INTEGER              , PUBLIC ::   nimpp, njmpp     !: i- & j-indexes for mpp-subdomain left bottom
    INTEGER              , PUBLIC ::   narea            !: number for local area (starting at 1) = MPI rank + 1
+   INTEGER              , PUBLIC ::   nimpi, njmpi     !: i and j position in the MPI domain decomposition
    INTEGER,               PUBLIC ::   nidom      !: IOIPSL things...
 
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   mig        !: local ==> global domain, including halos (jpiglo), i-index
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   mjg        !: local ==> global domain, including halos (jpjglo), j-index
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   mig0       !: local ==> global domain, excluding halos (Ni0glo), i-index
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   mjg0       !: local ==> global domain, excluding halos (Nj0glo), j-index
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   mi0, mi1   !: global, including halos (jpiglo) ==> local domain i-index
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION(:,:) ::   mig        !: local ==> global domain, i-index
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION(:,:) ::   mjg        !: local ==> global domain, j-index
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION(:,:) ::   mi0, mi1   !: global ==> local domain, i-index
    !                                                                !:    (mi0=1 and mi1=0 if global index not in local domain)
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   mj0, mj1   !: global, including halos (jpjglo) ==> local domain j-index
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION(:,:) ::   mj0, mj1   !: global ==> local domain, j-index
    !                                                                !:    (mj0=1 and mj1=0 if global index not in local domain)
-   INTEGER, PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:) ::   nfimpp, nfproc, nfjpi
+   INTEGER, PUBLIC, ALLOCATABLE, DIMENSION(:) ::   nfimpp, nfproc, nfjpi, nfni_0
 
    !!----------------------------------------------------------------------
    !! horizontal curvilinear coordinate and scale factors
@@ -137,7 +132,7 @@ MODULE dom_oce
    !! ---------------------------------------------------------------------
    REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: tmask_i                  !: interior (excluding halos+duplicated points) domain T-point mask
    REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:), TARGET :: tmask, umask, vmask, fmask  !: land/ocean mask at T-, U-, V- and F-pts
-   REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: xmskt, xmskf, xmsku     ! for ice dynamics
+   REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: xmskt, xmskf     ! for ice dynamics
 
    INTEGER(1), DIMENSION(:,:,:,:), ALLOCATABLE, SAVE :: klbct, klbcf, klbcu ! masks for weno5 solid latera BCs, last axis: E,N,W,S
    !INTEGER(1), DIMENSION(:,:,:), ALLOCATABLE, SAVE :: kmEt, kmWt
@@ -146,15 +141,21 @@ MODULE dom_oce
    !INTEGER(1), DIMENSION(:,:,:), ALLOCATABLE, SAVE :: kmNf, kmSf
 
 
-   
+   !! Air-Sea bulk transfer coefficients:
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::  CD_oce, CE_oce, CH_oce, U_zu_oce
+
+   !! Temporary arrays:
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::  xtmp1, xtmp2, xtmp3, xtmp4
+
+
    !!----------------------------------------------------------------------
    !! calendar variables
    !! ---------------------------------------------------------------------
    INTEGER , PUBLIC ::   nyear         !: current year
    INTEGER , PUBLIC ::   nmonth        !: current month
    INTEGER , PUBLIC ::   nday          !: current day of the month
-   INTEGER , PUBLIC ::   nhour         !: current hour
-   INTEGER , PUBLIC ::   nminute       !: current minute
+   INTEGER , PUBLIC ::   nhour0        !: time of day at the start of the run: hour
+   INTEGER , PUBLIC ::   nminute0      !:    and minute
    INTEGER , PUBLIC ::   ndastp        !: time step date in yyyymmdd format
    INTEGER , PUBLIC ::   nday_year     !: current day counted from jan 1st of the current year
    INTEGER , PUBLIC ::   nsec_year     !: seconds between 00h jan 1st of the current  year and half of the current time step
@@ -183,7 +184,7 @@ MODULE dom_oce
    LOGICAL, PUBLIC, PARAMETER ::   lk_agrif = .FALSE.   !: agrif flag
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: dom_oce.F90 15556 2021-11-29 15:23:06Z jchanut $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -223,21 +224,36 @@ CONTAINS
       !
       ii = ii+1
       ALLOCATE( e1t2(jpi,jpj), e2t2(jpi,jpj), xmskt(jpi,jpj), &
-         &      e1f2(jpi,jpj), e2f2(jpi,jpj), xmskf(jpi,jpj), &
-         &      xmsku(jpi,jpj),   STAT=ierr(ii) )
+         &      e1f2(jpi,jpj), e2f2(jpi,jpj), xmskf(jpi,jpj),   STAT=ierr(ii) )
       !
       ii = ii+1
       ALLOCATE(    klbct(jpi,jpj,nn_hls,4), klbcf(jpi,jpj,nn_hls,4), klbcu(jpi,jpj,nn_hls,4),  STAT = ierr(ii) )
       !
-      !
-      !PRINT *, 'LOLO `dom_oce_alloc@dom_oce.F90` allocating mask arrays with jpk =', jpk, ', proc #', narea
-      !
       ii = ii+1
       ALLOCATE( tmask(jpi,jpj,jpk), umask(jpi,jpj,jpk), vmask(jpi,jpj,jpk), fmask(jpi,jpj,jpk), tmask_i(jpi,jpj), STAT=ierr(ii) )
+      !
+      ii = ii+1
+      ALLOCATE( xtmp1(jpi,jpj), xtmp2(jpi,jpj), xtmp3(jpi,jpj), xtmp4(jpi,jpj),  STAT = ierr(ii) )
+      xtmp1(:,:)=0._wp ; xtmp2(:,:)=0._wp ; xtmp3(:,:)=0._wp ; xtmp4(:,:)=0._wp
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: dom_oce_alloc() => adding "tmp" work arrays to memory!'
+      !$acc enter data copyin( xtmp1, xtmp2, xtmp3, xtmp4 )
+      PRINT *, '    ==> xtmp1, xtmp2, xtmp3, xtmp4'
+#endif
+      !
+      ii = ii+1
+      ALLOCATE( CD_oce(jpi,jpj), CE_oce(jpi,jpj), CH_oce(jpi,jpj), U_zu_oce(jpi,jpj),   STAT = ierr(ii) )
+      CD_oce(:,:)=0._wp ; CE_oce(:,:)=0._wp ; CH_oce(:,:)=0._wp ; U_zu_oce(:,:)=0._wp
+#if defined _OPENACC || defined _OPENMP
+      PRINT *, ' * info GPU: dom_oce_alloc() => adding air-sea oce bulk formula arrays to memory!'
+      !$acc enter data copyin( CD_oce, CE_oce, CH_oce, U_zu_oce )
+      PRINT *, '    ==> CD_oce, CE_oce, CH_oce, U_zu_oce'
+#endif
+      !
       !
       dom_oce_alloc = MAXVAL(ierr)
       !
    END FUNCTION dom_oce_alloc
-   
+
    !!======================================================================
 END MODULE dom_oce

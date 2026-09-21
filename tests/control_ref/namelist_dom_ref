@@ -94,11 +94,11 @@
          rn_frq_0 = 0.65      !  if `ln_read_frq=F` prescr. solar flux penetr. through 1st ocean level
    !
    ! Relevant if `ln_prs_oce=T`:
-   ln_ssv_T    = .false.      !  prescribed sea surface velocities are provided on T grid points (default is U,V!)
+   ln_ssv_T    = .false.      !  prescribed sea surface velocities are provided on T grid points in input netCDF file (default is U,V!)
    ln_ssv_Fgrid= .false.      !  if true: also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )
    !
    ln_slab_sst = .false.      ! if true => prescribed SST & SSS are corrected based on a simplistic slab model approach
-         rn_mld_0 = 10.       ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT USED'`
+         rn_mld_0 = 10.       ! global value of mixed layer depth to fall back on when `ln_slab_sst=T` & `sn_mld='NOT_USED'`
          rn_ncs_sst = 0.5     ! nudging coefficient for SLAB bulk SST correction (the higher, the closer to the prescribed SST)
    !
    cn_dir      = './'      !  root directory for the ocean data location
@@ -110,18 +110,18 @@
    sn_tem      = 'sas_grid_T'            ,       120.        , 'sosstsst',   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_sal      = 'sas_grid_T'            ,       120.        , 'sosaline',   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_ssh      = 'sas_grid_T'            ,       120.        , 'sossheig',   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_mld      = 'NOT USED'              ,       120.        , 'mld'     ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_e3t      = 'NOT USED'              ,       120.        , 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_frq      = 'NOT USED'              ,       120.        , 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_mld      = 'NOT_USED'              ,       120.        , 'mld'     ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_e3t      = 'NOT_USED'              ,       120.        , 'e3t_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_frq      = 'NOT_USED'              ,       120.        , 'frq_m'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    !!
    !! Following is only for idealized test-cases for 2D advection featuring advection of scalars @ F-points:
-   sn_usf      = 'NOT USED'              ,       120.        , 'uos_v'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_vsf      = 'NOT USED'              ,       120.        , 'vos_u'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_usf      = 'NOT_USED'              ,       120.        , 'uos_v'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_vsf      = 'NOT_USED'              ,       120.        , 'vos_u'   ,   .true.    , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    !!
    !! Following only needed with STATION_ASF compiled with "sea-ice"
-   sn_ifr  = 'NOT USED'                  , 1.         , 'siconc'  ,   .true.    , .false. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_tic  = 'NOT USED'                  , 1.         , 'istl1'   ,   .true.    , .false. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_ial  = 'NOT USED'                  , 1.         , 'fal'     ,   .true.    , .false. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_ifr  = 'NOT_USED'                  , 1.         , 'siconc'  ,   .true.    , .false. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_tic  = 'NOT_USED'                  , 1.         , 'istl1'   ,   .true.    , .false. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_ial  = 'NOT_USED'                  , 1.         , 'fal'     ,   .true.    , .false. , 'yearly'  ,    ''            ,    ''    ,    ''
 /
 !!
 !!
@@ -141,6 +141,11 @@
    ln_flx      = .false.   !  flux formulation                          (T => fill namsbc_flx )
    ln_blk      = .false.   !  Bulk formulation                          (T => fill namsbc_blk )
    ln_abl      = .false.   !  ABL  formulation                          (T => fill namsbc_abl )
+   !
+   sn_loc_vct_tau = 'C'    ! C-grid point location of surface (air-sea or ice-sea) stress to be computed and/or transmitted to OASIS
+   !                       !   * 'T'   => both `utau` & `vtau` are located at T-point
+   !                       !   * 'C'   => follow 'C-grid' convention => `utau` @ U-point & `vtau` @ V-point
+   !                       !    ==> when coupled to NEMO4.4.2, use 'C' !
    !
    ln_cpl_atm  = .false.   !  atmosphere coupled   formulation          ( requires key_oasis3 )
    !
@@ -164,25 +169,26 @@
 &namsbc_blk    !   namsbc_blk  generic Bulk formula          (ln_blk =T)
 !-----------------------------------------------------------------------
    !                    !  bulk algorithm :
-   ln_NCAR      = .true.     ! "NCAR"      algorithm   (Large and Yeager 2008)
+   ln_NCAR      = .false.    ! "NCAR"      algorithm   (Large and Yeager 2008)
    ln_COARE_3p0 = .false.    ! "COARE 3.0" algorithm   (Fairall et al. 2003)
-   ln_ECMWF     = .false.    ! "ECMWF"     algorithm   (IFS cycle 45r1)
-      rn_zqt       = 10.     !  Air temperature & humidity reference height (m)
+   ln_ECMWF     = .true.     ! "ECMWF"     algorithm   (IFS cycle 45r1)
+      rn_zqt       =  2.     !  Air temperature & humidity reference height (m)
       rn_zu        = 10.     !  Wind vector reference height (m)
       nn_iter_algo = 5       !  Number of iterations in bulk param. algo ("stable ABL + weak wind" requires more)
       ln_skin_cs   = .false. !  use the cool-skin parameterization  => use at least nn_iter_algo > 10
       ln_skin_wl   = .false. !  use the warm-layer parameterization => use at least nn_iter_algo > 10
    !
-   ln_humi_sph = .true.  !  humidity "sn_humi" is specific humidity  [kg/kg]
-   ln_humi_dpt = .false. !  humidity "sn_humi" is dew-point temperature [K]
+   ln_humi_sph = .false. !  humidity "sn_humi" is specific humidity  [kg/kg]
+   ln_humi_dpt = .true.  !  humidity "sn_humi" is dew-point temperature [K]
    ln_humi_rlh = .false. !  humidity "sn_humi" is relative humidity     [%]
    ln_tair_pot = .false. !  air temperature read in "sn_tair" is already POTENTIAL TEMPERATURE, NOT ABSOLUTE (ECMWF => ln_tair_pot=.false.)
    !!
-   !! Bulk transfer coefficients over sea-ice:
+   !! Bulk transfer coefficients over sea-ice, 5 options:
    ln_Cx_ice_cst = .true.     ! use constant ice-air bulk transfer coefficients (value given below)
-      rn_Cd_i  = 1.4e-3       ! sea-ice drag coefficient
+      rn_Cd_i  = 1.6e-3       ! sea-ice drag coefficient
       rn_Ce_i  = 1.4e-3       !    "    sublimation coefficient
       rn_Ch_i  = 1.4e-3       !    "    sensible heat flux coefficient
+   ln_Cx_ice_STAB  = .false.  !  NANUQ's own flavor, taking into account near-surface atmospheric stability
    ln_Cx_ice_AN05  = .false.  !  (Andreas et al. 2005)
    ln_Cx_ice_LU12  = .false.  !  (Lupkes et al. 2012)
    ln_Cx_ice_LG15  = .false.  !  (Lupkes & Gryanik 2015)
@@ -200,11 +206,11 @@
    sn_prec     = 'ncar_precip.15JUNE2009_fill',   -1.        , 'PRC_MOD1',   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , ''       , ''
    sn_snow     = 'ncar_precip.15JUNE2009_fill',   -1.        , 'SNOW'    ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , ''       , ''
    sn_slp      = 'slp.15JUNE2009_fill'        ,    6.        , 'SLP'     ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , ''       , ''
-   sn_uoatm    = 'NOT USED'                   ,    6.        , 'UOATM'   ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , 'Uoceatm', ''
-   sn_voatm    = 'NOT USED'                   ,    6.        , 'VOATM'   ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , 'Voceatm', ''
-   sn_cc       = 'NOT USED'                   ,   24.        , 'CC'      ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , ''       , ''
-   sn_hpgi     = 'NOT USED'                   ,   24.        , 'uhpg'    ,   .false.   , .false., 'monthly' , 'weights_ERAI3D_F128_2_ORCA2_bicubic', 'UG'     , ''
-   sn_hpgj     = 'NOT USED'                   ,   24.        , 'vhpg'    ,   .false.   , .false., 'monthly' , 'weights_ERAI3D_F128_2_ORCA2_bicubic', 'VG'     , ''
+   sn_uoatm    = 'NOT_USED'                   ,    6.        , 'UOATM'   ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , 'Uoceatm', ''
+   sn_voatm    = 'NOT_USED'                   ,    6.        , 'VOATM'   ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , 'Voceatm', ''
+   sn_cc       = 'NOT_USED'                   ,   24.        , 'CC'      ,   .false.   , .true. , 'yearly'  , 'weights_core_orca2_bilinear_noc.nc' , ''       , ''
+   sn_hpgi     = 'NOT_USED'                   ,   24.        , 'uhpg'    ,   .false.   , .false., 'monthly' , 'weights_ERAI3D_F128_2_ORCA2_bicubic', 'UG'     , ''
+   sn_hpgj     = 'NOT_USED'                   ,   24.        , 'vhpg'    ,   .false.   , .false., 'monthly' , 'weights_ERAI3D_F128_2_ORCA2_bicubic', 'VG'     , ''
 /
 !-----------------------------------------------------------------------
 &namsbc_abl    !   Atmospheric Boundary Layer formulation           (ln_abl = T)
@@ -247,7 +253,7 @@
 !!   nambdy        Unstructured open boundaries                         (default: OFF)
 !!   nambdy_dta    Unstructured open boundaries - external data         (see  nambdy)
 !!======================================================================
-!!
+!
 !-----------------------------------------------------------------------
 &nambdy        !  unstructured open boundaries                          (default: OFF)
 !-----------------------------------------------------------------------
@@ -284,15 +290,15 @@
    bn_a_i      = 'amm12_bdyT_ice'        ,         24.       , 'siconc'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
    bn_h_i      = 'amm12_bdyT_ice'        ,         24.       , 'sithic'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
    bn_h_s      = 'amm12_bdyT_ice'        ,         24.       , 'snthic'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_t_i      = 'NOT USED'              ,         24.       , 'sitemp'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_t_s      = 'NOT USED'              ,         24.       , 'sntemp'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_tsu      = 'NOT USED'              ,         24.       , 'sittop'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_s_i      = 'NOT USED'              ,         24.       , 'sisalt'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_dmg      = 'NOT USED'              ,         24.       , 'damage'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_t_i      = 'NOT_USED'              ,         24.       , 'sitemp'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_t_s      = 'NOT_USED'              ,         24.       , 'sntemp'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_tsu      = 'NOT_USED'              ,         24.       , 'sittop'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_s_i      = 'NOT_USED'              ,         24.       , 'sisalt'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_dmg      = 'NOT_USED'              ,         24.       , 'damage'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
    ! melt ponds (be careful, bn_aip is the pond concentration (not fraction), so it differs from rn_iceapnd)
-   bn_aip      = 'NOT USED'              ,         24.       , 'siapnd'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_hip      = 'NOT USED'              ,         24.       , 'sihpnd'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
-   bn_hil      = 'NOT USED'              ,         24.       , 'sihlid'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_aip      = 'NOT_USED'              ,         24.       , 'siapnd'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_hip      = 'NOT_USED'              ,         24.       , 'sihpnd'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
+   bn_hil      = 'NOT_USED'              ,         24.       , 'sihlid'  ,    .true.   , .false.,  'daily'  ,    ''            ,   ''     ,     ''
    ! if bn_t_i etc are "not used", then define arbitrary temperatures and salinity and ponds
    rn_ice_tem  = 270.         !  arbitrary temperature               of incoming sea ice
    rn_ice_sal  = 10.          !       --   salinity                            --

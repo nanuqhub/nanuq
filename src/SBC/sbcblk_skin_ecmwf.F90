@@ -190,7 +190,7 @@ CONTAINS
 
       zcst2 = zcst1 / ( 5._wp*zHwl*zusw2 )  !OR: zcst2 = zcst1*rNuwl0 / ( 5._wp*zHwl*zusw2 ) ???
 
-      zcst0 = rdt * (rNuwl0 + 1._wp) / zHwl
+      zcst0 = rn_Dt * (rNuwl0 + 1._wp) / zHwl
 
       zA = zcst0 * zQabs / ( rNuwl0 * zRhoCp_w )
 

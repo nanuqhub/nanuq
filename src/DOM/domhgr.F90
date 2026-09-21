@@ -15,6 +15,7 @@ MODULE domhgr
    !!             -   ! 2004-05  (A. Koch-Larrouy) Add Gyre configuration
    !!            3.7  ! 2015-09  (G. Madec, S. Flavoni) add cell surface and their inverse
    !!                                       add optional read of e1e2u & e1e2v
+   !!             -   ! 2016-04  (S. Flavoni, G. Madec) new configuration interface: read or usrdef.F90
    !!----------------------------------------------------------------------
 
    !!----------------------------------------------------------------------
@@ -37,8 +38,8 @@ MODULE domhgr
    PUBLIC   dom_hgr   ! called by domain.F90
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: domhgr.F90 15056 2021-06-25 07:37:44Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/OCE 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -52,9 +53,14 @@ CONTAINS
       !!      the associated horizontal metrics, and the Coriolis factor (in s-1).
       !!
       !! ** Method  :   Controlled by ln_read_cfg logical
-      !!              =T : all needed arrays are read in mesh_mask.nc file
+      !!              =T : all needed arrays are read in domcfg file
       !!              =F : user-defined configuration, all needed arrays
       !!                   are computed in usr-def_hgr subroutine
+      !!
+      !!                If Coriolis factor is neither read nor computed (iff=0)
+      !!              it is computed from gphit assuming that the mesh is
+      !!              defined on the sphere :
+      !!                   ff = 2.*omega*sin(gphif)      (in s-1)
       !!
       !!                If u- & v-surfaces are neither read nor computed (ie1e2u_v=0)
       !!              (i.e. no use of reduced scale factors in some straits)
@@ -102,9 +108,8 @@ CONTAINS
       r1_e1v(:,:) = 1._wp / e1v(:,:)   ;   r1_e2v (:,:) = 1._wp / e2v(:,:)
       r1_e1f(:,:) = 1._wp / e1f(:,:)   ;   r1_e2f (:,:) = 1._wp / e2f(:,:)
       !
-      e1e2t(:,:) = e1t(:,:) * e2t(:,:)   ;   r1_e1e2t(:,:) = 1._wp / e1e2t(:,:)
-      e1e2f(:,:) = e1f(:,:) * e2f(:,:)   ;   r1_e1e2f(:,:) = 1._wp / e1e2f(:,:)
-      !
+      e1e2t (:,:) = e1t(:,:) * e2t(:,:)   ;   r1_e1e2t(:,:) = 1._wp / e1e2t(:,:)
+      e1e2f (:,:) = e1f(:,:) * e2f(:,:)   ;   r1_e1e2f(:,:) = 1._wp / e1e2f(:,:)
       IF( ie1e2u_v == 0 ) THEN               ! u- & v-surfaces have not been defined
          IF(lwp) WRITE(numout,*) '          u- & v-surfaces calculated as e1 e2 product'
          e1e2u (:,:) = e1u(:,:) * e2u(:,:)         ! compute them
@@ -119,7 +124,6 @@ CONTAINS
       e2_e1u(:,:) = e2u(:,:) / e1u(:,:)
       e1_e2v(:,:) = e1v(:,:) / e2v(:,:)
       !
-      !IF( ln_damage ) THEN
       e1t2(:,:) = e1t(:,:) * e1t(:,:)
       e2t2(:,:) = e2t(:,:) * e2t(:,:)
       e1f2(:,:) = e1f(:,:) * e1f(:,:)
@@ -141,15 +145,13 @@ CONTAINS
       !!---------------------------------------------------------------------
       !!              ***  ROUTINE hgr_read  ***
       !!
-      !! ** Purpose :   Read a mesh_mask file in NetCDF format using IOM
+      !! ** Purpose :   Read a domcfg file in NetCDF format using IOM
       !!
       !!----------------------------------------------------------------------
       REAL(wp), DIMENSION(:,:), INTENT(out) ::   plamt, plamu, plamv, plamf   ! longitude outputs
       REAL(wp), DIMENSION(:,:), INTENT(out) ::   pphit, pphiu, pphiv, pphif   ! latitude outputs
-      REAL(wp), DIMENSION(:,:), INTENT(out) ::   pe1v! i-scale factors
-      REAL(dp), DIMENSION(:,:), INTENT(out) ::   pe1t, pe1u, pe1f! i-scale factors
-      REAL(wp), DIMENSION(:,:), INTENT(out) ::   pe2u! j-scale factors
-      REAL(dp), DIMENSION(:,:), INTENT(out) ::   pe2t, pe2v, pe2f! j-scale factors
+      REAL(wp), DIMENSION(:,:), INTENT(out) ::   pe1t, pe1u, pe1v, pe1f       ! i-scale factors
+      REAL(wp), DIMENSION(:,:), INTENT(out) ::   pe2t, pe2u, pe2v, pe2f       ! j-scale factors
       INTEGER                 , INTENT(out) ::   ke1e2u_v                     ! =1 u- & v-surfaces read here, =0 otherwise
       REAL(wp), DIMENSION(:,:), INTENT(out) ::   pe1e2u, pe1e2v              ! u- & v-surfaces (if found in file)
       !
@@ -158,36 +160,36 @@ CONTAINS
       !
       IF(lwp) THEN
          WRITE(numout,*)
-         WRITE(numout,*) '   hgr_read : read the horizontal coordinates in mesh_mask'
-         WRITE(numout,*) '   ~~~~~~~~      jpiglo = ', jpiglo, ' jpjglo = ', jpjglo, ' jpk = ', jpk
+         WRITE(numout,*) '   hgr_read : read the horizontal coordinates in the domcfg file'
+         WRITE(numout,*) '   ~~~~~~~~'
       ENDIF
       !
       CALL iom_open( cn_domcfg, inum )
       !
-      CALL iom_get( inum, jpdom_global, 'glamt', plamt, cd_type = 'T', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'glamu', plamu, cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'glamv', plamv, cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'glamf', plamf, cd_type = 'F', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'glamt', plamt, cd_type = 'T', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'glamu', plamu, cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'glamv', plamv, cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'glamf', plamf, cd_type = 'F', psgn = 1._wp, kfill = jpfillcopy )
       !
-      CALL iom_get( inum, jpdom_global, 'gphit', pphit, cd_type = 'T', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'gphiu', pphiu, cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'gphiv', pphiv, cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'gphif', pphif, cd_type = 'F', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'gphit', pphit, cd_type = 'T', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'gphiu', pphiu, cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'gphiv', pphiv, cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'gphif', pphif, cd_type = 'F', psgn = 1._wp, kfill = jpfillcopy )
       !
-      CALL iom_get( inum, jpdom_global, 'e1t'  , pe1t , cd_type = 'T', psgn = 1._dp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'e1u'  , pe1u , cd_type = 'U', psgn = 1._dp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'e1v'  , pe1v , cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'e1f'  , pe1f , cd_type = 'F', psgn = 1._dp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e1t'  , pe1t , cd_type = 'T', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e1u'  , pe1u , cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e1v'  , pe1v , cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e1f'  , pe1f , cd_type = 'F', psgn = 1._wp, kfill = jpfillcopy )
       !
-      CALL iom_get( inum, jpdom_global, 'e2t'  , pe2t , cd_type = 'T', psgn = 1._dp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'e2u'  , pe2u , cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'e2v'  , pe2v , cd_type = 'V', psgn = 1._dp, kfill = jpfillcopy )
-      CALL iom_get( inum, jpdom_global, 'e2f'  , pe2f , cd_type = 'F', psgn = 1._dp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e2t'  , pe2t , cd_type = 'T', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e2u'  , pe2u , cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e2v'  , pe2v , cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
+      CALL iom_get( 'hgr_read', inum, jpdom_global, 'e2f'  , pe2f , cd_type = 'F', psgn = 1._wp, kfill = jpfillcopy )
       !
-      IF( iom_varid( inum, 'e1e2u', ldstop = .FALSE. ) > 0 ) THEN
+      IF( iom_varid( 'hgr_read', inum, 'e1e2u', ldstop = .FALSE. ) > 0 ) THEN
          IF(lwp) WRITE(numout,*) '           e1e2u & e1e2v read in ', TRIM( cn_domcfg ), ' file'
-         CALL iom_get( inum, jpdom_global, 'e1e2u', pe1e2u, cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
-         CALL iom_get( inum, jpdom_global, 'e1e2v', pe1e2v, cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
+         CALL iom_get( 'hgr_read', inum, jpdom_global, 'e1e2u', pe1e2u, cd_type = 'U', psgn = 1._wp, kfill = jpfillcopy )
+         CALL iom_get( 'hgr_read', inum, jpdom_global, 'e1e2v', pe1e2v, cd_type = 'V', psgn = 1._wp, kfill = jpfillcopy )
          ke1e2u_v = 1
       ELSE
          ke1e2u_v = 0

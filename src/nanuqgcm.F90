@@ -4,7 +4,7 @@ MODULE nanuqgcm
    !! StandAlone Surface module : surface fluxes + sea-ice + iceberg floats + ABL
    !!======================================================================
    !! History :  3.6  ! 2011-11  (S. Alderson, G. Madec) original code
-   !!             -   ! 2013-06  (I. Epicoco, S. Mocavero, CMCC) northcomms: setup avoiding MPI communication
+   !!             -   ! 2013-06  (I. Epicoco, S. Mocavero, CMCC) nemo_northcomms: setup avoiding MPI communication
    !!             -   ! 2014-12  (G. Madec) remove KPP scheme and cross-land advection (cla)
    !!            4.0  ! 2016-10  (G. Madec, S. Flavoni)  domain configuration / user defined interface
    !!----------------------------------------------------------------------
@@ -35,12 +35,19 @@ MODULE nanuqgcm
    USE iom            !
    USE mppini         ! shared/distributed memory setting (mpp_init routine)
    USE timing          ! Timing
-   USE halo_mng
+   !USE halo_mng
+   !
+#if ! defined key_mpi_off
+   USE mpi, ONLY : MPI_Wtime
+#endif
 
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
    USE dom_oce, ONLY : l_1c1g, l_need4ll, klbct, klbcf, klbcu
    USE par_ice, ONLY : jpl, nlay_i, nlay_s, ln_icethd
    !USE ice
+#endif
+#if defined _OPENMP
+   USE omp_lib
 #endif
 
    IMPLICIT NONE
@@ -50,17 +57,11 @@ MODULE nanuqgcm
 
    CHARACTER(lc) ::   cform_aaa="( /, 'AAAAAAAA', / ) "     ! flag for output listing
 
-#if ! defined key_mpi_off
-   ! need MPI_Wtime
-   INCLUDE 'mpif.h'
-#endif
-
    !! * Substitutions
 #  include "read_nml_substitute.h90"
-
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
-   !! $Id: nanuqgcm.F90 15267 2021-09-17 09:04:34Z smasson $
+   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NEMO/SAS 5.0, NEMO Consortium (2024)
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -80,8 +81,14 @@ CONTAINS
       !!              Madec, 2008, internal report, IPSL.
       !!----------------------------------------------------------------------
       INTEGER ::   istp   ! time step index
-      REAL(wp)::   zstptiming   ! elapsed time for 1 time step
       !!----------------------------------------------------------------------
+      !
+#if defined _OPENMP
+      CALL omp_set_num_threads(1) ; ! OpenMP is for GPU!!! Not for CPU multithreading !!!
+#endif
+
+      CALL timing_start( 'full code' )     ! do it as soon as possible, no need to test ln_timing (that is not yet defined)
+      CALL timing_start( 'before step' )
 
       !                            !-----------------------!
       CALL nanuq_init              !==  Initialisations  ==!
@@ -92,17 +99,20 @@ CONTAINS
       CALL mpp_max( 'nanuqgcm', nstop )
 
       IF(lwp) WRITE(numout,cform_aaa)   ! Flag AAAAAAA
+      CALL timing_stop( 'before step' )
 
-      !                            !-----------------------!
-      !                            !==   time stepping   ==!
-      !                            !-----------------------!
 
-#if defined _OPENACC
+#if defined _OPENACC || defined _OPENMP
       l_1c1g = (jpnij==1)  ! => we use 1 CPU core together with 1 GPU
       !
       IF(lwp) WRITE(numout,*) ''
       IF(l_1c1g) THEN
+#if defined _OPENACC
          WRITE(numout,*) ' ********************** OpenACC *************************'
+#endif
+#if defined _OPENMP
+         WRITE(numout,*) ' ******************* OpenMP => GPU  **********************'
+#endif
          WRITE(numout,*) ' *** NANUQ will use 1 CPU core and offload on 1 GPU ! ***'
          ! * jperio= 0, landlocked
          ! * jperio= 1, CYCLIC east-west
@@ -129,30 +139,28 @@ CONTAINS
 #endif
 
 
+
+
+      !                            !-----------------------!
+      !                            !==   time stepping   ==!
+      !                            !-----------------------!
+      !
       !                                               !== set the model time-step  ==!
       !
       istp = nit000
       !
       !
       DO WHILE( istp <= nitend .AND. nstop == 0 )
-
+         !
          ncom_stp = istp
-         IF( ln_timing ) THEN
-            zstptiming = MPI_Wtime()
-            IF ( istp == ( nit000 + 1 ) ) elapsed_time = zstptiming
-            IF ( istp ==         nitend ) elapsed_time = zstptiming - elapsed_time
-         ENDIF
-
+         CALL timing_start( 'step', istp, nit000, nitend, 1, 1000 )   ; ! `1` -> nn_fsbc
          CALL stp( istp )
+         CALL timing_stop( 'step', istp )
          istp = istp + 1
-
-         IF( lwp .AND. ln_timing )   WRITE(numtime,*) 'timing step ', istp-1, ' : ', MPI_Wtime() - zstptiming
-
+         !
       END DO
       !
 
-
-      !
       !                            !------------------------!
       !                            !==  finalize the run  ==!
       !                            !------------------------!
@@ -171,17 +179,28 @@ CONTAINS
          ENDIF
       ENDIF
       !
-      IF( ln_timing )   CALL timing_finalize
+      !CALL nanuq_dealloc()   ! free memory as soon as possible as the timing finalization can use large arrays if jpnij is big...
+      !
+      CALL timing_stop( 'full code', ld_finalize = .TRUE. )
       !
       CALL nanuq_closefile
       !
+#if defined key_xios
       CALL xios_finalize  ! end mpp communications with xios
       IF( lk_oasis_oce ) CALL cpl_finalize   ! end coupling and mpp communications with OASIS
-
+#else
+      IF ( lk_oasis_oce ) THEN
+         CALL cpl_finalize ! end coupling and mpp communications with OASIS
+      ELSEIF( lk_mpp ) THEN
+         CALL mppstop ! end mpp communications
+      ENDIF
+#endif
       !
       IF(lwm) THEN
-         IF( nstop == 0 ) THEN   ;   STOP 0
-         ELSE                    ;   STOP 123
+         IF( nstop == 0 ) THEN
+            STOP 0
+         ELSE
+            STOP 123
          ENDIF
       ENDIF
       !
@@ -201,7 +220,6 @@ CONTAINS
       NAMELIST/namcfg/ ln_read_cfg, cn_domcfg, ln_write_cfg, cn_domcfg_out
       !!----------------------------------------------------------------------
       !
-      !PRINT *, 'LOLO: entering `nanuq_init()`!, NAREA = ', narea
       !
       cxios_context = 'nanuq'
       !
@@ -213,13 +231,26 @@ CONTAINS
       !                             !  must be done as soon as possible to get narea  !
       !                             !-------------------------------------------------!
       !
+#if defined key_xios
       IF( lk_oasis_oce ) THEN
          CALL cpl_init( "nanuq", ilocal_comm )                                  ! nanuq local communicator given by oasis
-         CALL xios_initialize( "not used",local_comm=ilocal_comm )            ! send nanuq communicator to xios
+#if defined key_xios3
+         CALL xios_initialize( "nanuq"            ,local_comm=ilocal_comm )            ! send nanuq communicator to xios
+# else
+         CALL xios_initialize( "not used", local_comm=ilocal_comm )            ! send nanuq communicator to xios
+#endif
       ELSE
          CALL xios_initialize( "for_xios_mpi_id",return_comm=ilocal_comm )    ! nanuq local communicator given by xios
       ENDIF
       CALL mpp_start( ilocal_comm )
+#else
+      IF( lk_oasis_oce ) THEN
+         CALL cpl_init( "nanuq", ilocal_comm )             ! nanuq local communicator given by oasis
+         CALL mpp_start( ilocal_comm )
+      ELSE
+         CALL mpp_start( )
+      ENDIF
+#endif
       !
       narea = mpprank + 1                                   ! mpprank: the rank of proc (0 --> mppsize -1 )
       lwm = (narea == 1)                ! control of output namelists
@@ -237,16 +268,14 @@ CONTAINS
       IF( lwm )   CALL ctl_opn(      numond, 'output.namelist_dom', 'REPLACE', 'FORMATTED', 'SEQUENTIAL', -1, -1, .FALSE. )
       !ENDIF
       ! open /dev/null file to be able to supress output write easily
-      CALL ctl_opn(     numnul,               '/dev/null', 'REPLACE', 'FORMATTED', 'SEQUENTIAL', -1, -1, .FALSE. )
+      CALL ctl_opn(     numnul,               '/dev/null', 'UNKNOWN', 'FORMATTED', 'SEQUENTIAL', -1, -1, .FALSE. )
       !
       !                             !--------------------!
       !                             ! Open listing units !  -> need sn_cfctl from namctl to define lwp
       !                             !--------------------!
       !
       READ_NML_REF(numnam,namctl)
-      !901   IF( ios /= 0 )   CALL ctl_nam ( ios , 'namctl in reference namelist' )
       READ_NML_CFG(numnam,namctl)
-      !902   IF( ios >  0 )   CALL ctl_nam ( ios , 'namctl in configuration namelist' )
       !
       ! finalize the definition of namctl variables
       IF( narea < sn_cfctl%procmin .OR. narea > sn_cfctl%procmax .OR. MOD( narea - sn_cfctl%procmin, sn_cfctl%procincr ) /= 0 )   &
@@ -257,8 +286,10 @@ CONTAINS
       IF(lwp) THEN                      ! open listing units
          !
          IF( .NOT. lwm ) THEN           ! alreay opened for narea == 1
-            IF(lk_oasis_oce) THEN; CALL ctl_opn( numout,   'nanuq.output','REPLACE','FORMATTED','SEQUENTIAL',-1,-1, .FALSE., narea )
-            ELSE                 ; CALL ctl_opn( numout, 'nanuq.output','REPLACE','FORMATTED','SEQUENTIAL',-1,-1, .FALSE., narea )
+            IF(lk_oasis_oce) THEN
+               CALL ctl_opn( numout, 'nanuq.output','REPLACE','FORMATTED','SEQUENTIAL',-1,-1, .FALSE., narea )
+            ELSE
+               CALL ctl_opn( numout, 'nanuq.output','REPLACE','FORMATTED','SEQUENTIAL',-1,-1, .FALSE., narea )
             ENDIF
          ENDIF
          !
@@ -305,9 +336,7 @@ CONTAINS
       !                             !------------------------------------!
       !
       READ_NML_REF(numnam,namcfg)
-      !903   IF( ios /= 0 )   CALL ctl_nam ( ios , 'namcfg in reference namelist' )
       READ_NML_CFG(numnam,namcfg)
-      !904   IF( ios >  0 )   CALL ctl_nam ( ios , 'namcfg in configuration namelist' )
       !
       CALL domain_cfg ( cn_cfg, nn_cfg, Ni0glo, Nj0glo, jpkglo, l_Iperio, l_Jperio, l_NFold, c_NFtype )
       !
@@ -317,21 +346,17 @@ CONTAINS
       !                             ! mpp parameters and domain decomposition !
       !                             !-----------------------------------------!
       CALL mpp_init
-      !$acc update device( nn_hls, Nis0, Nie0, Njs0, Nje0 )
+      !$acc update device(nn_hls,Nis0,Nie0,Njs0,Nje0)
 
-#if defined key_loop_fusion
-      IF( nn_hls == 1 ) THEN
-         CALL ctl_stop( 'STOP', 'nanuqgcm : Loop fusion can be used only with extra-halo' )
-      ENDIF
-      CALL ctl_warn( 'nanuq_init', 'you use key_loop_fusion, this may significantly slow down NANUQ performances' )
-#endif
+      !lolo? CALL halo_mng_init()
 
-      CALL halo_mng_init()
       ! Now we know the dimensions of the grid and numout has been set: we can allocate arrays
       CALL nanuq_alloc()
 
+      IF( lk_oasis_oce ) CALL cpl_domdef   ! Define grid for coupling
+
       ! Initialise time level indices
-      Nbb = 1; Nnn = 2; Naa = 3; Nrhs = Naa
+      Nbb = 1; Nnn = 2
 
       !                             !-------------------------------!
       !                             !  NANUQ general initialization  !
@@ -340,40 +365,33 @@ CONTAINS
       CALL nanuq_ctl                          ! Control prints
       !
       !                                      ! General initialization
-      IF( ln_timing    )   CALL timing_init ( 'timing_nanuq.output' )
-      IF( ln_timing    )   CALL timing_start( 'nanuq_init')
+      CALL timing_open( lwp, mpi_comm_oce )   ! open timing report file
+      IF( ln_timing    )   CALL timing_start( 'nanuq_init' )
 
       CALL phy_cst         ! Physical constants
-
       CALL eos_init        ! Equation of seawater
-
       CALL dom_init()      ! Domain
 
       IF( sn_cfctl%l_prtctl )   &
          &                 CALL prt_ctl_init        ! Print control
 
-      !IF( ln_rstart )      CALL rst_read_open
-      CALL day_init()        ! model calendar (using both namelist and restart infos)
+      !LOLOfixme? IF( ln_rstart )      CALL rst_read_open
+      CALL day_init()      ! model calendar (using both namelist and restart infos)
 
       !                                      ! external forcing
       !
-      !IF(lwp) WRITE(numout,*) 'LOLO: calling `sbc_init` from `nanuq_init` of nanuqgcm.F90 !'
       CALL sbc_init()  ! Forcings : surface module
-      !IF(lwp) WRITE(numout,*) 'LOLO: exiting `sbc_init` from `nanuq_init` of nanuqgcm.F90 !'
-      !
-      !IF(lwp) WRITE(numout,*) 'LOLO: calling `oss_init` from `nanuq_init` of nanuqgcm.F90 !'
+      
       CALL oss_init()  ! Forcings : bottom module
-      !IF(lwp) WRITE(numout,*) 'LOLO: exiting `oss_init` from `nanuq_init` of nanuqgcm.F90 !'
-      !
-      !
-      !IF(lwp) WRITE(numout,*) 'LOLO: calling `ice_init` from `nanuq_init` of nanuqgcm.F90 !'
-      CALL ice_init()         ! ICE initialization
-      !IF(lwp) WRITE(numout,*) 'LOLO: exiting `ice_init` from `nanuq_init` of nanuqgcm.F90 !'
+      
+      CALL ice_init()  ! ICE initialization
 
       ! ==> clem: open boundaries init. is mandatory for sea-ice because ice BDY is not decoupled from
       !           the environment of ocean BDY. Therefore bdy is called by NANUQ
       !           This is not clean and should be changed in the future.
       CALL bdy_init()
+
+      !!!NO IF( lk_oasis_oce )   CALL cpl_enddef       ! MUST NOT BE HERE, moved to `ossmod.F90`           ! terminate coupling initialization
 
       IF(lwp) WRITE(numout,cform_aaa)           ! Flag AAAAAAA
       !
@@ -426,7 +444,6 @@ CONTAINS
       !   &                                                '--> add -Dkey_nosignedzero to the definition of %CPP in your arch file' )
       !LOLOfixme.
       !
-      !
    END SUBROUTINE nanuq_ctl
 
 
@@ -476,6 +493,22 @@ CONTAINS
       !
    END SUBROUTINE nanuq_alloc
 
+   !SUBROUTINE nanuq_dealloc()
+   !   !!----------------------------------------------------------------------
+   !   !!                     ***  ROUTINE nanuq_alloc  ***
+   !   !!
+   !   !! ** Purpose :   Allocate all the dynamic arrays of the OCE modules
+   !   !!
+   !   !! ** Method  :
+   !   !!----------------------------------------------------------------------
+   !   USE dom_oce   , ONLY : dom_oce_dealloc
+   !   USE sbc_ice   , ONLY : sbc_ice_dealloc
+   !   !!----------------------------------------------------------------------
+   !   !
+   !   CALL dom_oce_dealloc()    ! ocean domain
+   !   CALL sbc_ice_dealloc()
+   !   !
+   !END SUBROUTINE nanuq_dealloc
 
    SUBROUTINE nanuq_set_cfctl(sn_cfctl, setto )
       !!----------------------------------------------------------------------

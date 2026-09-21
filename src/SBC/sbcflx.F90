@@ -39,7 +39,7 @@ MODULE sbcflx
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 0.1 beta, Brodeau (2024)
+   !! NANUQ 1.0.0, Brodeau (2026)
    !! $Id: sbcflx.F90 14433 2021-02-11 08:06:49Z smasson $
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
