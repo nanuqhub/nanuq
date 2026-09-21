@@ -11,6 +11,7 @@ do.sh
 *~
 *.tmp
 *.out
+*.log
 *.err
 *.orig
 *.old
@@ -21,3 +22,18 @@ out
 *.local
 *.NEW
 *#
+*.openMP
+*.openACC
+MY_SRC
+*.nc
+*.exe
+*.output
+*.stat
+output.namelist*
+*.01
+*.02
+*.03
+layout.dat
+*.stat
+*.step
+nout.000000
