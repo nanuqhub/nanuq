@@ -21,6 +21,7 @@ With respect to the current version of SI3, NANUQ allows to use:
 - 5th order symmetric WENO interpolation for remapping between the C-grid point (such as from center to corner grid points for example).
 - an implicit RK3 numerical scheme for time integration of the brittle rheologies
 - simple _slab ocean_ scheme (for heat and salt) for standalone sea-ice simulations
+- bulk transfer coefficients over sea-ice, to compute turbulent air-ice fluxes, depend on near surface atmospheric stability (Monin-Obukhov ST) based on a Jordan _et al._, 1999 / Andreas _et al._, 2005 type of stability functions (algo "STAB" in namelist)
 
 
 <br>
@@ -339,31 +340,5 @@ See the dedicated [README](./tests/TEST-CASES/EGL12/cpl_oce/README.md) under `./
 
 
 
-
 <br>
 
-
-## Stuff not yet implemented in SI3 (NEMO v5)
-
- - bulk transfer coefficients for sea-ice / atmosphere turbulent fluxes estimates (`C_D`, `C_H` & `C_E`), depend on atmospheric surface boundary layer stability (using stability function of Grachev _et al._ 2007 in stable SBL within a _Monin-Obukov_-based iterative algorithm)
-
-
-
-
-
-
-<br>
-
-
-<br>
-
-Remember my friend (totally out of context but important):
-
-    ! * jperio= 0, landlocked
-    ! * jperio= 1, CYCLIC east-west
-    ! * jperio= 2, equatorial symmetric (i.e. CYCLIC north-south)
-    ! * jperio= 3, north fold WITH T-point pivot
-    ! * jperio= 4, CYCLIC east-west and north fold WITH T-point pivot
-    ! * jperio= 5, north fold WITH F-point pivot
-    ! * jperio= 6, CYCLIC east-west and north fold WITH F-point pivot
-    ! * jperio= 7, CYCLIC east-west and north-south
