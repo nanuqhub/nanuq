@@ -340,5 +340,3 @@ See the dedicated [README](./tests/TEST-CASES/EGL12/cpl_oce/README.md) under `./
 
 
 
-<br>
-
