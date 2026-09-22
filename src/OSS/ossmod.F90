@@ -77,7 +77,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER ::   ios, icpt                         ! local integer
       !!
-      NAMELIST/namoss/ rn_Cd_io, ln_drgice_imp, nn_foss, ln_prs_oce, ln_cpl_oce, ln_ice_embd
+      NAMELIST/namoss/ rn_Cd_io, ln_drgice_imp, nn_foss, ln_prs_oce, ln_cpl_oce, ln_cpl_oce_croco, ln_ice_embd
       !!----------------------------------------------------------------------
       !
       IF(lwp) THEN
@@ -101,6 +101,7 @@ CONTAINS
          WRITE(numout,*) '      Type of coupling (Ocean/Ice/Atmosphere) : '
          WRITE(numout,*) '         prescribed surface ocean state          ln_prs_oce = ', ln_prs_oce
          WRITE(numout,*) '         ice-ocean coupled formulation           ln_cpl_oce = ', ln_cpl_oce
+         WRITE(numout,*) '         => for CROCO C-grid point arrangement ln_cpl_oce_croco = ', ln_cpl_oce_croco
          WRITE(numout,*) '         OASIS coupling                        lk_oasis_oce = ', lk_oasis_oce
          WRITE(numout,*) '         ice embedded into ocean              ln_ice_embd   = ', ln_ice_embd
          !WRITE(numout,*) '      Misc. options of oss : '
@@ -202,7 +203,7 @@ CONTAINS
       CALL oss_prs_init() ! Prescribed sea surface state fields initialization
       !                   ! or initial state in coupled mode
 
-      !$acc update device ( rn_Cd_io, ln_drgice_imp, nn_foss, ln_cpl_oce, ln_ice_embd )
+      !$acc update device ( rn_Cd_io, ln_drgice_imp, nn_foss, ln_cpl_oce, ln_cpl_oce_croco, ln_ice_embd )
 
       IF( .NOT. ln_rstart ) THEN
          IF(lwp) WRITE(numout,*)"  'oss_init()' => `ssst`, `sssq`, `sst_s` & `sss_s` initialized with `sst_m`, `sst_m` & `sss_m`!"

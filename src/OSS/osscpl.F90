@@ -17,17 +17,17 @@ MODULE osscpl
    !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    ! * O_SSTSST   1          jpr_sst
    ! * O_SSSal    2          jpr_sss
-   ! * O_OCurx1   3          jpr_ssu
-   ! * O_OCury1   4          jpr_ssv
+   ! * O_OCurx1   3          jpr_ssu --  @ U-points
+   ! * O_OCury1   4          jpr_ssv --  @ V-points
    ! * O_SSHght   5          jpr_ssh
    ! * O_E3T1st   6          jpr_e3t
    ! * O_FraQsr   7          jpr_frq
    !   => 7 fields
 
-   !! What NANUQ sends to the ocean model:
-   !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   ! * I_OTaux1   1          jps_otx1
-   ! * I_OTauy1   2          jps_oty1
+   !! What NANUQ sends to the ocean model
+   !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ! * I_OTaux1   1          jps_otx1 -- IF(sn_loc_vct_tau=='C') => @ U-points | IF(sn_loc_vct_tau=='T') => @ T-points
+   ! * I_OTauy1   2          jps_oty1 -- IF(sn_loc_vct_tau=='C') => @ V-points | IF(sn_loc_vct_tau=='T') => @ T-points
    ! * I_QnsOce   3          jps_qnsoce
    ! * I_QsrOce   4          jps_qsroce
    ! * IOEvaMPr   5          jps_oemp
@@ -185,10 +185,9 @@ CONTAINS
       IF( oss_cpl_alloc() /= 0 )   CALL ctl_stop( 'STOP', 'oss_cpl_alloc : unable to allocate arrays' )
 
 
-
-
-
-
+      IF( ln_cpl_oce_croco .AND. sn_loc_vct_tau=='T' ) &
+         &   CALL ctl_stop( 'STOP', 'oss_cpl_init : you cannot have "sn_loc_vct_tau=T" with "ln_cpl_oce_croco=.true."' )
+      !!    => because CROCO expects surface stress components to be defined at U- and V-points, not at T-points !!!
 
 
 
@@ -514,7 +513,12 @@ CONTAINS
 #endif
          !
          !$acc update self ( utau )
-         CALL cpl_snd( midcpl, jps_otx1 , isec, RESHAPE ( utau(Nis0:Nie0,Njs0:Nje0), (/Ni_0,Nj_0,1/) ), info ) ! 1
+         IF( ln_cpl_oce_croco ) THEN
+            CALL cpl_snd( midcpl, jps_otx1 , isec, RESHAPE ( utau(Nis0-1:Nie0-1,Njs0:Nje0), (/Ni_0,Nj_0,1/) ), info ) ! 1
+         ELSE
+            !! Ocean component below is on a normal C-grid:
+            CALL cpl_snd( midcpl, jps_otx1 , isec, RESHAPE ( utau(Nis0:Nie0,Njs0:Nje0),     (/Ni_0,Nj_0,1/) ), info ) ! 1
+         ENDIF
          !
          IF( (sn_loc_vct_tau=='T').AND.(iom_use('utau_oa3_t')) )  CALL iom_put( 'utau_oa3_t', utau )
          IF( (sn_loc_vct_tau=='C').AND.(iom_use('utau_oa3_u')) )  CALL iom_put( 'utau_oa3_u', utau )
@@ -535,7 +539,12 @@ CONTAINS
 #endif
          !
          !$acc update self ( vtau )
-         CALL cpl_snd( midcpl, jps_oty1 , isec, RESHAPE ( vtau(Nis0:Nie0,Njs0:Nje0), (/Ni_0,Nj_0,1/) ), info ) ! 2
+         IF( ln_cpl_oce_croco ) THEN
+            CALL cpl_snd( midcpl, jps_oty1 , isec, RESHAPE ( vtau(Nis0:Nie0,Njs0-1:Nje0-1), (/Ni_0,Nj_0,1/) ), info ) ! 2
+         ELSE
+            !! Ocean component below is on a normal C-grid:
+            CALL cpl_snd( midcpl, jps_oty1 , isec, RESHAPE ( vtau(Nis0:Nie0,Njs0:Nje0),     (/Ni_0,Nj_0,1/) ), info ) ! 2
+         ENDIF
          !
          IF( (sn_loc_vct_tau=='T').AND.(iom_use('vtau_oa3_t')) )  CALL iom_put( 'vtau_oa3_t', vtau )
          IF( (sn_loc_vct_tau=='C').AND.(iom_use('vtau_oa3_v')) )  CALL iom_put( 'vtau_oa3_v', vtau )

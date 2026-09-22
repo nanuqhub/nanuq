@@ -30,6 +30,7 @@ MODULE oss_nnq
 #endif
    LOGICAL , PUBLIC ::   ln_prs_oce     !: prescribed surface state of the ocean => standalone formulation
    LOGICAL , PUBLIC ::   ln_cpl_oce     !: ice-ocean coupled formulation
+   LOGICAL , PUBLIC ::   ln_cpl_oce_croco !: T=> takes into account that U-/V-points are located left/below of T-points, respectively !
    !
    LOGICAL , PUBLIC ::   ln_ice_embd    !: flag for levitating/embedding sea-ice in the ocean
    !                                             !: =F levitating ice (no presure effect) with mass and salt exchanges
@@ -45,7 +46,7 @@ MODULE oss_nnq
    !!                     Sea Surface Mean fields
    !!----------------------------------------------------------------------
    INTEGER , PUBLIC                     ::   nn_foss   !: frequency of oss computation
-   !$acc declare create( ln_prs_oce, ln_cpl_oce, ln_ice_embd, nn_foss )
+   !$acc declare create( ln_prs_oce, ln_cpl_oce, ln_cpl_oce_croco, ln_ice_embd, nn_foss )
 
    !! Fields read into netCDF file(s) or received from OASIS:
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   ssu_m     !: prescribed or received (coupled) surface sea i-current (U-point) [m/s]

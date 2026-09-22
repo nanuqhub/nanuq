@@ -78,6 +78,7 @@
       !              ! Type of coupling (Ice/Ocean) :
    ln_prs_oce  = .true.    !  uses a prescribed surface state of the ocean => standalone mode
    ln_cpl_oce  = .false.   !  ocean coupled   formulation          ( requires key_oasis3 )
+      ln_cpl_oce_croco = .false. ! =T takes into account that U-/V-points are located left/below of T-points, respectively !
       !
    ln_ice_embd = .false.   !  =T embedded sea-ice (pressure + mass and salt exchanges)
       !                    !  =F levitating ice (no pressure, mass and salt exchanges)
@@ -145,7 +146,7 @@
    sn_loc_vct_tau = 'C'    ! C-grid point location of surface (air-sea or ice-sea) stress to be computed and/or transmitted to OASIS
    !                       !   * 'T'   => both `utau` & `vtau` are located at T-point
    !                       !   * 'C'   => follow 'C-grid' convention => `utau` @ U-point & `vtau` @ V-point
-   !                       !    ==> when coupled to NEMO4.4.2, use 'C' !
+   !                       !    ==> when coupled to NEMO4.4.2, use 'C' !   
    !
    ln_cpl_atm  = .false.   !  atmosphere coupled   formulation          ( requires key_oasis3 )
    !
