@@ -8,7 +8,7 @@ Put simply, NANUQ is a standalone executable that computes the surface fluxes re
 
 As part of this process, NANUQ resolves both sea-ice dynamics and thermodynamics. It can be used in two ways:
 
-* **Standalone sea-ice experiments:** NANUQ is provided with prescribed surface states for both the liquid ocean and the atmosphere, supplied as netCDF files. A simple _slab ocean_ scheme acting on the heat and salt content of the ocean mixed-layer can be used (prescribed ocean MLD data must be provided along with ocean surface state).
+* **Standalone sea-ice experiments:** NANUQ is provided with prescribed surface states for both the liquid ocean and the atmosphere, supplied as netCDF files. A simple _slab ocean_ scheme acting on the heat and salt content of the ocean mixed-layer can be used (prescribed ocean MLD data must be provided along with ocean surface state including temperature, salinity and 15m-depth currents)
 * **Coupled ocean/sea-ice experiments:** NANUQ is provided with a prescribed surface atmospheric state (as a netCDF file) and receives the surface liquid-ocean state from an ocean model via OASIS. In return, NANUQ sends the surface fluxes of momentum, solar and non-solar heat, and freshwater (E−P) back to the ocean model via OASIS. These fluxes are provided as surface boundary conditions over **both ice-free and ice-covered regions**.
 
 <p align="center">
