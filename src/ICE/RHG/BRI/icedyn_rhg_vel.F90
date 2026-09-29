@@ -19,8 +19,6 @@ MODULE icedyn_rhg_vel
    USE ice, ONLY: divSx_t, divSy_t, divSx_f, divSy_f, ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v, ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u
 #endif
 
-   USE icedyn_rhg_tools, ONLY: fdamp_low_conc
-
    USE timing
 
    IMPLICIT NONE
@@ -36,7 +34,7 @@ CONTAINS
 
 
    SUBROUTINE update_uv_eul( kts, pdt, pAu, pAv, pmu_dt, pmv_dt, pSt, pSf, pgrdH, pVoce, ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u, &
-      &                                     pm01x, pm01y, pm00x, pm00y, pV )
+      &                                     pm01x, pm01y, pm00x, pm00y, pucncl, pvcncl, pV )
       !!----------------------------------------------------------------------------------------------
       !!   Semi-Implicit Euler update operator for ice velocities update
       !!----------------------------------------------------------------------------------------------
@@ -49,12 +47,14 @@ CONTAINS
       REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(in)    :: pVoce    ! the 4 ocean velocity components
       REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u ! air-ice windstress components at relevant points [N/m^2]
       INTEGER(1), DIMENSION(jpi,jpj),   INTENT(in)    :: pm01x, pm01y, pm00x, pm00y
+      REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pucncl, pvcncl ! cancelers for the div. of the stress tensors where tiny ice concentration (@U,V points)
       REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(inout) :: pV        ! the 4 sea-ice velocity components
       !!----------------------------------------------------------------------------------------------
       REAL(wp) :: zds11_dx, zds12_dy, zds22_dy, zds12_dx
       REAL(wp) :: zA, zUi, zVi, zUo, zVo, zM_dt, zmsk, ztau_ai
       REAL(wp) :: zTauO, zcorio, zt1, zt2, zRHS
       REAL(wp) :: zdivSx_t, zdivSy_t, zdivSx_f, zdivSy_f
+      REAL(wp) :: zmltU, zmltV
       INTEGER  :: ji, jj
       !!----------------------------------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('update_uv_eul')
@@ -67,6 +67,10 @@ CONTAINS
 
                !! Divergence of the 2 vertically-integrated stress tensors
                !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+               ! makes no sense to have huge gradient where the 2 involved points have a tiny concencentration of ice (A<~0.1)
+               zmltU = r1_e1e2u(ji,jj) * pucncl(ji,jj)
+               zmltV = r1_e1e2v(ji,jj) * pvcncl(ji,jj)
+
 #              include "icedyn_rhg_vel_divs_t.h90"
 
 #              include "icedyn_rhg_vel_divs_f.h90"
@@ -99,6 +103,10 @@ CONTAINS
 
                !! Divergence of the 2 vertically-integrated stress tensors
                !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+               ! makes no sense to have huge gradient where the 2 involved points have a tiny concencentration of ice (A<~0.1)
+               zmltU = r1_e1e2u(ji,jj) * pucncl(ji,jj)
+               zmltV = r1_e1e2v(ji,jj) * pvcncl(ji,jj)
+
 #              include "icedyn_rhg_vel_divs_t.h90"
 
 #              include "icedyn_rhg_vel_divs_f.h90"
@@ -138,21 +146,22 @@ CONTAINS
 
    SUBROUTINE update_uv_rk3( kts, pdt, pAu, pAv, p1_Mu, p1_Mv, pSt, pSf, pgrdH, pVoce, &
       &                                     ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u,         &
-      &                                     pm01x, pm01y, pm00x, pm00y, pVice )
+      &                                     pm01x, pm01y, pm00x, pm00y, pucncl, pvcncl, pVice )
       !!----------------------------------------------------------------------------------------------
       !!   Implicit RK3 method for ice velocities update
       !!     => using the coefficients of "Lobatto IIIA"
       !!----------------------------------------------------------------------------------------------
-      INTEGER,                        INTENT(in)    :: kts       ! current small time step
-      REAL(wp),                       INTENT(in)    :: pdt       ! (small) time-step [s]
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pAu, pAv  ! Ice concentration
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: p1_Mu, p1_Mv ! `1/mass` @U and @V                 [m2.kg-1]
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(in)    :: pSt, pSf    ! the 3 components the stress tensor
-      REAL(wp), DIMENSION(jpi,jpj,4), INTENT(in)    :: pgrdH    ! gradient of SSH
-      REAL(wp), DIMENSION(jpi,jpj,4), INTENT(in)    :: pVoce    ! the 4 ocean velocity components
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u ! air-ice windstress components at relevant points [N/m^2]
-      INTEGER(1), DIMENSION(jpi,jpj), INTENT(in)    :: pm01x, pm01y, pm00x, pm00y
-      REAL(wp), DIMENSION(jpi,jpj,4), INTENT(inout) :: pVice        ! the 4 sea-ice velocity components
+      INTEGER,                          INTENT(in)    :: kts       ! current small time step
+      REAL(wp),                         INTENT(in)    :: pdt       ! (small) time-step [s]
+      REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pAu, pAv  ! Ice concentration
+      REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: p1_Mu, p1_Mv ! `1/mass` @U and @V                 [m2.kg-1]
+      REAL(wp),   DIMENSION(jpi,jpj,3), INTENT(in)    :: pSt, pSf    ! the 3 components the stress tensor
+      REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(in)    :: pgrdH    ! gradient of SSH
+      REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(in)    :: pVoce    ! the 4 ocean velocity components
+      REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u ! air-ice windstress components at relevant points [N/m^2]
+      INTEGER(1), DIMENSION(jpi,jpj),   INTENT(in)    :: pm01x, pm01y, pm00x, pm00y
+      REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pucncl, pvcncl ! cancelers for the div. of the stress tensors where tiny ice concentration (@U,V points)
+      REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(inout) :: pVice          ! the 4 sea-ice velocity components
       !!----------------------------------------------------------------------------------------------
       REAL(wp) :: zds11_dx, zds12_dy, zds22_dy, zds12_dx
       REAL(wp) :: zA, zUi, zVi, zUo, zVo, zmsk
@@ -165,6 +174,7 @@ CONTAINS
       REAL(wp), DIMENSION(4) :: zVice_n      ! ice velocities at time k+1                                                           [m.s-1]
       REAL(wp), DIMENSION(4) :: zRHSi        ! all the content of the RHS exluding the `-rho_o*CD_o*||U_oce-U_ice||*u_i` at time k  [m.s-2]
       REAL(wp), DIMENSION(4) :: zZ           ! the `rho_o*CD_o*||U_oce-U_ice||/mass` at time k (`mass` is in `kg.m-2`)               [s-1]
+      REAL(wp) :: zmltU, zmltV
       !!----------------------------------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('update_uv_rk3')
       !$acc data present( pAu,pAv,p1_Mu,p1_Mv,pSt,pSf,pgrdH,pVoce,ptaux_i_u,ptauy_i_v,ptaux_i_v,ptauy_i_u,pm01x,pm01y,pm00x,pm00y,pVice ) create( zTau_ai,zgrdH,zVice,zVice_n,zVoce,zRHSi,zZ )
@@ -180,6 +190,10 @@ CONTAINS
 
             !! Divergence of the 2 vertically-integrated stress tensors
             !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            ! makes no sense to have huge gradient where the 2 involved points have a tiny concencentration of ice (A<~0.1)
+            zmltU = r1_e1e2u(ji,jj) * pucncl(ji,jj)
+            zmltV = r1_e1e2v(ji,jj) * pvcncl(ji,jj)
+
 #           include "icedyn_rhg_vel_divs_t.h90"
 
 #           include "icedyn_rhg_vel_divs_f.h90"

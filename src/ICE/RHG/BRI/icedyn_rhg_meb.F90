@@ -40,6 +40,7 @@ MODULE icedyn_rhg_meb
    USE icedyn_rhg_tools, ONLY: sigmaII_sclr, strain_rate_dsd
    USE icedyn_rhg_bri
 
+   USE icedyn_rhg_tools, ONLY: fcncl_low_conc
    USE icedyn_rhg_vel
 
    IMPLICIT NONE
@@ -118,7 +119,7 @@ CONTAINS
       REAL(wp) ::  zmassU, zmassV   ! ice/snow mass and volume
       REAL(wp) ::  zr, zr1, zr2, zr3, zmsk, zzt, zzf, zht, zhf, zravrg
       !!-------------------------------------------------------------------
-      !$acc data present( pshear_i,pdivu_i,pdelta_i,u_ice,v_ice,uVice,vUice,SIGMAt,SIGMAf,dmdt,dmdf,SI1t,SI2t,SI1f,SI2f )
+      !$acc data present( pshear_i,pdivu_i,pdelta_i,u_ice,v_ice,uVice,vUice,SIGMAt,SIGMAf,dmdt,dmdf,SI1t,SI2t,SI1f,SI2f,ucncl,vcncl )
 
       IF( ln_timing )   CALL timing_start(crtnm)
 
@@ -256,6 +257,9 @@ CONTAINS
             xtmp3(ji,jj) = 0.5_wp*(taux_ai_t(ji,jj) + taux_ai_t(ji,jj+1)) * zr2 ! x-component of air-ice wind stress at T-point to V-point [kg m^-1 s^-2]
             xtmp4(ji,jj) = 0.5_wp*(tauy_ai_t(ji,jj) + tauy_ai_t(ji+1,jj)) * zr1 ! y-component of air-ice wind stress at T-point to U-point [kg m^-1 s^-2]
             !
+            ucncl(ji,jj) = MERGE( fcncl_low_conc( au_i(ji,jj) )  ,  1._wp  ,  ln_cdsttic )
+            vcncl(ji,jj) = MERGE( fcncl_low_conc( av_i(ji,jj) )  ,  1._wp  ,  ln_cdsttic )
+            !
          ENDDO
       ENDDO
       !$acc end parallel loop
@@ -285,11 +289,11 @@ CONTAINS
          IF( ln_bri_rk3 ) THEN
             ! ==> Update velocities using IMPLICIT RK3 scheme "Lobatto IIIA" (implicit in terms of ice velocity for the bottom ice-water drag)
             CALL update_uv_rk3( jter, rdtbri, au_i, av_i, xxmU, xxmV, SIGMAt, SIGMAf, xgrdH, V_oce, xtmp1, xtmp2, xtmp3, xtmp4, &
-               &                              kmsk01x, kmsk01y, kmsk00x, kmsk00y,  V_ts )
+               &                              kmsk01x, kmsk01y, kmsk00x, kmsk00y, ucncl, vcncl, V_ts )
          ELSE
             ! ==> Update velocities using 1st-order Euler scheme in time (implicit in terms of ice velocity for the bottom ice-water drag)
             CALL update_uv_eul( jter, rdtbri, au_i, av_i, xxmU, xxmV, SIGMAt, SIGMAf, xgrdH, V_oce, xtmp1, xtmp2, xtmp3, xtmp4, &
-               &                              kmsk01x, kmsk01y, kmsk00x, kmsk00y,  V_ts )
+               &                              kmsk01x, kmsk01y, kmsk00x, kmsk00y, ucncl, vcncl,  V_ts )
          ENDIF
          !
          !
@@ -507,7 +511,7 @@ CONTAINS
          ! Update of stress tensors using implicit Euler 1st order
          ! =======================================================
 
-         !$acc data present( pV4,pxpCt,pxpCf,pScHt,pScHf,pPmax_t,pPmax_f,pht,phf,psgmt,psgmf,p1mdt,p1mdf )
+         !$acc data present( pV4,pxpCt,pxpCf,pScHt,pScHf,pht,phf,psgmt,psgmf,p1mdt,p1mdf )
 
          khep = MERGE( 1 , 0 , ln_MCx_test )
 

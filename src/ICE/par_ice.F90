@@ -151,8 +151,9 @@ MODULE par_ice
    !                                      !:        Òlason et. al. 2022 => 0.5 (root square)), recent studies suggest much weaker, around `0.2` !
    REAL(wp), PUBLIC ::   rn_c_ref         !: Cohesion value at the lab scale                                                         = 2.E6
    REAL(wp), PUBLIC ::   rn_l_ref         !: scaling paramater for cohesion, `l_ref` in [Eq.30 of Olason et al.,2022]
+   LOGICAL,  PUBLIC ::   ln_cdsttic       !: cancel the divergence of the internal stress tensor where tiny ice concentration (@U,V points)
    REAL(wp), PUBLIC ::   r_c_to_N         !: it is `rn_N_ref/rn_c_ref` to convert from `cohesion` to `Nlim`
-   !$acc declare create( rn_dmg_max, r_dmd_min, rn_C0, rn_pow_scl_res, rn_c_ref, rn_l_ref, r_c_to_N )
+   !$acc declare create( rn_dmg_max, r_dmd_min, rn_C0, rn_pow_scl_res, rn_c_ref, rn_l_ref, ln_cdsttic, r_c_to_N )
    !
    !                                      !!** ice-advection namelist (namdyn_adv) **
    LOGICAL, PUBLIC :: ln_adv_Pra       !: Prather        advection scheme

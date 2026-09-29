@@ -146,7 +146,7 @@
    sn_loc_vct_tau = 'C'    ! C-grid point location of surface (air-sea or ice-sea) stress to be computed and/or transmitted to OASIS
    !                       !   * 'T'   => both `utau` & `vtau` are located at T-point
    !                       !   * 'C'   => follow 'C-grid' convention => `utau` @ U-point & `vtau` @ V-point
-   !                       !    ==> when coupled to NEMO4.4.2, use 'C' !   
+   !                       !    ==> when coupled to NEMO4.4.2, use 'C' !
    !
    ln_cpl_atm  = .false.   !  atmosphere coupled   formulation          ( requires key_oasis3 )
    !

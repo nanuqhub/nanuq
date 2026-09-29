@@ -30,9 +30,7 @@ MODULE icedyn_rhg_tools
    PUBLIC strain_rate_dsd
    PUBLIC strain_rate_min
 
-   PUBLIC low_conc_canceler
-   PUBLIC cancel_low_conc
-   PUBLIC fdamp_low_conc
+   PUBLIC fcncl_low_conc
 
    PUBLIC div_stress_tensor
 
@@ -435,88 +433,7 @@ CONTAINS
    END SUBROUTINE strain_rate_min
 
 
-
-
-
-   SUBROUTINE low_conc_canceler( pA, pcncl )
-      !!------------------------------------------------------------------------------------
-      !!------------------------------------------------------------------------------------
-      !! Create an array intended to be used (trough multiplication) to gradually cancel
-      !! a given array field at low ice concentration.
-      !!
-      !!
-      !! It is mainly used to cancel the components of the divergence of the `h*SIGMA` tensors
-      !! as spatial derivatives of `h*SIGMA` tend to become a nonsense at low ice resolution
-      !!
-      !! Here is the "gnuplot-read" equation of the function we use
-      !!  ``` plot 0.51 * ( 1. + 20.*(x-0.3) / sqrt( 1 + (20.*(x-0.3))**2 ) ) - 0.008 ```
-      !!
-      !! `x` being the ice concentration
-      !!
-      !! => looks like a smooth step function that is 0 at `x=0` and reaches 1 at about `x=0.5`
-      !!
-      !!------------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pA    ! ice concentration at point "X" [0:1]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pcncl ! correction factor [0:1]
-      !!------------------------------------------------------------------------------------
-      REAL(wp) :: zx, zc
-      INTEGER  :: ji, jj
-      !!------------------------------------------------------------------------------------
-      !$acc data present( pA, pcncl )
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            zx = 20._wp * (pA(ji,jj) - 0.3_wp)
-            zc = 0.51_wp * ( 1._wp + zx / SQRT(1._wp + zx*zx) ) - 0.008_wp
-            pcncl(ji,jj) = MIN( MAX( zc , 0._wp ) , 1._wp )
-         END DO
-      END DO
-      !$acc end parallel loop
-      !$acc end data
-   END SUBROUTINE low_conc_canceler
-
-
-   SUBROUTINE cancel_low_conc(  pA, pF )
-      !!------------------------------------------------------------------------------------
-      !!------------------------------------------------------------------------------------
-      !! Create an array intended to be used (trough multiplication) to gradually cancel
-      !! a given array field at low ice concentration.
-      !!
-      !!
-      !! It is mainly used to cancel the components of the divergence of the `h*SIGMA` tensors
-      !! as spatial derivatives of `h*SIGMA` tend to become a nonsense at low ice resolution
-      !!
-      !! Here is the "gnuplot-read" equation of the function we use
-      !!  ```plot 0.505 * ( 1. + 25.*(x-0.5) / sqrt( 1 + (25.*(x-0.5))**2 ) ) - 0.003`
-      !!
-      !! `x` being the ice concentration
-      !!
-      !! => looks like a smooth step function that is 0 at `x=0` and reaches 1 at about `x=0.7`
-      !!
-      !!------------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)    :: pA    ! ice concentration at point "X" [0:1]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) :: pF    ! field to correct
-      !!------------------------------------------------------------------------------------
-      REAL(wp) :: zx, zc, zF
-      INTEGER  :: ji, jj
-      !!------------------------------------------------------------------------------------
-      !$acc data present( pA, pF )
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            zF = pF(ji,jj)
-            zx = 25._wp * (pA(ji,jj) - 0.5_wp)
-            zc = 0.505_wp * ( 1._wp + zx / SQRT(1._wp + zx*zx) ) - 0.003_wp
-            zF = MIN( MAX( zc , 0._wp ) , 1._wp ) * zF
-            pF(ji,jj) = zF
-         END DO
-      END DO
-      !$acc end parallel loop
-      !$acc end data
-   END SUBROUTINE cancel_low_conc
-
-
-   FUNCTION fdamp_low_conc(  pA )
+   FUNCTION fcncl_low_conc(  pA )
       !!------------------------------------------------------------------------------------
       !$acc routine seq
       !!------------------------------------------------------------------------------------
@@ -536,16 +453,16 @@ CONTAINS
       !! => looks like a smooth step function that is 0 at `x=0` and reaches 1 at about `x=0.7`
       !!
       !!------------------------------------------------------------------------------------
-      REAL(wp)             :: fdamp_low_conc
+      REAL(wp)             :: fcncl_low_conc
       REAL(wp), INTENT(in) :: pA    ! ice concentration at point "X" [0:1]
       !!------------------------------------------------------------------------------------
       REAL(wp) :: zx, zc
       !!------------------------------------------------------------------------------------
       zx = 40._wp * (pA - 0.15_wp)
       zc = 0.505_wp * ( 1._wp + zx / SQRT(1._wp + zx*zx) ) - 0.005_wp
-      fdamp_low_conc = MIN( MAX( zc , 0._wp ) , 1._wp )
+      fcncl_low_conc = MIN( MAX( zc , 0._wp ) , 1._wp )
       !!
-   END FUNCTION fdamp_low_conc
+   END FUNCTION fcncl_low_conc
 
 
 

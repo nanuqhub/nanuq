@@ -189,6 +189,8 @@
       !                               !        Òlason et. al. 2022 => 0.5 (root square)), recent studies suggest much weaker, around `0.2` !
       rn_c_ref       = 41000.!Anton   ! cohesion value at the reference "lab" scale [Pa]
       rn_l_ref       = 0.1   !Anton   !     reference "lab" scale (`l_ref` in Olason et al.,2022) [m]
+      !
+      ln_cdsttic     = .true.         ! cancel the divergence of the internal stress tensor where tiny ice concentration (@U,V points)
 /
 !------------------------------------------------------------------------------
 &namdyn_adv     !   Ice advection

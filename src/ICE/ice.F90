@@ -348,7 +348,8 @@ MODULE ice
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   ::   sudy_u, svdx_v  ! transports (u*dy, v*dx) for T-centric mesh (m^2/s)
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   ::   sudy_v, svdx_u  ! transports (u*dy, v*dx) for F-centric mesh (m^2/s)
 
-
+   !! Cancel the divergence of the internal stress tensor where tiny ice concentration (@U,V points)
+   REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   :: ucncl, vcncl
 
 #if defined key_dbgvel
    !! For debuggin purposes, we want to save the components of the divergence of the vertically-integrated internal stress tensors:
@@ -576,7 +577,7 @@ CONTAINS
          PRINT *, '             => dmdt, dmdf, SIGMAf, V_ts, sudy_v, svdx_u'
          !$acc enter data copyin( dmdt, dmdf, SIGMAf, V_ts, sudy_v, svdx_u )
          PRINT *, '            => SI1f, SI2f'
-         !$acc enter data copyin( SI1f, SI2f )         
+         !$acc enter data copyin( SI1f, SI2f )
 #endif
       END IF
 
@@ -590,7 +591,6 @@ CONTAINS
       PRINT *, '            => rdgc'
       !$acc enter data copyin( rdgc )
 #endif
-      !END IF
 
       !LOLOfixme: make it inside a `ln_icethd` flag here?
       ii = ii + 1
@@ -614,6 +614,21 @@ CONTAINS
       PRINT *, '            => sudy_u, svdx_v'
       !$acc enter data copyin( sudy_u, svdx_v )
 #endif
+
+      !IF( ln_damage .AND. ln_cdsttic ) THEN
+      IF( ln_damage ) THEN
+         ii = ii + 1
+         ALLOCATE( ucncl(jpi,jpj), vcncl(jpi,jpj),       STAT = ierr(ii) )
+         ucncl(:,:)=1._wp ;  vcncl(:,:)=1._wp
+#if defined _OPENACC || defined _OPENMP
+         PRINT *, ' * info GPU: ice_alloc() => adding U,V cancelling arrays to memory'
+         PRINT *, '             => ucncl, vcncl'
+         !$acc enter data copyin( ucncl, vcncl )
+#endif
+      END IF
+
+
+
 
 
       !! ARRAYS for debugging only:

@@ -125,7 +125,7 @@ CONTAINS
          &                  ln_rhg_EVP, rn_creepl, rn_ecc, nn_nevp, rn_relast, nn_rhg_chkcvg,  &
          &                  ln_rhg_brittle, rn_cfl_coeff, ln_rhg_MEB, ln_rhg_BBM, rn_N_ref, rn_E0, rn_eta0,   &
          &                  rn_P0, rn_kth, nn_d_adv, ln_adv_d_pra, ln_adv_d_wnx, ln_MCx_test, &
-         &                  rn_crndg, rn_dmg_max, rn_C0, rn_pow_scl_res, rn_c_ref, rn_l_ref
+         &                  rn_crndg, rn_dmg_max, rn_C0, rn_pow_scl_res, rn_c_ref, rn_l_ref, ln_cdsttic
       !!-------------------------------------------------------------------
       !
       READ_NML_REF(numnam_ice,namdyn_rhg)
@@ -175,21 +175,15 @@ CONTAINS
                IF( ln_adv_d_wnx ) WRITE(numout,*) '         => will use WENO advection scheme'
             ENDIF
             !
-            WRITE(numout,*) '         perform Mohr-Coulomb test at mid-point            ln_MCx_test  = ', ln_MCx_test
-            WRITE(numout,*) '         cross-nudging coeff. for stress tensor            rn_crndg      = ', rn_crndg
-            !IF(rn_crndg>0._wp) THEN
-            !   WRITE(numout,*) '      => boost the CN at the coastline?             ln_boost_CN_coast = ', ln_boost_CN_coast
-            !   IF(ln_boost_CN_coast) WRITE(numout,*) '                   ==>          rn_max_CN_coast = ', rn_max_CN_coast
-            !   WRITE(numout,*) '      => boost the CN where damage is high?      ln_boost_CN_high_dmg = ', ln_boost_CN_high_dmg
-            !   IF(ln_boost_CN_high_dmg) WRITE(numout,*) '                   ==>         rn_max_CN_dmg = ', rn_max_CN_dmg
-            !ENDIF
-            WRITE(numout,*) '         ceiling value to cap max damage with              rn_dmg_max    = ', rn_dmg_max
-            WRITE(numout,*) '         compaction paramater (coeff. of exponential)      rn_C0         = ', rn_C0
+            WRITE(numout,*) '         perform Mohr-Coulomb test at mid-point              ln_MCx_test = ', ln_MCx_test
+            WRITE(numout,*) '         cross-nudging coeff. for stress tensor                 rn_crndg = ', rn_crndg
+            WRITE(numout,*) '         ceiling value to cap max damage with                 rn_dmg_max = ', rn_dmg_max
+            WRITE(numout,*) '         compaction paramater (coeff. of exponential)              rn_C0 = ', rn_C0
             WRITE(numout,*) '         Sea-ice cohesion:'
             WRITE(numout,*) '         "power" at w. the cohesion scales / local dx     rn_pow_scl_res = ', rn_pow_scl_res
-            WRITE(numout,*) '         ice cohesion value at the lab scale               rn_c_ref      = ', rn_c_ref, 'Pa'
-            WRITE(numout,*) '         scaling parameter for cohesion                    rn_l_ref      = ', rn_l_ref, 'm'
-
+            WRITE(numout,*) '         ice cohesion value at the lab scale                    rn_c_ref = ', rn_c_ref, 'Pa'
+            WRITE(numout,*) '         scaling parameter for cohesion                         rn_l_ref = ', rn_l_ref, 'm'
+            WRITE(numout,*) '         cancel `div(SIGMA)` where tiny conc. @U & V points   ln_cdsttic = ', ln_cdsttic
             IF( rn_N_ref >= 0._wp ) CALL ctl_stop( 'ice_dyn_rhg_init: `rn_N_ref` must be < 0 !!!' )
 
          END IF ! IF( ln_rhg_brittle )
@@ -211,7 +205,7 @@ CONTAINS
       r_dmd_min = 1._wp - rn_dmg_max
       !WRITE(numout,*) '         `r_dmd_min` set to = ', r_dmd_min, ' on proc #', narea
 
-      !$acc update device( rn_cfl_coeff, rn_dmg_max, r_dmd_min, rn_C0, rn_pow_scl_res, rn_c_ref, rn_l_ref )
+      !$acc update device( rn_cfl_coeff, rn_dmg_max, r_dmd_min, rn_C0, rn_pow_scl_res, rn_c_ref, rn_l_ref, ln_cdsttic )
 
       ridlzd = MERGE( 0._wp , 1._wp , ln_idealized )
       IF( lwp ) WRITE(numout,*) ' *  Coriolis and SSH terms in momentum eq. ? ',ln_idealized,'=> ridlzd =',INT(ridlzd,1)
