@@ -1,6 +1,6 @@
 [![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
 
-# NANUQ: a standalone GPU-optimized fork of NEMO/SI3 featuring brittle rheologies
+# NANUQ: a standalone GPU-optimized sea ic modelling framework based on NEMO/SI3
 
 NANUQ is a fork of SI3+SBC, i.e. the *sea-ice* and *ocean surface boundary conditions* components of NEMO version 5.
 
@@ -29,7 +29,7 @@ With respect to the current version of SI3 (NEMO v5), NANUQ allows to use:
 ## Why NANUQ?
 Technically, NANUQ is the equivalent of the SAS (StandAlone Surface) configuration of NEMO. Like SAS, it can be run either in standalone mode, using a prescribed surface state of the liquid ocean, or coupled to OCE—the 3D, liquid-ocean-only component of NEMO—via OASIS.
 
-We believe in modularity, and the SI3 sea-ice component is too valuable to be accessible only through the vast and potentially intimidating NEMO ecosystem. NANUQ aims to make SI3 **accessible, usable, and easily tweakable** as a standalone sea-ice component, without requiring users to navigate the full NEMO code base.
+We believe in modularity, and the SI3 sea-ice component is too valuable to be accessible only through the vast and potentially intimidating NEMO ecosystem. NANUQ aims to make SI3 more **accessible, usable, and easily tweakable** as a standalone sea-ice component, without requiring users to navigate the full NEMO code base.
 
 To achieve this, NANUQ removes unnecessary source code, dependencies, memory allocations, and run-time operations inherited from SAS.
 
@@ -38,7 +38,7 @@ When using SI3 (or, more precisely, SAS) as a standalone *sea-ice-only* componen
 * **Source-code dependencies:** SI3 depends on numerous NEMO modules that are specific to the liquid ocean. As a result, using SI3 in standalone mode through SAS requires compiling the entire NEMO source code.
 * **Unnecessary memory usage and computations:** SAS allocates many 3D and 2D arrays that are specific to the liquid ocean and performs ocean-specific operations that are unnecessary for a standalone sea-ice model. This significantly increases memory usage compared with NANUQ.
 
-A standalone sea-ice GCM such as NANUQ, with the liquid-ocean code removed, is also particularly well suited to porting and optimizing the sea-ice model for GPUs.
+A standalone sea-ice GCM such as NANUQ is also particularly well suited to porting and optimizing the sea-ice model for GPUs.
 
 NANUQ's ability to run efficiently on a single GPU enables the use of hybrid HPC nodes for coupled ocean–sea-ice experiments, with NANUQ running on a GPU and the OCE component of NEMO running on CPU cores using MPI, coupled through OASIS.
 
