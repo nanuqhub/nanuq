@@ -1,6 +1,6 @@
 [![DOI](https://zenodo.org/badge/1140470961.svg)](https://doi.org/10.5281/zenodo.21134373)
 
-# NANUQ: a standalone GPU-optimized sea ic modelling framework based on NEMO/SI3
+# NANUQ: a standalone GPU-optimized sea ice modelling framework based on NEMO/SI3
 
 NANUQ is a fork of SI3+SBC, i.e. the *sea-ice* and *ocean surface boundary conditions* components of NEMO version 5.
 
