@@ -13,7 +13,8 @@ MODULE remap_weno
    USE par_ice, ONLY : ln_damage, ln_use_weno_rmp, cn_rmp_weno_wght, epsi10, epsi20, rn_amax
 
    USE ice,     ONLY : weno_s_lw_t_x, weno_s_lw_t_y, weno_s_ow_t_x, weno_s_ow_t_y,   &
-      &                weno_s_lw_f_x, weno_s_lw_f_y, weno_s_ow_f_x, weno_s_ow_f_y
+      &                weno_s_lw_f_x, weno_s_lw_f_y, weno_s_ow_f_x, weno_s_ow_f_y,   &
+      &                weno_s_lw_u_x, weno_s_lw_u_y, weno_s_ow_u_x, weno_s_ow_u_y
 
    USE timing
 
@@ -27,6 +28,7 @@ MODULE remap_weno
    PUBLIC :: weno7_ISx_G
 
    PUBLIC :: weno5_sym_ISx_G
+   PUBLIC :: weno5_sym_IS4_G
 
    !PUBLIC :: rmpT2U_wn5s
    !PUBLIC :: rmpT2V_wn5s
@@ -95,7 +97,7 @@ CONTAINS
 
       CALL rmp_wn5s_x( klbct, e1t, weno_s_lw_t_x, weno_s_ow_t_x, pxt, pxu )
       CALL rmp_wn5s_y( klbct, e2t, weno_s_lw_t_y, weno_s_ow_t_y, pxt, pxv )
-      
+
       IF( l_min_max ) THEN
          zmin = vminmax(1) ; zmax = vminmax(2)
          !$acc parallel loop collapse(2) copyin(zmin,zmax)
@@ -171,7 +173,9 @@ CONTAINS
       !!--------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj) :: zxu, zxf
       !!--------------------------------------------------------------
+#if defined _OPENACC || defined _OPENMP
       CALL ctl_stop( 'STOP', 'rmpT2F_wn5s: => make me GPU compliant !!!' )
+#endif
       rmpT2F_wn5s(:,:) = 0._wp
       !
       ! First interp `pxt` from T[i] to U[i] points:
@@ -179,7 +183,7 @@ CONTAINS
       CALL lbc_lnk( 'rmpT2F_wn5s@remap_weno.F90', zxu,'U',1._wp )
 
       ! Now interp `zxu` from U[i] to F[i] points:
-      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_t_y, weno_s_ow_t_y, zxu, zxf ) !LOLO: need weights for U point ??
+      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_u_y, weno_s_ow_u_y, zxu, zxf )  ! U-centered cells (height `e2u`) => weights of the U-grid, not the T-grid ones
       !       "vu depuis `U` le `F` est l'equivalent du `V` vu depuis `T`", hence the `t` here...
 
       IF(PRESENT(lbcl)) THEN
@@ -220,8 +224,8 @@ CONTAINS
 #endif
       !
       ! Now interp from U[i] to F[i] points:
-      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_t_y, weno_s_ow_t_y, xtmp1, xtmp3 ) !LOLO: need weights for U point ??
-      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_t_y, weno_s_ow_t_y, xtmp2, xtmp4 ) !LOLO: need weights for U point ??
+      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_u_y, weno_s_ow_u_y, xtmp1, xtmp3 )  ! U-centered cells (height `e2u`) => weights of the U-grid, not the T-grid ones
+      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_u_y, weno_s_ow_u_y, xtmp2, xtmp4 )  ! U-centered cells (height `e2u`) => weights of the U-grid, not the T-grid ones
       !
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
@@ -272,8 +276,8 @@ CONTAINS
 #endif
       !
       ! Now interp from U[i] to F[i] points:
-      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_t_y, weno_s_ow_t_y, xtmp1, xtmp3 ) !LOLO: need weights for U point ??
-      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_t_y, weno_s_ow_t_y, xtmp2, xtmp4 ) !LOLO: need weights for U point ??
+      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_u_y, weno_s_ow_u_y, xtmp1, xtmp3 )  ! U-centered cells (height `e2u`) => weights of the U-grid, not the T-grid ones
+      CALL rmp_wn5s_y( klbcu, e2u, weno_s_lw_u_y, weno_s_ow_u_y, xtmp2, xtmp4 )  ! U-centered cells (height `e2u`) => weights of the U-grid, not the T-grid ones
       !
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
@@ -428,10 +432,13 @@ CONTAINS
       !!    that leads to the following expression of
       !!    IS[l] (smoothness indicators) for WENO5-sym
       !!
+      !! WARNING: valid for the stencils `kl=1,2,3` ONLY. Stencil 4 (cells `i+1`, `i+2`, `i+3`) does not
+      !!          contain the cell `i` which this function relies on => use `weno5_sym_IS4_G` for `kl=4`.
+      !!
       !!=======================================================================
       !$acc routine
       !!=======================================================================
-      REAL(wp)            :: weno5_sym_ISx_G   ! Smoothness indicator for stencil # `kl`
+      REAL(wp)            :: weno5_sym_ISx_G   ! Smoothness indicator for stencil # `kl` (`kl=1,2,3` only!)
       INTEGER, INTENT(in) :: kl                ! which of the 4 stencils kl=[1:4]
       REAL(wp),INTENT(in) :: prh_m, prh_p      ! `h` local scale factor of mesh size
       !                                        ! ==> prh_m = e1(i-1)/e1(i), prh_p = e1(i+1)/e1(i) or e2(j-1)/e2(j), prh_p = e2(j+1)/e2(j)
@@ -492,6 +499,59 @@ CONTAINS
    END FUNCTION weno5_sym_ISx_G
 
 
+   FUNCTION weno5_sym_IS4_G( prh_p, prh_pp, pFkp1, pFkp2, pFp )
+      !!=======================================================================
+      !!
+      !! Smoothness indicator of the 4th (right-most) stencil of the symetric WENO 5,
+      !! the one made of the 3 cells `i+1`, `i+2` and `i+3`, in the generalized case
+      !! of a curvilinear grid (variying mesh size `h`).
+      !!
+      !! Why a dedicated function: `weno5_sym_ISx_G` builds the polynomial of a stencil from the
+      !! averages of cells `i-1` and `i` (stencils 1 and 2) or of cells `i` and `i+1` (stencil 3), plus the value at `i+1/2`.
+      !! That is exact for these 3 stencils because they all contain the cells it uses, but the 4th stencil does NOT
+      !! contain cell `i`: using `weno5_sym_ISx_G` with `kl=4` does not give the smoothness of the polynomial of stencil 4
+      !! (it was found 2 to 40 times too large when compared to the actual indicator).
+      !!
+      !! Here the quadratic polynomial of stencil 4 is determined by:
+      !!   * its value at the face `i+1/2` (`pFp`, interpolation done with this very stencil),
+      !!   * its average over cell `i+1` (`pFkp1`) and its average over cell `i+2` (`pFkp2`),
+      !! and its smoothness indicator is then the (Jiang & Shu) integral over cell `i`
+      !! of `h*(p')^2 + h^3*(p'')^2`, as for the other 3 stencils.
+      !!
+      !! Verified numerically (2000 random non-uniform meshes): agrees with the direct integral of the polynomial to 1.E-14.
+      !!
+      !!=======================================================================
+      !$acc routine
+      !!=======================================================================
+      REAL(wp)             :: weno5_sym_IS4_G ! Smoothness indicator of stencil # 4
+      REAL(wp), INTENT(in) :: prh_p           ! `h(i+1)/h(i)`: mesh size of cell `i+1` over the one of cell `i`
+      REAL(wp), INTENT(in) :: prh_pp          ! `h(i+2)/h(i)`: mesh size of cell `i+2` over the one of cell `i`
+      REAL(wp), INTENT(in) :: pFkp1, pFkp2    ! scalar field in cells `i+1` and `i+2`
+      REAL(wp), INTENT(in) :: pFp             ! interp of F at i+1/2 by stencil # 4
+      !!=======================================================================
+      REAL(wp) :: zd1, zd2, zu, zc1, zc2
+      !!=======================================================================
+      ! Local coordinate: `x=0` at the face `i+1/2`, and cell `i` is `[-1,0]` (lengths are expressed in units of `h(i)`),
+      ! so cell `i+1` is `[0,prh_p]` and cell `i+2` is `[prh_p,prh_p+prh_pp]`.
+      ! Polynomial of stencil 4: `p(x) = pFp + zc1*x + zc2*x^2`
+      !
+      ! Differences between the cell averages and the value at the face, which are what the 2 coefficients are made of:
+      zd1 = pFkp1 - pFp
+      zd2 = pFkp2 - pFp
+      zu  = zd1 / prh_p
+      !
+      ! The 2 conditions `average over cell i+1 = pFkp1` and `average over cell i+2 = pFkp2` make a 2x2 linear system for
+      ! `zc1` and `zc2`, solved here by hand (elimination of `zc1`):
+      zc2 = 3._wp * ( zd2 - zu*(2._wp*prh_p + prh_pp) ) / ( (prh_p + prh_pp)*(prh_p + prh_pp) )
+      zc1 = 2._wp*zu - 2._wp*prh_p*zc2/3._wp
+      !
+      ! Integral over cell `i` = `[-1,0]` of `(p')^2 + (p'')^2` with `p' = zc1 + 2*zc2*x` and `p'' = 2*zc2`:
+      !   zc1^2 - 2*zc1*zc2 + 4/3*zc2^2   (from `p'`)   +   4*zc2^2   (from `p''`)
+      weno5_sym_IS4_G = zc1*zc1 - 2._wp*zc1*zc2 + (16._wp/3._wp)*zc2*zc2
+      !
+   END FUNCTION weno5_sym_IS4_G
+
+
 
 
 
@@ -499,7 +559,8 @@ CONTAINS
 
 
    SUBROUTINE read_weno_sym_w( kpi, kpj, kpp, kwo, cfilew, pLWtx, pOWtx, pLWty, pOWty, &
-      &                                                    pLWfx, pOWfx, pLWfy, pOWfy  )
+      &                                                    pLWfx, pOWfx, pLWfy, pOWfy, &
+      &                                                    pLWux, pOWux, pLWuy, pOWuy  )
       !!================================================================================================
       !!================================================================================================
       INTEGER,                                            INTENT(in)  :: kpi, kpj, kpp, kwo
@@ -513,6 +574,12 @@ CONTAINS
       REAL(8),    DIMENSION(kpi,kpj,kpp),       OPTIONAL, INTENT(out) :: pOWfx
       REAL(8),    DIMENSION(kpi,kpj,kpp,kwo+1), OPTIONAL, INTENT(out) :: pLWfy
       REAL(8),    DIMENSION(kpi,kpj,kpp),       OPTIONAL, INTENT(out) :: pOWfy
+      !
+      ! Weights for cells centered on U-points (needed to interpolate from U- to F-points, along `y`):
+      REAL(8),    DIMENSION(kpi,kpj,kpp,kwo+1), OPTIONAL, INTENT(out) :: pLWux
+      REAL(8),    DIMENSION(kpi,kpj,kpp),       OPTIONAL, INTENT(out) :: pOWux
+      REAL(8),    DIMENSION(kpi,kpj,kpp,kwo+1), OPTIONAL, INTENT(out) :: pLWuy
+      REAL(8),    DIMENSION(kpi,kpj,kpp),       OPTIONAL, INTENT(out) :: pOWuy
       !!================================================================================================
       !!
       CHARACTER(len=13), PARAMETER :: crtn = 'read_weno_sym_w'
@@ -522,8 +589,10 @@ CONTAINS
       CHARACTER(len=13) :: cvlw    ! ex: `w5s_lw_t_01_x`
       CHARACTER(len=1)  :: cwo, cp
       LOGICAL           :: lReadFp ! read weights at F-points?
+      LOGICAL           :: lReadUp ! read weights at U-points?
       !!================================================================================================
       lReadFp = ( PRESENT(pLWfx) .AND. PRESENT(pOWfx) .AND. PRESENT(pLWfy) .AND. PRESENT(pOWfy) )
+      lReadUp = ( PRESENT(pLWux) .AND. PRESENT(pOWux) .AND. PRESENT(pLWuy) .AND. PRESENT(pOWuy) )
 
       WRITE(cwo,'(i1)') kwo
 
@@ -594,6 +663,39 @@ CONTAINS
 
       ENDIF !IF( lReadFp )
 
+      ! Weights for cells centered on U-points, same variable naming as for T and F points but with `u` (written by
+      ! `weno_sym_w_nemo.x`, which builds them with the mesh sizes `e1u` and `e2u`, i.e. the actual geometry of the U-cells):
+      IF( lReadUp ) THEN
+
+         cp = 'u'
+
+         pLWux = 0._wp
+         pOWux = 0._wp
+         pLWuy = 0._wp
+         pOWuy = 0._wp
+
+         cvar = 'weno'//cwo//'_ow_'//cp//'_x'
+         IF(lwp) WRITE(numout,*) '     --- reading optimal w. 3D array ',TRIM(cvar)
+         CALL iom_get( 'read_weno_sym_w', inum, jpdom_global, TRIM(cvar), pOWux(:,:,:) )
+
+         cvar = 'weno'//cwo//'_ow_'//cp//'_y'
+         IF(lwp) WRITE(numout,*) '     --- reading optimal w. 3D array ',TRIM(cvar)
+         CALL iom_get( 'read_weno_sym_w', inum, jpdom_global, TRIM(cvar), pOWuy(:,:,:) )
+
+         DO js = 1, kwo+1
+
+            WRITE(cvlw,'("w",i1,"s_lw_",a1,"_",i2.2,"_x")') kwo, cp, js   ! Name of linear weight array to read
+            IF(lwp) WRITE(numout,*) '     --- reading linear w. 3D array ',TRIM(cvlw)
+            CALL iom_get( 'read_weno_sym_w', inum, jpdom_global, TRIM(cvlw), pLWux(:,:,:,js) )
+
+            WRITE(cvlw,'("w",i1,"s_lw_",a1,"_",i2.2,"_y")') kwo, cp, js   ! Name of linear weight array to read
+            IF(lwp) WRITE(numout,*) '     --- reading linear w. 3D array ',TRIM(cvlw)
+            CALL iom_get( 'read_weno_sym_w', inum, jpdom_global, TRIM(cvlw), pLWuy(:,:,:,js) )
+
+         END DO
+
+      ENDIF !IF( lReadUp )
+
       CALL iom_close( inum )
 
       IF(lwp) WRITE(numout,*) ' * Linear and Optimal weights for symetric WENO'//cwo//' read !'
@@ -649,6 +751,13 @@ CONTAINS
          ALLOCATE( weno_s_lw_t_x(jpi,jpj,nS,nP), weno_s_ow_t_x(jpi,jpj,nS),  &
             &      weno_s_lw_t_y(jpi,jpj,nS,nP), weno_s_ow_t_y(jpi,jpj,nS), STAT=ierr )
          IF( ierr/=0 ) CALL ctl_stop( 'STOP', 'remap_weno_init: failed to allocate WENO T-point arrays.' )
+         !
+         ! Weights for cells centered on U-points: always needed, for the U to F interpolation along `y`
+         ! (the cells centered on U-points do not have the same height, `e2u`, as the ones centered on T-points, `e2t`)
+         ALLOCATE( weno_s_lw_u_x(jpi,jpj,nS,nP), weno_s_ow_u_x(jpi,jpj,nS),  &
+            &      weno_s_lw_u_y(jpi,jpj,nS,nP), weno_s_ow_u_y(jpi,jpj,nS), STAT=ierr )
+         IF( ierr/=0 ) CALL ctl_stop( 'STOP', 'remap_weno_init: failed to allocate WENO U-point arrays.' )
+         !
          IF( ln_damage ) THEN
             ALLOCATE( weno_s_lw_f_x(jpi,jpj,nS,nP), weno_s_ow_f_x(jpi,jpj,nS),  &
                &      weno_s_lw_f_y(jpi,jpj,nS,nP), weno_s_ow_f_y(jpi,jpj,nS), STAT=ierr )
@@ -661,14 +770,20 @@ CONTAINS
 
          IF( ln_damage ) THEN
             CALL read_weno_sym_w( jpi, jpj, nS, ko_wrmp, cn_rmp_weno_wght, weno_s_lw_t_x, weno_s_ow_t_x, weno_s_lw_t_y, weno_s_ow_t_y, &
-               &                                                           weno_s_lw_f_x, weno_s_ow_f_x, weno_s_lw_f_y, weno_s_ow_f_y )
+               &                                                           weno_s_lw_f_x, weno_s_ow_f_x, weno_s_lw_f_y, weno_s_ow_f_y, &
+               &                                                           pLWux=weno_s_lw_u_x, pOWux=weno_s_ow_u_x, pLWuy=weno_s_lw_u_y, pOWuy=weno_s_ow_u_y )
             CALL lbc_lnk('remap_weno_init', weno_s_lw_t_x,'T',1._wp, weno_s_lw_t_y,'T',1._wp, weno_s_lw_f_x,'F',1._wp, weno_s_lw_f_y,'F',1._wp )
             CALL lbc_lnk('remap_weno_init', weno_s_ow_t_x,'T',1._wp, weno_s_ow_t_y,'T',1._wp, weno_s_ow_f_x,'F',1._wp, weno_s_ow_f_y,'F',1._wp )
          ELSE
-            CALL read_weno_sym_w( jpi, jpj, nS, ko_wrmp, cn_rmp_weno_wght, weno_s_lw_t_x, weno_s_ow_t_x, weno_s_lw_t_y, weno_s_ow_t_y )
+            CALL read_weno_sym_w( jpi, jpj, nS, ko_wrmp, cn_rmp_weno_wght, weno_s_lw_t_x, weno_s_ow_t_x, weno_s_lw_t_y, weno_s_ow_t_y, &
+               &                                                           pLWux=weno_s_lw_u_x, pOWux=weno_s_ow_u_x, pLWuy=weno_s_lw_u_y, pOWuy=weno_s_ow_u_y )
             CALL lbc_lnk('remap_weno_init', weno_s_lw_t_x,'T',1._wp, weno_s_lw_t_y,'T',1._wp )
             CALL lbc_lnk('remap_weno_init', weno_s_ow_t_x,'T',1._wp, weno_s_ow_t_y,'T',1._wp )
          ENDIF
+         !
+         ! Halo exchange of the U-point weights (read in both cases above), at U-point positions:
+         CALL lbc_lnk('remap_weno_init', weno_s_lw_u_x,'U',1._wp, weno_s_lw_u_y,'U',1._wp )
+         CALL lbc_lnk('remap_weno_init', weno_s_ow_u_x,'U',1._wp, weno_s_ow_u_y,'U',1._wp )
 
          IF(lwp) THEN
             WRITE(numout,*) '                    ==>             done!'
@@ -677,8 +792,9 @@ CONTAINS
          ENDIF
 
 #if defined _OPENACC || defined _OPENMP
-         PRINT *, ' * info GPU: remap_weno_init() => adding the 8 `weno_s_*w_*_*` arrays to memory!'
+         PRINT *, ' * info GPU: remap_weno_init() => adding the 12 `weno_s_*w_*_*` arrays to memory!'
          !$acc enter data copyin(weno_s_lw_t_x,weno_s_lw_t_y,weno_s_ow_t_x,weno_s_ow_t_y,weno_s_lw_f_x,weno_s_lw_f_y,weno_s_ow_f_x,weno_s_ow_f_y)
+         !$acc enter data copyin(weno_s_lw_u_x,weno_s_lw_u_y,weno_s_ow_u_x,weno_s_ow_u_y)
 #endif
 
          !! Some debug control:

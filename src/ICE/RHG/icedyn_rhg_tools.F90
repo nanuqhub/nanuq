@@ -22,17 +22,13 @@ MODULE icedyn_rhg_tools
    !   MODULE PROCEDURE strain_rate_Cgrid, strain_rate_Egrid
    !END INTERFACE strain_rate
 
-   PUBLIC sigmaII_sclr
-   PUBLIC sigmaII_full
-   PUBLIC update_invariants_Egrid
+   PUBLIC update_sigmaII_Egrid
 
    PUBLIC strain_rate_all
    PUBLIC strain_rate_dsd
    PUBLIC strain_rate_min
 
    PUBLIC fcncl_low_conc
-
-   PUBLIC div_stress_tensor
 
    PUBLIC vel_div_t
    PUBLIC vel_ten_t
@@ -47,86 +43,40 @@ MODULE icedyn_rhg_tools
 CONTAINS
 
 
-   FUNCTION sigmaII_sclr( ps11, ps22, ps12 )
-      !!------------------------------------------------------------------------------------
-      !$acc routine
-      !!------------------------------------------------------------------------------------
-      !! Compute `sigma_II`: maximum shearing stress aka 2nd invariant of stress tensor => same units as input stresses
-      !!------------------------------------------------------------------------------------
-      REAL(wp)             :: sigmaII_sclr
-      REAL(wp), INTENT(in) :: ps11, ps22, ps12  ! sigma_11, sigma_22, sigma_12
-      !!
-      REAL(wp) :: ztmp
-      !!------------------------------------------------------------------------------------
-      ztmp  = 0.5_wp * (ps11 - ps22)
-      sigmaII_sclr = SQRT( ztmp*ztmp + ps12*ps12 )
-      !!
-   END FUNCTION sigmaII_sclr
 
-   SUBROUTINE sigmaII_full( pSt, pSf, pSII )
+   SUBROUTINE update_sigmaII_Egrid( pSt, pSf,  pSIIt, pSIIf )
       !!------------------------------------------------------------------------------------
       !!------------------------------------------------------------------------------------
       !! Compute `sigma_II`: maximum shearing stress aka 2nd invariant of stress tensor => same units as input stresses
       !!------------------------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(in)  :: pSt, pSf
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(out) :: pSII
-      !!
-      REAL(wp) :: ztmp, zs
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(out) :: pSIIt, pSIIf
+      !!------------------------------------------------------------------------------------
+      REAL(wp) :: zs2, zs12
       INTEGER  :: ji, jj
       !!------------------------------------------------------------------------------------
-      !$acc data present( pSt, pSf, pSII )
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            ztmp        = 0.5_wp * ( pSt(ji,jj,1) - pSt(ji,jj,2) )
-            zs          = pSf(ji,jj,3)
-            pSII(ji,jj) = SQRT( ztmp*ztmp + zs*zs )
-         END DO
-      END DO
-      !$acc end parallel loop
-      !$acc end data
-   END SUBROUTINE sigmaII_full
-
-
-   SUBROUTINE update_invariants_Egrid( pSt, pSf,  pSIt, pSIIt, pSIf, pSIIf )
-      !!------------------------------------------------------------------------------------
-      !!------------------------------------------------------------------------------------
-      !! Compute `sigma_II`: maximum shearing stress aka 2nd invariant of stress tensor => same units as input stresses
-      !!------------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj,3), INTENT(in)  :: pSt, pSf
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(out) :: pSIt, pSIIt, pSIf, pSIIf
-      !!------------------------------------------------------------------------------------
-      REAL(wp) :: ztmp, zs11, zs22, zs12
-      INTEGER  :: ji, jj
-      !!------------------------------------------------------------------------------------
-      !%acc data present( pSt, pSf, pSI, pSII )
+      !%acc data present( pSt, pSf, pSII )
       !%acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
             !
             ! T-points:
-            zs11 = pSt(ji,jj,1)
-            zs22 = pSt(ji,jj,2)
+            ! The stored components are already `sigma_1 = (s11+s22)/2` and `sigma_2 = (s11-s22)/2`, hence the
+            ! 1st invariant is `sigma_1` itself and the 2nd one is `SQRT( sigma_2^2 + sigma_12^2 )`.
             zs12 = pSf(ji,jj,3)
+            zs2  = pSt(ji,jj,2)
+            pSIIt(ji,jj) = SQRT( zs2*zs2 + zs12*zs12 )
             !
-            pSIt(ji,jj)  = 0.5_wp * ( zs11 + zs22 )
-            ztmp         = 0.5_wp * ( zs11 - zs22 )
-            pSIIt(ji,jj) = SQRT( ztmp*ztmp + zs12*zs12 )
-            !
-            ! F-points:
-            zs11 = pSf(ji,jj,1)
-            zs22 = pSf(ji,jj,2)
+            ! F-points (same, with `sigma_12` located at T):
             zs12 = pSt(ji,jj,3)
-            !
-            pSIf(ji,jj)  = 0.5_wp * ( zs11 + zs22 )
-            ztmp         = 0.5_wp * ( zs11 - zs22 )
-            pSIIf(ji,jj) = SQRT( ztmp*ztmp + zs12*zs12 )
+            zs2  = pSf(ji,jj,2)
+            pSIIf(ji,jj) = SQRT( zs2*zs2 + zs12*zs12 )
             !
          END DO
       END DO
       !%acc end parallel loop
       !%acc end data
-   END SUBROUTINE update_invariants_Egrid
+   END SUBROUTINE update_sigmaII_Egrid
 
 
 
@@ -470,71 +420,6 @@ CONTAINS
 
 
 
-   SUBROUTINE div_stress_tensor( cgt, phc, phx, pe1e1, pe2e2,  pe1e1_e, pe2e2_e,  p1_e2x, p1_e1x, p1_e1y, p1_e2y, p1_e1e2x, p1_e1e2y,  &
-      &                               ps11c, ps22c, ps12x,  pdSx, pdSy,  pm0 )
-      !!----------------------------------------------------------------------------------------------
-      !! Computes the vector (pdSx,pdSy) = divergence of the h-integrated internal stress tensor
-      !!
-      !!   depending on the grid: T-centric grid => cgt='T' or F-centric grid => cgt='F'
-      !!
-      !! INPUT:                                               |     cgt=='T'   |    cgt=='F'    |
-      !!   * ps11c, ps22c: sigma11, sigma22           =>  ! @ point T[i,j] | @ point F[i,j] |
-      !!   * ps12x       :       sigma12                =>  ! @ point F[i,j] | @ point T[i,j] |
-      !!
-      !! RETURNS:                                             |     cgt=='T'   |    cgt=='F'    |
-      !!   * pdSx: x-component of the div of the tensor =>  | @ point U[i,j] | @ point V[i,j] |
-      !!   * pdSy: y-component of the div of the tensor =>  | @ point V[i,j] | @ point U[i,j] |
-      !!
-      !!----------------------------------------------------------------------------------------------
-      CHARACTER(len=1),             INTENT(in)  :: cgt
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: phc, phx   ! ice thickness at center and corner point [m]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: pe1e1, pe2e2, pe1e1_e, pe2e2_e
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: p1_e2x, p1_e1x, p1_e1y, p1_e2y
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: p1_e1e2x, p1_e1e2y
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in)  :: ps11c, ps22c, ps12x ! components of stress tensors on T- or F-centric grids x h !!!
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: pdSx, pdSy      ! x,y components of the divergence of the tensor
-      INTEGER,        OPTIONAL,     INTENT(in)  :: pm0
-      !!
-      INTEGER  :: ip, im, jp, jm, ji, jj, m0
-      !!--------------------------------------------------------------------------------------------
-      IF( ln_timing ) CALL timing_start('div_stress_tensor')
-      m0 = 0
-      IF( PRESENT(pm0) ) m0 = pm0
-
-      IF ( cgt == 'T' ) THEN
-         ip =  1
-         im =  0
-         jp =  0
-         jm = -1
-      ELSEIF ( cgt == 'F' ) THEN
-         ip =  0
-         im = -1
-         jp =  1
-         jm =  0
-      ELSE
-         CALL ctl_stop( 'STOP', 'div_stress_tensor(): unknown grid-point type: '//cgt//'!')
-      ENDIF
-      !
-      !pdSx(:,:) = 0._wp
-      !pdSy(:,:) = 0._wp
-      !
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            !                   !--- ds11/dx + ds12/dy
-            pdSx(ji,jj) = ( ( ps11c(ji+ip,jj)*phc(ji+ip,jj)*pe2e2(ji+ip,jj)   - ps11c(ji+im,jj)*phc(ji+im,jj)*pe2e2(ji+im,jj)   ) * p1_e2x(ji,jj) &
-               &          + ( ps12x(ji,jj+jp)*phx(ji,jj+jp)*pe1e1_e(ji,jj+jp) - ps12x(ji,jj+jm)*phx(ji,jj+jm)*pe1e1_e(ji,jj+jm) ) * p1_e1x(ji,jj) &
-               &                 ) * p1_e1e2x(ji,jj)
-            !                   !--- ds22/dy + ds12/dx
-            pdSy(ji,jj) = ( ( ps22c(ji,jj-jm)*phc(ji,jj-jm)*pe1e1(ji,jj-jm)   - ps22c(ji,jj-jp)*phc(ji,jj-jp)*pe1e1(ji,jj-jp)   ) * p1_e1y(ji,jj) &
-               &          + ( ps12x(ji-im,jj)*phx(ji-im,jj)*pe2e2_e(ji-im,jj) - ps12x(ji-ip,jj)*phx(ji-ip,jj)*pe2e2_e(ji-ip,jj) ) * p1_e2y(ji,jj) &
-               &               ) * p1_e1e2y(ji,jj)
-            !
-         END DO
-      END DO
-      !
-      IF( ln_timing )   CALL timing_stop('div_stress_tensor')
-      !
-   END SUBROUTINE div_stress_tensor
 
 
 

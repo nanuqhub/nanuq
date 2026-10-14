@@ -88,7 +88,8 @@ CONTAINS
 
       IF( cgt=='T' ) THEN
 
-         CALL adv_pra_2d( kt, zdt, pUx, pVx, pe1e2, p1_e1e2, pmsk,  p1md, sx1md_t, sxx1md_t, sy1md_t, syy1md_t, sxy1md_t ) !--- ice damage @ T
+         ! `1-damage` is an intensive field (a property carried by the ice, not a quantity per unit area):
+         CALL adv_pra_2d( kt, zdt, pUx, pVx, pe1e2, p1_e1e2, pmsk,  p1md, sx1md_t, sxx1md_t, sy1md_t, syy1md_t, sxy1md_t, ldintensive=.TRUE. ) !--- ice damage @ T
 
          ! --- Lateral boundary conditions --- !
          !     caution: for gradients (sx and sy) the sign changes
@@ -101,7 +102,8 @@ CONTAINS
          !
       ELSEIF( cgt=='F' ) THEN
 
-         CALL adv_pra_2d( kt, zdt, pUx, pVx, pe1e2, p1_e1e2, pmsk,  p1md, sx1md_f, sxx1md_f, sy1md_f, syy1md_f, sxy1md_f ) !--- ice damage @ F
+         ! `1-damage` is an intensive field (a property carried by the ice, not a quantity per unit area):
+         CALL adv_pra_2d( kt, zdt, pUx, pVx, pe1e2, p1_e1e2, pmsk,  p1md, sx1md_f, sxx1md_f, sy1md_f, syy1md_f, sxy1md_f, ldintensive=.TRUE. ) !--- ice damage @ F
 
          ! --- Lateral boundary conditions --- !
          !     caution: for gradients (sx and sy) the sign changes
@@ -119,7 +121,10 @@ CONTAINS
          !
       ENDIF !IF( cgt=='T' )
 
-      IF( lrst_ice )   CALL adv_pra_d_rst( 'WRITE', kt )   !* write Prather fields in the restart file
+      ! Write the Prather fields in the restart file. This routine is called once for the T-points and once for the F-points,
+      ! so we only write the moments of the points that were just advected (`cgt`): writing both sets at each call would write
+      ! every field twice, the first time with the other grid's moments not yet advected for this time step.
+      IF( lrst_ice )   CALL adv_pra_d_rst( 'WRITE', kt, cgt )
 
       !$acc end data
       IF( ln_timing )   CALL timing_stop(crtnm)
@@ -185,19 +190,23 @@ CONTAINS
    END SUBROUTINE adv_pra_d_init
 
 
-   SUBROUTINE adv_pra_d_rst( cdrw, kt )
+   SUBROUTINE adv_pra_d_rst( cdrw, kt, cgt )
       !!---------------------------------------------------------------------
       !!                   ***  ROUTINE adv_pra_d_rst  ***
       !!
       !! ** Purpose :   Read or write file in restart file
       !!
       !! ** Method  :   use of IOM library
+      !!                'READ'  : reads the moments for both the T- and F-points
+      !!                'WRITE' : writes the moments of the grid points given by `cgt` only ('T' or 'F')
       !!----------------------------------------------------------------------
       CHARACTER(len=*) , INTENT(in) ::   cdrw   ! "READ"/"WRITE" flag
       INTEGER, OPTIONAL, INTENT(in) ::   kt     ! ice time-step
+      CHARACTER(len=1), OPTIONAL, INTENT(in) ::   cgt   ! 'T' or 'F' points (mandatory for "WRITE")
       !
       INTEGER ::   iter     ! local integer
       INTEGER ::   id1      ! local integer
+      CHARACTER(len=1) ::   cgtl   ! local copy of `cgt` ("WRITE" mode)
       !!----------------------------------------------------------------------
       !                                      !==========================!
       IF( TRIM(cdrw) == 'READ' ) THEN        !==  Read or initialize  ==!
@@ -240,22 +249,36 @@ CONTAINS
          IF(lwp) WRITE(numout,*) '----  ice-adv-rst-d  ----'
          iter = kt                           ! ice restarts are written at kt == nitrst
          !
-         !$acc update self( sx1md_t, sy1md_t, sxx1md_t, syy1md_t, sxy1md_t )
-         !$acc update self( sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f )
+         ! The grid type is needed to know which moments to write:
+         ! (`ctl_stop` does not necessarily stop right away, so we use a local copy `cgtl`: an absent optional argument must not be read)
+         cgtl = 'X'
+         IF( PRESENT(cgt) ) THEN
+            cgtl = cgt
+         ELSE
+            CALL ctl_stop('STOP', 'adv_pra_d_rst: argument `cgt` is mandatory in "WRITE" mode')
+         ENDIF
          !
          ! In case Prather scheme is used for advection, write second order moments
          ! ------------------------------------------------------------------------
-         CALL iom_rstput( iter, nitrst, numriw, 'sx1md_t' , sx1md_t  )
-         CALL iom_rstput( iter, nitrst, numriw, 'sy1md_t' , sy1md_t  )
-         CALL iom_rstput( iter, nitrst, numriw, 'sxx1md_t', sxx1md_t )
-         CALL iom_rstput( iter, nitrst, numriw, 'syy1md_t', syy1md_t )
-         CALL iom_rstput( iter, nitrst, numriw, 'sxy1md_t', sxy1md_t )
-         !
-         CALL iom_rstput( iter, nitrst, numriw, 'sx1md_f' , sx1md_f  )
-         CALL iom_rstput( iter, nitrst, numriw, 'sy1md_f' , sy1md_f  )
-         CALL iom_rstput( iter, nitrst, numriw, 'sxx1md_f', sxx1md_f )
-         CALL iom_rstput( iter, nitrst, numriw, 'syy1md_f', syy1md_f )
-         CALL iom_rstput( iter, nitrst, numriw, 'sxy1md_f', sxy1md_f )
+         IF( cgtl=='T' ) THEN
+            ! Moments of `1-damage` @T-points: bring them back from the GPU, then write them:
+            !$acc update self( sx1md_t, sy1md_t, sxx1md_t, syy1md_t, sxy1md_t )
+            CALL iom_rstput( iter, nitrst, numriw, 'sx1md_t' , sx1md_t  )
+            CALL iom_rstput( iter, nitrst, numriw, 'sy1md_t' , sy1md_t  )
+            CALL iom_rstput( iter, nitrst, numriw, 'sxx1md_t', sxx1md_t )
+            CALL iom_rstput( iter, nitrst, numriw, 'syy1md_t', syy1md_t )
+            CALL iom_rstput( iter, nitrst, numriw, 'sxy1md_t', sxy1md_t )
+         ELSEIF( cgtl=='F' ) THEN
+            ! Moments of `1-damage` @F-points: bring them back from the GPU, then write them:
+            !$acc update self( sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f )
+            CALL iom_rstput( iter, nitrst, numriw, 'sx1md_f' , sx1md_f  )
+            CALL iom_rstput( iter, nitrst, numriw, 'sy1md_f' , sy1md_f  )
+            CALL iom_rstput( iter, nitrst, numriw, 'sxx1md_f', sxx1md_f )
+            CALL iom_rstput( iter, nitrst, numriw, 'syy1md_f', syy1md_f )
+            CALL iom_rstput( iter, nitrst, numriw, 'sxy1md_f', sxy1md_f )
+         ELSE
+            CALL ctl_stop('STOP', 'adv_pra_d_rst: wrong value for grid type `cgt` in "WRITE" mode')
+         ENDIF
          !
       ENDIF
       !

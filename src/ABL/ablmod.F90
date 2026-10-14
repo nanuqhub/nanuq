@@ -76,8 +76,8 @@ CONTAINS
       REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   pslp_dta   ! sea-level pressure
       REAL(wp) , INTENT(in   ), DIMENSION(jpi,jpj)        ::   pcd_du     ! Cd x Du (T-point)
       REAL(wp) , INTENT(inout), DIMENSION(jpi,jpj)        ::   psen       ! Ch x Du
-      REAL(wp) , INTENT(inout), DIMENSION(jpi,jpj)        ::   pevp       ! Ce x Du
-      REAL(wp) , INTENT(inout), DIMENSION(jpi,jpj)        ::   pwndm      ! ||uwnd - uoce||
+      REAL(wp) , INTENT(inout), DIMENSION(jpi,jpj)        ::   pevp       ! in: Ce x Du ; out: evaporation [kg/m2/s], <0 when ocean loses water (bulk convention)
+      REAL(wp) , INTENT(inout), DIMENSION(jpi,jpj)        ::   pwndm      ! in: U_zu_oce (absolute wind at zu, adjusted by bulk algo, for ustar2) ; out: |U_abl| at z=zu
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)        ::   plat       ! latent heat flux
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)   ::   ptaui      ! taux
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)   ::   ptauj      ! tauy
@@ -93,7 +93,8 @@ CONTAINS
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)   ::   ptaui_ice  ! ice-surface taux stress (T-point)
       REAL(wp) , INTENT(  out), DIMENSION(jpi,jpj)   ::   ptauj_ice  ! ice-surface tauy stress (T-point)
       !
-      REAL(wp), DIMENSION(jpi,jpj)         ::   zwnd_i, zwnd_j
+      REAL(wp), DIMENSION(jpi,jpj)         ::   zwnd_i, zwnd_j   ! ocean-relative wind components (U_abl - U_oce)
+      REAL(wp)                             ::   zwabs            ! absolute wind speed at z=zu at one grid point (|U_abl|), stored in `pwndm`
       REAL(wp), DIMENSION(jpi,jpj)         ::   zsspt, ztabs, zpre
       REAL(wp), DIMENSION(jpi,2:jpka) ::   zCF
       REAL(wp), DIMENSION(jpi,jpj,1:jpka)  ::   zpdif
@@ -115,9 +116,9 @@ CONTAINS
       !
       IF( kt == nit000 ) ALLOCATE ( ustar2(jpi,jpj) )
       IF( kt == nit000 ) ALLOCATE ( zrough(jpi,jpj) )
-      !! Compute ustar squared as Cd || Uatm-Uoce ||^2
-      !! needed for surface boundary condition of TKE
-      !! pwndm contains | U10m - U_oce | (see blk_oce_1 in sbcblk)
+      !! Compute ustar squared as Cd * |U_atm|^2 (absolute atmospheric wind, NOT corrected for the ocean current),
+      !! needed for surface boundary condition of TKE. Same choice as the bulk formulation (see below).
+      !! pwndm contains U_zu_oce: the absolute wind at zu, adjusted for stability/gustiness by the bulk algorithm (see blk_oce_1 in sbcblk)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             zzoce         = pCd_du    (ji,jj) * pwndm(ji,jj)
@@ -296,12 +297,21 @@ CONTAINS
                      END DO
                   END DO
                END DO
-               zpdif(:,:,:) = MAX( MIN( zpdif(:,:,:), 10._wp ), -10._wp )   ! limiter due to ice/oce inconsistencies between nemo/si3 & atm frc
+               ! Limit the anomaly (ice/oce inconsistencies between nemo/si3 & atm frc), on the interior points only:
+               zpdif(Nis0:Nie0,Njs0:Nje0,:) = MAX( MIN( zpdif(Nis0:Nie0,Njs0:Nje0,:), 10._wp ), -10._wp )
 
+               ! The smoothing filter reads one halo point around each interior point, so the halo of `zpdif` must be valid
+               ! BEFORE smoothing. Otherwise the filter would read stale values at the domain/MPI-box edges.
+               CALL lbc_lnk( 'ablmod', zpdif(:,:,:), 'T', 1.0_wp )
+
+               ! `smooth_pblh()` works on a 2D field, so it must be called level by level: passing the whole 3D array
+               ! (as done before) only filtered level 1, `jpka` times, and left levels 2 to `jpka` unsmoothed.
                DO jk = 1, jpka
-                  CALL smooth_pblh( zpdif(:,:,:), msk_abl(:,:) )
+                  CALL smooth_pblh( zpdif(:,:,jk), msk_abl(:,:) )
                END DO
-               CALL lbc_lnk( 'ablmod', zpdif(:,:,:), 'T', 1.0_wp)
+
+               ! Refresh the halo of the smoothed field, since `smooth_pblh()` only updates the interior points.
+               CALL lbc_lnk( 'ablmod', zpdif(:,:,:), 'T', 1.0_wp )
 
                DO jj=Njs0, Nje0
                   DO ji=Nis0, Nie0
@@ -632,8 +642,14 @@ CONTAINS
             zpre( ji, jj ) = pres_temp( zhumi, pslp_dta(ji,jj), ght_abl(2), ptpot=ztemp, pta=ztabs( ji, jj ) )
             zcff           = rho_air( ztabs( ji, jj ), zhumi, zpre( ji, jj ) )
             psen( ji, jj ) =    - cp_air(zhumi) * zcff * psen(ji,jj) * ( zsspt(ji,jj) - ztemp )         !GS: negative sign to respect aerobulk convention
-            pevp( ji, jj ) = MAX( 0._wp,  zcff * pevp(ji,jj) * ( pssq(ji,jj)  - zhumi ) )
-            plat( ji, jj ) = - L_vap( psst(ji,jj) ) * pevp( ji, jj )
+            ! Evaporation computed as a positive upward mass flux (`zztmp >= 0` when the ocean loses water, condensation is ignored):
+            zztmp          = MAX( 0._wp,  zcff * pevp(ji,jj) * ( pssq(ji,jj)  - zhumi ) )
+            ! Latent heat flux, downward-positive convention => negative when the ocean evaporates:
+            plat( ji, jj ) = - L_vap( psst(ji,jj) ) * zztmp
+            ! Returned evaporation follows the same convention as `bulk_formula_sclr()@sbc_phy.F90` and what `blk_oce_2()@sbcblk.F90`
+            ! expects (`pevap < 0` when the ocean loses water), so that `emp = -pevap - pprec` is positive for E > P
+            ! and the evaporation heat content is removed at the right sign:
+            pevp( ji, jj ) = - zztmp
             rhoa( ji, jj ) = zcff
          END DO
       END DO
@@ -645,14 +661,20 @@ CONTAINS
          END DO
       END DO
       !
-      ! ... scalar wind ( = | U10m - U_oce | ) at T-point (masked)
+      ! ... scalar wind at T-point (masked), two versions:
+      !     zcff  = | U_abl - U_oce |  : ocean-relative, used for the ocean stress (`ptaum`, `ptaui`, `ptauj`)
+      !     zwabs = | U_abl |          : absolute wind at z=zu, returned in `pwndm` (= `wndm`), the same definition as in bulk mode
+      ! `pwndm` is returned as the ABSOLUTE wind so that the ice fluxes (`blk_ice_2`) and all outputs use the same wind
+      ! in bulk and ABL modes. `ustar2` and `zrough` were computed above from the absolute wind (`U_zu_oce`), not from `zcff`.
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             zcff          = SQRT(  zwnd_i(ji,jj) * zwnd_i(ji,jj)   &
                &                 + zwnd_j(ji,jj) * zwnd_j(ji,jj) )   ! * msk_abl(ji,jj)
             zztmp         = rhoa(ji,jj) * pcd_du(ji,jj)
+            zwabs         = SQRT(  u_abl(ji,jj,2,nt_a) * u_abl(ji,jj,2,nt_a)   &
+               &                 + v_abl(ji,jj,2,nt_a) * v_abl(ji,jj,2,nt_a) )
 
-            pwndm (ji,jj) =         zcff
+            pwndm (ji,jj) =         zwabs
             ptaum (ji,jj) = zztmp * zcff
             zwnd_i(ji,jj) = zztmp * zwnd_i(ji,jj)
             zwnd_j(ji,jj) = zztmp * zwnd_j(ji,jj)
@@ -1183,7 +1205,9 @@ CONTAINS
                      zCF (ji,jkdwn) = zCF (ji,jkdwn+1) + 0.5_wp * e3t_abl(jkdwn+1)  &
                         &               * (zbuoy1*(ghw_abl(jk)-ghw_abl(jkdwn+1))    &
                         &                 +zbuoy2*(ghw_abl(jk)-ghw_abl(jkdwn  )) )  &
-                        &                            + 0.5_wp * e3t_abl(jkup) * rn_Rod *          &
+                        ! Shear term of the downward search: it lives in the layer between `jkdwn` and `jkdwn+1`, so the
+                        ! layer thickness must be `e3t_abl(jkdwn+1)` (it was wrongly `e3t_abl(jkup)`, a leftover loop index)
+                        &                            + 0.5_wp * e3t_abl(jkdwn+1) * rn_Rod *      &
                         &               ( SQRT(tke_abl( ji, jj, jkdwn+1, nt_a ))*zsh2(ji,jkdwn+1) &
                         &               + SQRT(tke_abl( ji, jj, jkdwn  , nt_a ))*zsh2(ji,jkdwn  ) )
 

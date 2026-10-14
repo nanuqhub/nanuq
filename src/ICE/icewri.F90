@@ -11,7 +11,7 @@ MODULE icewri
    !!----------------------------------------------------------------------
    USE phycst         ! physical constant
    USE dom_oce        ! domain: ocean
-   USE sbc_oce , ONLY : ln_blk, qsr, qns ! surf. boundary cond.: ocean
+   USE sbc_oce , ONLY : ln_blk, ln_abl, qsr, qns ! surf. boundary cond.: ocean
    USE sbc_ice        ! Surface boundary condition: ice fields
    USE par_ice
    USE ice            ! sea-ice: variables
@@ -31,7 +31,7 @@ MODULE icewri
    USE remap_classic, ONLY : rmpT2F, rmpF2T, rmpT2U, rmpT2V, do_rmpF2T
    !USE remap_weno,    ONLY : rmpT2F_wn5s !rmpT2U_wn5s, rmpT2V_wn5s
 
-   USE icedyn_rhg_tools, ONLY : strain_rate_all, sigmaII_full, vel_div_t, vel_shear_f, vel_maxshr_t
+   USE icedyn_rhg_tools, ONLY : strain_rate_all, vel_div_t, vel_shear_f, vel_maxshr_t
 
    IMPLICIT NONE
    PRIVATE
@@ -141,7 +141,7 @@ CONTAINS
          END IF
 
 
-         IF( ln_blk ) THEN
+         IF( ln_blk .OR. ln_abl ) THEN
             !! Bulk transfer coefficients as seen by the atmosphere: 100% sea-ice => `Cx_ice` | 0% sea-ice => `Cx_oce`
             IF( iom_use("Cd") ) THEN
                !$acc update self( CD_oce, CD_ice )
@@ -265,38 +265,6 @@ CONTAINS
             !$acc update self( divSy_f )
             CALL iom_put( 'divSy_f', divSy_f )
          ENDIF
-         IF( iom_use('ds11t_dx_u') ) THEN
-            !$acc update self( ds11t_dx_u )
-            CALL iom_put( 'ds11t_dx_u', ds11t_dx_u )
-         ENDIF
-         IF( iom_use('ds12f_dy_u') ) THEN
-            !$acc update self( ds12f_dy_u )
-            CALL iom_put( 'ds12f_dy_u', ds12f_dy_u )
-         ENDIF
-         IF( iom_use('ds22t_dy_v') ) THEN
-            !$acc update self( ds22t_dy_v )
-            CALL iom_put( 'ds22t_dy_v', ds22t_dy_v )
-         ENDIF
-         IF( iom_use('ds12f_dx_v') ) THEN
-            !$acc update self( ds12f_dx_v )
-            CALL iom_put( 'ds12f_dx_v', ds12f_dx_v )
-         ENDIF
-         IF( iom_use('ds11f_dx_v') ) THEN
-            !$acc update self( ds11f_dx_v )
-            CALL iom_put( 'ds11f_dx_v', ds11f_dx_v )
-         ENDIF
-         IF( iom_use('ds12t_dy_v') ) THEN
-            !$acc update self( ds12t_dy_v )
-            CALL iom_put( 'ds12t_dy_v', ds12t_dy_v )
-         ENDIF
-         IF( iom_use('ds22f_dy_u') ) THEN
-            !$acc update self( ds22f_dy_u )
-            CALL iom_put( 'ds22f_dy_u', ds22f_dy_u )
-         ENDIF
-         IF( iom_use('ds12t_dx_u') ) THEN
-            !$acc update self( ds12t_dx_u )
-            CALL iom_put( 'ds12t_dx_u', ds12t_dx_u )
-         ENDIF
          !
 #endif
 
@@ -327,8 +295,8 @@ CONTAINS
          ENDIF
 
          IF( iom_use('normstr') ) THEN
-            !$acc update self( SI1t )
-            CALL iom_put( 'normstr',  SI1t(:,:)*z1_h_t(:,:) )
+            !$acc update self( SIGMAt(:,:,1) )
+            CALL iom_put( 'normstr',  SIGMAt(:,:,1)*z1_h_t(:,:) )
          ENDIF
          IF( iom_use('sheastr') ) THEN
             !$acc update self( SI2t )
@@ -336,16 +304,16 @@ CONTAINS
          ENDIF
          IF( iom_use('ice_sig11') .OR. iom_use('ice_sig22') .OR. iom_use('ice_sig12') ) THEN
             !$acc update self( SIGMAt )
-            IF( iom_use('ice_sig11')  ) CALL iom_put( 'ice_sig11' ,  SIGMAt(:,:,1)*z1_h_t(:,:) )
-            IF( iom_use('ice_sig22')  ) CALL iom_put( 'ice_sig22' ,  SIGMAt(:,:,2)*z1_h_t(:,:) )
-            IF( iom_use('ice_sig12')  ) CALL iom_put( 'ice_sig12' ,  SIGMAt(:,:,3)*z1_h_f(:,:) )
+            IF( iom_use('ice_sig11')  ) CALL iom_put( 'ice_sig11' ,  (SIGMAt(:,:,1)+SIGMAt(:,:,2))*z1_h_t(:,:) )
+            IF( iom_use('ice_sig22')  ) CALL iom_put( 'ice_sig22' ,  (SIGMAt(:,:,1)-SIGMAt(:,:,2))*z1_h_t(:,:) )
+            IF( iom_use('ice_sig12')  ) CALL iom_put( 'ice_sig12' ,         SIGMAt(:,:,3)         *z1_h_f(:,:) )
          ENDIF
 
          IF( ln_damage ) THEN
             !! --> following fields only exist on the E-grid...
             IF( iom_use('normstrf') ) THEN
-               !$acc update self( SI1f )
-               CALL iom_put( 'normstrf',  SI1f(:,:)*z1_h_f(:,:) )
+               !$acc update self( SIGMAf(:,:,1) )
+               CALL iom_put( 'normstrf',  SIGMAf(:,:,1)*z1_h_f(:,:) )
             ENDIF
             IF( iom_use('sheastrf') ) THEN
                !$acc update self( SI2f )
@@ -353,9 +321,9 @@ CONTAINS
             ENDIF
             IF( iom_use('ice_sig11f') .OR. iom_use('ice_sig22f') .OR. iom_use('ice_sig12t') ) THEN
                !$acc update self( SIGMAf )
-               IF( iom_use('ice_sig11f') ) CALL iom_put( 'ice_sig11f',  SIGMAf(:,:,1)*z1_h_f(:,:) )
-               IF( iom_use('ice_sig22f') ) CALL iom_put( 'ice_sig22f',  SIGMAf(:,:,2)*z1_h_f(:,:) )
-               IF( iom_use('ice_sig12t') ) CALL iom_put( 'ice_sig12t',  SIGMAf(:,:,3)*z1_h_t(:,:) )
+               IF( iom_use('ice_sig11f') ) CALL iom_put( 'ice_sig11f', (SIGMAf(:,:,1)+SIGMAf(:,:,2))*z1_h_f(:,:) )
+               IF( iom_use('ice_sig22f') ) CALL iom_put( 'ice_sig22f', (SIGMAf(:,:,1)-SIGMAf(:,:,2))*z1_h_f(:,:) )
+               IF( iom_use('ice_sig12t') ) CALL iom_put( 'ice_sig12t',        SIGMAf(:,:,3)         *z1_h_t(:,:) )
             ENDIF
          ENDIF !IF( ln_damage )
 

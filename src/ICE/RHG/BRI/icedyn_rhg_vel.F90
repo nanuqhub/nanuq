@@ -12,11 +12,10 @@ MODULE icedyn_rhg_vel
    USE phycst, ONLY : rho0
    USE dom_oce        ! Ocean domain
    USE par_ice
-   USE lib_mpp,  ONLY: ctl_stop
    USE in_out_manager, ONLY : ln_timing
 
 #if defined key_dbgvel
-   USE ice, ONLY: divSx_t, divSy_t, divSx_f, divSy_f, ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v, ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u
+   USE ice, ONLY: divSx_t, divSy_t, divSx_f, divSy_f
 #endif
 
    USE timing
@@ -50,7 +49,7 @@ CONTAINS
       REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pucncl, pvcncl ! cancelers for the div. of the stress tensors where tiny ice concentration (@U,V points)
       REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(inout) :: pV        ! the 4 sea-ice velocity components
       !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zds11_dx, zds12_dy, zds22_dy, zds12_dx
+      REAL(wp) :: zS1, zS2, zS12
       REAL(wp) :: zA, zUi, zVi, zUo, zVo, zM_dt, zmsk, ztau_ai
       REAL(wp) :: zTauO, zcorio, zt1, zt2, zRHS
       REAL(wp) :: zdivSx_t, zdivSy_t, zdivSx_f, zdivSy_f
@@ -163,8 +162,7 @@ CONTAINS
       REAL(wp),   DIMENSION(jpi,jpj),   INTENT(in)    :: pucncl, pvcncl ! cancelers for the div. of the stress tensors where tiny ice concentration (@U,V points)
       REAL(wp),   DIMENSION(jpi,jpj,4), INTENT(inout) :: pVice          ! the 4 sea-ice velocity components
       !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zds11_dx, zds12_dy, zds22_dy, zds12_dx
-      REAL(wp) :: zA, zUi, zVi, zUo, zVo, zmsk
+      REAL(wp) :: zS1, zS2, zS12
       REAL(wp) :: zdivSx_t, zdivSy_t, zdivSx_f, zdivSy_f
       REAL(wp) :: zms0x, zmsax, zmsbx, zms0y, zmsay, zmsby, zrhoco, zAu, zAv, z1_Mu, z1_Mv, zcorio_u, zCorio_v
       INTEGER  :: ji, jj, jz, jp
@@ -220,7 +218,11 @@ CONTAINS
                zgrdH(jp) = pgrdH(ji,jj,jp)
             END DO
 
-            zTau_ai(:) = (/ ptaux_i_u(ji,jj), ptauy_i_v(ji,jj), ptaux_i_v(ji,jj), ptauy_i_u(ji,jj) /)
+            !BECAUSE `_FortranAAssign` bug (ROCm): zTau_ai(:) = (/ ptaux_i_u(ji,jj), ptauy_i_v(ji,jj), ptaux_i_v(ji,jj), ptauy_i_u(ji,jj) /)
+            zTau_ai(1) = ptaux_i_u(ji,jj)
+            zTau_ai(2) = ptauy_i_v(ji,jj)
+            zTau_ai(3) = ptaux_i_v(ji,jj)
+            zTau_ai(4) = ptauy_i_u(ji,jj)
 
             !! Part of the RHS that is explicit and the `Z` term:
             !!    `d(u)/dt = RHSi(u[k]) - Z*u[k+1]`
@@ -304,7 +306,7 @@ CONTAINS
       REAL(wp), DIMENSION(4), INTENT(out) :: pRHSi    !  [m.s-2]
       REAL(wp), DIMENSION(4), INTENT(out) :: pZ       !  [s-1]
       !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zAu, zAv, zUu, zVu, zUu_o, zVu_o, zUv, zVv, zUv_o, zVv_o, z1_Mu, z1_Mv
+      REAL(wp) :: zUu, zVu, zUu_o, zVu_o, zUv, zVv, zUv_o, zVv_o, z1_Mu, z1_Mv
       REAL(wp) :: zTo, zcorio, zt1, zt2, zRHS
       !!----------------------------------------------------------------------------------------------
       !
@@ -391,7 +393,7 @@ CONTAINS
       REAL(wp), DIMENSION(4), INTENT(in)  :: pV       ! the 4 sea-ice velocity components
       REAL(wp), DIMENSION(4), INTENT(out) :: pZ       !  [s-1]
       !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zAu, zAv, zUu, zVu, zUu_o, zVu_o, zUv, zVv, zUv_o, zVv_o, z1_Mu, z1_Mv, zTo, zt1, zt2
+      REAL(wp) :: zUu, zVu, zUu_o, zVu_o, zUv, zVv, zUv_o, zVv_o, z1_Mu, z1_Mv, zTo, zt1, zt2
       !!----------------------------------------------------------------------------------------------
       !
       z1_Mu  = p1_Mu ! 1/mass (ice+snow) per surface unit at u-points

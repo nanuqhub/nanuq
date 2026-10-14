@@ -87,7 +87,7 @@ CONTAINS
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pt_zt    ! potential air temperature            [Kelvin]
       REAL(wp), INTENT(inout), DIMENSION(jpi,jpj) ::   pSSQ     ! sea surface specific humidity         [kg/kg]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pq_zt    ! specific air humidity at zt           [kg/kg]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pU_zu    ! relative wind module at zu              [m/s]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pU_zu    ! absolute wind module at zu (not corrected for ocean current) [m/s]
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCd      ! transfer coefficient for momentum         [-]
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCh      ! transfer coefficient for sensible heat    [-]
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCe      ! transfert coefficient for evaporation     [-]
@@ -126,7 +126,7 @@ CONTAINS
             zt_zt = pt_zt(ji,jj)            
             zSSQ  =  pSSQ(ji,jj)
             zq_zt = pq_zt(ji,jj)
-            zUbzu  = MAX( 0.5_wp , pU_zu(ji,jj) ) ! relative wind speed at zu (normally 10m), we don't want to fall under 0.5 m/s
+            zUbzu  = MAX( 0.5_wp , pU_zu(ji,jj) ) ! absolute wind speed at zu (normally 10m), we don't want to fall under 0.5 m/s
 
             !! First guess of stability:
             zstab = 0.5_wp + SIGN( 0.5_wp , virt_temp(zt_zt, zq_zt) - virt_temp(zSST, zSSQ) )

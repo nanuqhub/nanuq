@@ -1,7 +1,7 @@
    
                !! F-centric cell
                !! ~~~~~~~~~~~~~~
-               zsigI  = pSI1f(ji,jj)
+               zsigI  = psgmf(ji,jj,1)
                zsigII = pSI2f(ji,jj)
    
                zxpC = pxpCf(ji,jj)  ! `expC` [Eq.8]

@@ -17,7 +17,7 @@
       REAL(wp), DIMENSION(4) :: zStncl, zW, zIS, zAl
       REAL(wp), DIMENSION(6) :: zF
       REAL(wp) :: ztau5, z1_S, zsumAl, za
-      REAL(wp) :: zFp, z1_h, zrhm, zrhp
+      REAL(wp) :: zFp, z1_h, zrhm, zrhp, zrhpp
       REAL(wp) :: zmS, zmN, zmS1, zmS2, zmN1, zmN2, zmN3, zOL
       INTEGER  :: kpw
       INTEGER  :: ji, jj, jp, jf
@@ -37,6 +37,7 @@
             z1_h = 1._wp / pe2p(ji,jj)
             zrhm = pe2p(ji,jj-1) * z1_h
             zrhp = pe2p(ji,jj+1) * z1_h
+            zrhpp = pe2p(ji,jj+2) * z1_h  ! mesh size of cell `j+2` over the one of cell `j`, needed by the 4th stencil only
 
             !! Smoothness indicator
             !$acc loop seq
@@ -51,8 +52,18 @@
                   zFp = zFp +  pLW(ji,jj,jp,jf) * zF(jf)
                END DO
 
-               IF(ll_SI_wght)  zIS(jp) = weno5_sym_ISx_G( jp, zrhm, zrhp, zF(kpw-1), zF(kpw), zF(kpw+1), zFp )
-               !           => zF(kpw) is always the central value of zF, i.e it should be F(j)
+               ! Smoothness indicator of stencil `jp`, from the polynomial of this stencil:
+               !  * stencils 1 to 3 contain the cells `j-1`, `j`, `j+1` which `weno5_sym_ISx_G` relies on
+               !    (zF(kpw) is always the central value of zF, i.e it should be F(j))
+               !  * stencil 4 (cells `j+1`, `j+2`, `j+3`) does not contain cell `j`, so it has its own function, which uses
+               !    the data of the stencil itself, `zF(kpw+1)` and `zF(kpw+2)`, i.e. F(j+1) and F(j+2)
+               IF(ll_SI_wght) THEN
+                  IF( jp <= kpw ) THEN
+                     zIS(jp) = weno5_sym_ISx_G( jp, zrhm, zrhp, zF(kpw-1), zF(kpw), zF(kpw+1), zFp )
+                  ELSE
+                     zIS(jp) = weno5_sym_IS4_G( zrhp, zrhpp, zF(kpw+1), zF(kpw+2), zFp )
+                  ENDIF
+               ENDIF
 
                zStncl(jp) = zFp
 
@@ -62,8 +73,19 @@
 
 
             IF( ll_SI_wght ) THEN
-               ! Compute the alphas => can we use this tau method in the sym context? #fixme
+               ! Compute the alphas (WENO-Z form, `q=1`: alpha = d * (1 + tau/IS), with tau = |IS(1) - IS(4)|)
                ! ~~~~~~~~~~~~~~~~~~
+               ! Is this tau method valid in the symmetric context? Checked numerically (1D, 6-cell stencil, uniform and 15%
+               ! non-uniform grids, tanh fronts of 3 widths, a bump, a kink, each at 101 positions across the stencil), with
+               ! the optimal weights of the actual grid and the corrected smoothness indicator of stencil 4:
+               !  * smooth data: tau ~ h^4 while IS ~ h^2, so the weights go to the optimal ones as h^2 and the accuracy
+               !    stays at order ~6, as with the linear optimal weights
+               !  * fronts: lowest mean error of the options tried (2.5% of the data range, against 3.2% for WENO-Z with q=2
+               !    and 3.7% for Jiang-Shu), at the price of 1 to 2 points more over/undershoot (19% against 17%).
+               !    A front sitting exactly on the face keeps the optimal weights, which is the right answer there (the
+               !    symmetric value). The remaining over/undershoot is due to the stencils and is also found with
+               !    the linear optimal weights (22%), not to the choice of alpha.
+               ! => kept as it is. Still to be checked on real fields (2D, solid boundaries) with an A/B run.
                ztau5 = ABS( zIs(1) - zIs(kpw+1) )
 
                zsumAl = 0._wp

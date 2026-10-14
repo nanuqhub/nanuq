@@ -129,6 +129,8 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   :: weno_s_ow_t_x, weno_s_ow_t_y ! WENOX optimal weights for curvilinear T-grid
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) :: weno_s_lw_f_x, weno_s_lw_f_y ! WENOX linear  weights for curvilinear F-grid
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   :: weno_s_ow_f_x, weno_s_ow_f_y ! WENOX optimal weights for curvilinear F-grid
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) :: weno_s_lw_u_x, weno_s_lw_u_y ! WENOX linear  weights for curvilinear U-grid (cells centered on U-points)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   :: weno_s_ow_u_x, weno_s_ow_u_y ! WENOX optimal weights for curvilinear U-grid (used for the U to F interpolation)
 
    !                                     !!** define arrays
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   V_oce           !: surface ocean velocity used in ice dynamics
@@ -223,9 +225,8 @@ MODULE ice
    REAL(wp),   PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   V_ts ! all the "time-splitting" sea-ice velocities u,v@U,V & u,v@V,U
    !!
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   :: dmdt, dmdf    !: `1-d` 1 - ice damage / #bbm
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: SIGMAt !: T-centric vertically-integrated internal stress tensor => (s11@t, s22@t, s12@f) (N/m2*m)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: SIGMAf !: F-centric vertically-integrated internal stress tensor => (s11@f, s22@f, s12@t) (N/m2*m)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   :: SI1t, SI1f  !: first (normal) invarient of vertically-integrated internal stress tensor (N/m2*m)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: SIGMAt !: T-centric vert-integr internal stress tensor => ([s11+s22]/2@t, [s11-s22]/2@t, s12@f) (N/m2*m)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: SIGMAf !: F-centric vert-integr internal stress tensor => ([s11+s22]/2@f, [s11-s22]/2@f, s12@t) (N/m2*m)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   :: SI2t, SI2f  !: second (shear) invarient of vertically-integrated internal stress tensor (N/m2*m)
    !
    !!
@@ -354,8 +355,6 @@ MODULE ice
 #if defined key_dbgvel
    !! For debuggin purposes, we want to save the components of the divergence of the vertically-integrated internal stress tensors:
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) :: divSx_t, divSy_t, divSx_f, divSy_f
-   REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) :: ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v  ! T-centric tensor
-   REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:) :: ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u  ! F-centric tensor
 #endif
 
 
@@ -456,15 +455,14 @@ CONTAINS
 
       ii = ii + 1
       ALLOCATE( u_ice(jpi,jpj) , v_ice(jpi,jpj) , uVice(jpi,jpj), vUice(jpi,jpj), SIGMAt(jpi,jpj,3), &
-         &      SI1t(jpi,jpj)  , SI2t(jpi,jpj)  , &
          &      vt_i (jpi,jpj) , vt_s (jpi,jpj) , st_i(jpi,jpj) , at_i(jpi,jpj) , ato_i(jpi,jpj) ,   &
-         &      et_i (jpi,jpj) , et_s (jpi,jpj) , tm_su(jpi,jpj) ,   &  !tm_si(jpi,jpj) ,
+         &      et_i (jpi,jpj) , et_s (jpi,jpj) , tm_su(jpi,jpj) , SI2t(jpi,jpj)  ,  &  !tm_si(jpi,jpj) ,
          &      tau_icebfr(jpi,jpj), icb_mask(jpi,jpj), &
          &      taux_oi_u(jpi,jpj) , tauy_oi_v(jpi,jpj) , &
          &      af_i(jpi,jpj),  au_i(jpi,jpj),  av_i(jpi,jpj),   STAT=ierr(ii) )
       !
       u_ice(:,:)=0._wp ; v_ice(:,:)=0._wp ; uVice(:,:)=0._wp ; vUice(:,:)=0._wp ; SIGMAt(:,:,:)=0._wp
-      SI1t(:,:)=0._wp  ;  SI2t(:,:)=0._wp
+      SI2t(:,:)=0._wp
       vt_i (:,:)=0._wp ; vt_s (:,:)=0._wp ; st_i(:,:)=0._wp ; at_i(:,:)=0._wp ; ato_i(:,:)=0._wp
       et_i (:,:)=0._wp ; et_s (:,:)=0._wp
       tm_su(:,:)=0._wp ; !tm_si(:,:)=0._wp
@@ -474,10 +472,8 @@ CONTAINS
       !
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 2D arrays to memory'
-      PRINT *, '            => u_ice, v_ice, uVice, vUice, SIGMAt, vt_i, vt_s, st_i, at_i, ato_i'
-      !$acc enter data copyin( u_ice, v_ice, uVice, vUice, SIGMAt, vt_i, vt_s, st_i, at_i, ato_i )
-      PRINT *, '            => SI1t, SI2t'
-      !$acc enter data copyin( SI1t, SI2t )
+      PRINT *, '            => u_ice, v_ice, uVice, vUice, SIGMAt, SI2t, vt_i, vt_s, st_i, at_i, ato_i'
+      !$acc enter data copyin( u_ice, v_ice, uVice, vUice, SIGMAt, SI2t, vt_i, vt_s, st_i, at_i, ato_i )
       PRINT *, '            => et_i, et_s, tm_su, taux_oi_u, tauy_oi_v, af_i, au_i, av_i'
       !$acc enter data copyin( et_i, et_s, tm_su, taux_oi_u, tauy_oi_v, af_i, au_i, av_i )
       !! --> ignored for now: vm_ibr, tau_icebfr, icb_mask
@@ -567,17 +563,13 @@ CONTAINS
       IF( ln_damage ) THEN
          ii = ii + 1
          ALLOCATE(   V_ts(jpi,jpj,4), dmdt(jpi,jpj), dmdf(jpi,jpj), SIGMAf(jpi,jpj,3),   &
-            &        SI1f(jpi,jpj)  , SI2f(jpi,jpj)  , &
-            &      sudy_v(jpi,jpj), svdx_u(jpi,jpj),       STAT = ierr(ii) )
+            &      sudy_v(jpi,jpj), svdx_u(jpi,jpj), SI2f(jpi,jpj)  ,      STAT = ierr(ii) )
          V_ts(:,:,:)= 0._wp ; dmdt(:,:)=0._wp ;  dmdf(:,:)=0._wp ;  SIGMAf(:,:,:)=0._wp
-         SI1f(:,:)=0._wp  ;  SI2f(:,:)=0._wp
-         sudy_v(:,:)=0._wp ;  svdx_u(:,:)=0._wp
+         SI2f(:,:)=0._wp ; sudy_v(:,:)=0._wp ;  svdx_u(:,:)=0._wp
 #if defined _OPENACC || defined _OPENMP
          PRINT *, ' * info GPU: ice_alloc() => adding brittle-reology-specific 2D arrays to memory'
-         PRINT *, '             => dmdt, dmdf, SIGMAf, V_ts, sudy_v, svdx_u'
-         !$acc enter data copyin( dmdt, dmdf, SIGMAf, V_ts, sudy_v, svdx_u )
-         PRINT *, '            => SI1f, SI2f'
-         !$acc enter data copyin( SI1f, SI2f )
+         PRINT *, '             => dmdt, dmdf, SIGMAf, SI2f, V_ts, sudy_v, svdx_u'
+         !$acc enter data copyin(  dmdt, dmdf, SIGMAf, SI2f, V_ts, sudy_v, svdx_u )
 #endif
       END IF
 
@@ -636,23 +628,14 @@ CONTAINS
 #if defined key_dbgvel
       ii = ii + 1
       ALLOCATE( divSx_t(jpi,jpj), divSy_t(jpi,jpj), divSx_f(jpi,jpj), divSy_f(jpi,jpj), &
-         &      ds11t_dx_u(jpi,jpj), ds12f_dy_u(jpi,jpj), ds22t_dy_v(jpi,jpj), ds12f_dx_v(jpi,jpj), &
-         &      ds11f_dx_v(jpi,jpj), ds12t_dy_v(jpi,jpj), ds22f_dy_u(jpi,jpj), ds12t_dx_u(jpi,jpj), &
          &      STAT = ierr(ii) )
       divSx_t(:,:)=0._wp ;  divSy_t(:,:)=0._wp ;  divSx_f(:,:)=0._wp ;  divSy_f(:,:)=0._wp
-      ds11t_dx_u(:,:)=0._wp ; ds12f_dy_u(:,:)=0._wp ; ds22t_dy_v(:,:)=0._wp ; ds12f_dx_v(:,:)=0._wp
-      ds11f_dx_v(:,:)=0._wp ; ds12t_dy_v(:,:)=0._wp ; ds22f_dy_u(:,:)=0._wp ; ds12t_dx_u(:,:)=0._wp
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding debugging arrays of `div(sigma*h)`'
       PRINT *, '            => divSx_t, divSy_t, divSx_f, divSy_f'
-      PRINT *, '            => ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v'
-      PRINT *, '            => ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u'
       !$acc enter data copyin( divSx_t, divSy_t, divSx_f, divSy_f )
-      !$acc enter data copyin( ds11t_dx_u, ds12f_dy_u, ds22t_dy_v, ds12f_dx_v )
-      !$acc enter data copyin( ds11f_dx_v, ds12t_dy_v, ds22f_dy_u, ds12t_dx_u )
 #endif
 #endif
-
 
       ice_alloc = MAXVAL( ierr(:) )
       IF( ice_alloc /= 0 )   CALL ctl_stop( 'STOP', 'ice_alloc: failed to allocate arrays.' )

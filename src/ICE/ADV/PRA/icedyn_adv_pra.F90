@@ -94,6 +94,9 @@ CONTAINS
       INTEGER  ::   ji, jj, jk, jl          ! dummy loop indices
       REAL(wp) ::   zdt, zati2
       REAL(wp) ::   z1_dt, zds
+      REAL(wp) ::   zvt                     ! total ice volume (sum over the categories) of a box
+      !REAL(wp) ::   zcfl, zcflmax          ! Courant number of a box, and its maximum over the domain
+      !CHARACTER(len=8) :: cwcfl             ! `zcflmax` as a string (for the warning)
       !
       CHARACTER(len=15), PARAMETER :: crtnm = 'ice_dyn_adv_pra'
       CHARACTER(len=1),  PARAMETER :: cgt    = 'T'
@@ -115,8 +118,9 @@ CONTAINS
             CALL icemax4D_cnt( nlay_i, pszv_i, pv_i, sszi_max )
             CALL icemax4D_cnt( nlay_i,      pe_i, pv_i,  sei_max )
             CALL icemax4D_cnt( nlay_s,      pe_s, pv_s,  ses_max )
-            !
-#if ! defined _OPENACC || defined _OPENMP
+
+            ! CPU build only (lbc_lnk_gpu is used otherwise):
+#if ! ( defined _OPENACC || defined _OPENMP )
             IF( nn_hls <= 2 ) THEN   ! (maybe even `<= 1` would do it actually, but not tested yet...)
                CALL lbc_lnk( crtnm, shi_max,cgt,1._wp, shs_max,cgt,1._wp )   ! 3D
                CALL lbc_lnk( crtnm, sei_max,cgt,1._wp )   ! 4D / nlay_i
@@ -133,6 +137,29 @@ CONTAINS
       zdt = rDt_ice
       z1_dt = 1._wp / zdt
 
+      !! --- Courant number check --- !
+      !! The Prather scheme moves the fraction `|U|*dt/V` of a box through each of its faces, so the total fraction leaving a box
+      !! (through its 2 faces in x, and in y) must not exceed 1, otherwise volumes (and moments) can become negative. Nothing else
+      !! checks this, so we compute here the largest such fraction over the domain and send a warning if it is above 1.
+      !! `pUu` & `pVv` are transports in km^2/s and `r1_e1e2t*r1_scl_fct` is 1/(box area) in km^-2; `r1_e1e2t` is 0 over land.
+      !zcflmax = 0._wp
+!!$acc parallel loop collapse(2) reduction(max:zcflmax)
+      !DO jj=Njs0, Nje0
+      !   DO ji=Nis0, Nie0
+      !      ! The x and y passes are done one after the other, so the x and y fractions are tested separately (not added up):
+      !      zcfl = MAX( ( MAX( 0._wp, pUu(ji,jj) ) + MAX( 0._wp, -pUu(ji-1,jj) ) ) ,   &
+      !         &        ( MAX( 0._wp, pVv(ji,jj) ) + MAX( 0._wp, -pVv(ji,jj-1) ) ) ) * zdt * r1_e1e2t(ji,jj) * r1_scl_fct
+      !      zcflmax = MAX( zcflmax, zcfl )
+      !   END DO
+      !END DO
+!!$acc end parallel loop
+      !CALL mpp_max( crtnm, zcflmax )   ! max over the whole domain (all the MPI processes)
+      !IF( zcflmax > 1._wp ) THEN
+      !   WRITE(cwcfl,'(F8.2)') zcflmax
+      !   CALL ctl_warn( crtnm//': the Courant number of the Prather advection is above 1 (max = '//TRIM(ADJUSTL(cwcfl))//')', &
+      !      &           'The volumes and moments of some boxes can become negative: reduce the time step or the ice velocity' )
+      !ENDIF
+
       ! --- transport --- !
       !      + record at_i before advection (for open water)
       !$acc parallel loop collapse(2) present( sati1 )
@@ -147,6 +174,27 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+
+      IF( ln_rdgtrc ) THEN
+         ! The ridged-ice fraction `rdgc` is the volume of ridged ice divided by the total volume of ice, so it is an intensive
+         ! field weighted by the ice volume: advecting it directly would mix the boxes with a wrong (box area) weight, and would
+         ! change it in a divergent flow. We advect instead the volume of ridged ice `Vr = rdgc * vt_i` (a quantity per unit area,
+         ! so the standard advection is the right one for it) and we get `rdgc = Vr / vt_i` back at the end of this routine,
+         ! with the ice volume after advection. This must be done HERE, before `v_i` is advected below.
+         ! (`prdgc` then holds `Vr`, and `sxrdg`, `syrdg`, ... the moments of `Vr`)
+         !$acc parallel loop collapse(2) present( prdgc, pv_i )
+         DO jj=Njs0-1, Nje0+1
+            DO ji=Nis0-1, Nie0+1
+               zvt = 0._wp
+               !$acc loop seq
+               DO jl=1, jpl
+                  zvt = zvt + pv_i(ji,jj,jl)
+               END DO
+               prdgc(ji,jj) = prdgc(ji,jj) * zvt
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
 
       !IF( ln_icediachk ) THEN
       !   ! diagnostics
@@ -197,6 +245,19 @@ CONTAINS
       CALL lbc_lnk_gpu( crtnm,  pv_i,  sxice,  syice,  pv_s,   sxsnw,   sysnw,  pa_i,    sxa,    sya    )
       CALL lbc_lnk_gpu( crtnm,  sxxice, syyice, sxyice, sxxsnw,  syysnw,  sxysnw, sxxa,   syya,   sxya  )
       !
+      IF( ln_icethd ) THEN
+         ! Same fields as in the CPU branch below. The GPU build runs on 1 GPU (no MPI), so `lbc_lnk_gpu` only takes care of the
+         ! East-West & North-South periodicity (no sign change is needed): without this, the periodic halos of these fields
+         ! would be stale at the next time step, and the fluxes across the periodic seam would be wrong.
+         ! One call per tracer: the field itself + its 5 moments, with `nlay_i` or `nlay_s` layers (4D arrays):
+         CALL lbc_lnk_gpu( crtnm, nlay_i, pszv_i, sxsz, sysz, sxxsz, syysz, sxysz )   ! ice salinity
+         CALL lbc_lnk_gpu( crtnm, nlay_i, pe_i,   sxei, syei, sxxei, syyei, sxyei )   ! ice enthalpy
+         CALL lbc_lnk_gpu( crtnm, nlay_s, pe_s,   sxes, syes, sxxes, syyes, sxyes )   ! snow enthalpy
+         IF( ln_age ) THEN
+            ! Ice age (3D arrays): the field itself + its 5 moments:
+            CALL lbc_lnk_gpu( crtnm, poa_i, sxage, syage, sxxage, syyage, sxyage )
+         ENDIF
+      ENDIF
 #else
       CALL lbc_lnk( crtnm, pv_i,cgt,1._wp,  sxice,cgt,-1._wp,  syice,cgt,-1._wp,  & ! ice volume
          &               sxxice,cgt,1._wp, syyice,cgt, 1._wp, sxyice,cgt, 1._wp,  &
@@ -254,10 +315,18 @@ CONTAINS
       !$acc end parallel loop
 
       IF( ln_rdgtrc ) THEN
+         ! Open water and ridged-ice fraction: lateral boundary conditions.
+         ! The 5 Prather moments of the ridged-ice fraction must be exchanged as well (as is done for all the other advected
+         ! tracers): the advection routines do not update all the halo points, so without this the moments in the halos are stale
+         ! and the first pass of the next time step would use them to compute fluxes into the first interior points.
+         ! Sign change for the gradients (`sx` and `sy`), as for the other tracers (cf. the `lbc_lnk` calls above).
 #if defined _OPENACC || defined _OPENMP
-         CALL lbc_lnk_gpu( crtnm, pato_i, prdgc )
+         ! `pato_i`, `prdgc` and its 5 moments in a single call (7 fields):
+         CALL lbc_lnk_gpu( crtnm, pato_i, prdgc, sxrdg, syrdg, sxxrdg, syyrdg, sxyrdg )
 #else
-         CALL lbc_lnk(     crtnm, pato_i,cgt,1._wp, prdgc,cgt,1._wp )
+         CALL lbc_lnk(     crtnm, pato_i,cgt,1._wp, prdgc,cgt,1._wp,                                  &
+            &                     sxrdg,cgt,-1._wp, syrdg,cgt,-1._wp,                                 &
+            &                     sxxrdg,cgt,1._wp, syyrdg,cgt,1._wp, sxyrdg,cgt,1._wp )
 #endif
       ELSE
 #if defined _OPENACC || defined _OPENMP
@@ -306,6 +375,26 @@ CONTAINS
          !   ==> included into `Hbig` !!!
 
       ENDIF !IF( .NOT. ln_pureADV2D )
+
+      IF( ln_rdgtrc ) THEN
+         ! Back from the advected volume of ridged ice `Vr` (held by `prdgc` since before the advection) to the ridged-ice fraction:
+         ! `rdgc = Vr / vt_i`, with the total ice volume `vt_i` AFTER advection (and after the corrections of `v_i` just above, so
+         ! that `rdgc` is consistent with the final `v_i`). The fraction is bounded by [0,1], and set to 0 where there is
+         ! (almost) no ice. The whole domain, halos included, is converted: the exchange above filled the halos with `Vr`
+         ! (and `v_i`), so they must be converted too, otherwise `rdgc` would be `Vr` in the halos.
+         !$acc parallel loop collapse(2) present( prdgc, pv_i )
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               zvt = 0._wp
+               !$acc loop seq
+               DO jl=1, jpl
+                  zvt = zvt + pv_i(ji,jj,jl)
+               END DO
+               prdgc(ji,jj) = MERGE( MIN( MAX( prdgc(ji,jj) / MAX( zvt, epsi10 ) , 0._wp ) , 1._wp ) , 0._wp , zvt > epsi10 )
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
 
 
       IF( lrst_ice )   CALL adv_pra_rst( 'WRITE', kt )   !* write Prather fields in the restart file !LOLOfixme!
@@ -476,6 +565,7 @@ CONTAINS
       INTEGER ::   jk, jl
       INTEGER ::   iter
       INTEGER ::   id1, id0, idx
+      LOGICAL ::   ll_lay   ! the number of snow & ice layers of the restart matches `nlay_s` & `nlay_i`
       CHARACTER(len=25) ::   znam
       CHARACTER(len=2)  ::   zchar, zchar1
       REAL(wp), DIMENSION(jpi,jpj,jpl) ::   z3d   ! 3D workspace
@@ -498,7 +588,10 @@ CONTAINS
             IF( iom_varid( 'adv_pra_rst', numrir, znam , ldstop = .FALSE. ) > 0 )   id0 = id0+1
          END DO
 
-         IF( id1 > 0 .AND. id0 == (nlay_s+nlay_i) ) THEN   !**  Read the restart file  **!
+         ! The mandatory fields (ice & snow volume, ice concentration) are read as soon as a restart exists. The layer-dependent
+         ! fields (salinity, snow & ice enthalpy), which only exist if the run that wrote the restart had `ln_icethd=T`, are
+         ! checked separately below (`ll_lay`): a mismatch there must not reset the moments that can be read correctly.
+         IF( id1 > 0 ) THEN   !**  Read the restart file  **!
             !
             ! ---------------------- !
             ! == mandatory fields == !
@@ -522,14 +615,16 @@ CONTAINS
             CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'syya'  , syya   )
             CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxya'  , sxya   )
 
+            ! The Prather moments of the ridged-ice fraction are now those of the VOLUME of ridged ice (cf. `ice_dyn_adv_pra`),
+            ! hence the new names `s*vrdg`: the moments of an older restart (moments of the fraction) are not read, but set to 0.
             IF( ln_rdgtrc ) THEN                                    ! ridged-ice fraction
-               idx = iom_varid( 'adv_pra_rst',numrir, 'sxrdg', ldstop = .FALSE. )
+               idx = iom_varid( 'adv_pra_rst',numrir, 'sxvrdg', ldstop = .FALSE. )
                IF( idx > 0 ) THEN      ! field exists
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxrdg'   , sxrdg   , psgn = -1._wp )
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'syrdg'   , syrdg   , psgn = -1._wp )
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxxrdg'  , sxxrdg   )
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'syyrdg'  , syyrdg   )
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxyrdg'  , sxyrdg   )
+                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxvrdg'  , sxrdg   , psgn = -1._wp )
+                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'syvrdg'  , syrdg   , psgn = -1._wp )
+                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxxvrdg' , sxxrdg   )
+                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'syyvrdg' , syyrdg   )
+                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, 'sxyvrdg' , sxyrdg   )
                ELSE
                   IF(lwp) WRITE(numout,*)
                   IF(lwp) WRITE(numout,*) '   ==>>> did not find the "ridged fraction"-related Prather adv. fields in the restart => set to 0'
@@ -538,20 +633,35 @@ CONTAINS
             ENDIF
             !
             IF( ln_icethd ) THEN
+               !
+               ! Do the snow & ice layers of the restart match the ones of this run? (`id0` counts the layers found for the
+               ! snow and ice enthalpy moments; it is 0 if the restart was written by a run without thermodynamics)
+               ll_lay = ( id0 == (nlay_s+nlay_i) )
+               IF( .NOT. ll_lay ) THEN
+                  ! No match: only the layer-dependent moments are set to 0 (all the other moments are read normally):
+                  IF(lwp) WRITE(numout,*)
+                  IF(lwp) WRITE(numout,*) '   ==>>> layers of the restart do not match `nlay_i`/`nlay_s` (or no thermo in previous run)' &
+                     &                    //' => salinity & enthalpy Prather adv. fields set to 0'
+                  sxsz = 0._wp   ;   sysz = 0._wp   ;   sxxsz = 0._wp   ;   syysz = 0._wp   ;   sxysz = 0._wp
+                  sxes = 0._wp   ;   syes = 0._wp   ;   sxxes = 0._wp   ;   syyes = 0._wp   ;   sxyes = 0._wp
+                  sxei = 0._wp   ;   syei = 0._wp   ;   sxxei = 0._wp   ;   syyei = 0._wp   ;   sxyei = 0._wp
+               ENDIF
                !                                                        ! ice salinity
-               DO jk = 1, nlay_i
-                  WRITE(zchar1,'(I2.2)') jk
-                  znam = 'sxsz'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sxsz (:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sysz'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sysz (:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sxxsz'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxxsz(:,:,jk,:) = z3d(:,:,:)
-                  znam = 'syysz'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   syysz(:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sxysz'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxysz(:,:,jk,:) = z3d(:,:,:)
-               END DO
+               IF( ll_lay ) THEN
+                  DO jk = 1, nlay_i
+                     WRITE(zchar1,'(I2.2)') jk
+                     znam = 'sxsz'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sxsz (:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sysz'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sysz (:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sxxsz'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxxsz(:,:,jk,:) = z3d(:,:,:)
+                     znam = 'syysz'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   syysz(:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sxysz'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxysz(:,:,jk,:) = z3d(:,:,:)
+                  END DO
+               ENDIF !IF( ll_lay )
 
                IF( ln_age ) THEN                                        ! ice age
                   idx = iom_varid( 'adv_pra_rst',numrir, 'sxage' , ldstop = .FALSE. )
@@ -568,33 +678,35 @@ CONTAINS
                   ENDIF
                ENDIF
                !                                                        ! snow layers heat content
-               DO jk = 1, nlay_s
-                  WRITE(zchar1,'(I2.2)') jk
-                  znam = 'sxes'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sxes (:,:,jk,:) = z3d(:,:,:)
-                  znam = 'syes'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   syes (:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sxxes'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxxes(:,:,jk,:) = z3d(:,:,:)
-                  znam = 'syyes'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   syyes(:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sxyes'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxyes(:,:,jk,:) = z3d(:,:,:)
-               END DO
-               !                                                        ! ice layers heat content
-               DO jk = 1, nlay_i
-                  WRITE(zchar1,'(I2.2)') jk
-                  znam = 'sxei'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sxei (:,:,jk,:) = z3d(:,:,:)
-                  znam = 'syei'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   syei (:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sxxei'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxxei(:,:,jk,:) = z3d(:,:,:)
-                  znam = 'syyei'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   syyei(:,:,jk,:) = z3d(:,:,:)
-                  znam = 'sxyei'//'_l'//zchar1
-                  CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxyei(:,:,jk,:) = z3d(:,:,:)
-               END DO
+               IF( ll_lay ) THEN
+                  DO jk = 1, nlay_s
+                     WRITE(zchar1,'(I2.2)') jk
+                     znam = 'sxes'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sxes (:,:,jk,:) = z3d(:,:,:)
+                     znam = 'syes'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   syes (:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sxxes'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxxes(:,:,jk,:) = z3d(:,:,:)
+                     znam = 'syyes'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   syyes(:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sxyes'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxyes(:,:,jk,:) = z3d(:,:,:)
+                  END DO
+                  !                                                        ! ice layers heat content
+                  DO jk = 1, nlay_i
+                     WRITE(zchar1,'(I2.2)') jk
+                     znam = 'sxei'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   sxei (:,:,jk,:) = z3d(:,:,:)
+                     znam = 'syei'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d, psgn = -1._wp )   ;   syei (:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sxxei'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxxei(:,:,jk,:) = z3d(:,:,:)
+                     znam = 'syyei'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   syyei(:,:,jk,:) = z3d(:,:,:)
+                     znam = 'sxyei'//'_l'//zchar1
+                     CALL iom_get( 'adv_pra_rst', numrir, jpdom_auto, znam , z3d )   ;   sxyei(:,:,jk,:) = z3d(:,:,:)
+                  END DO
+               ENDIF !IF( ll_lay ) (this `IF` was opened before the snow layers)
                !
             ENDIF
             !
@@ -771,11 +883,11 @@ CONTAINS
          !
          IF( ln_rdgtrc ) THEN    !  ridged-ice fraction
             !$acc update self( sxrdg, syrdg, sxxrdg, syyrdg, sxyrdg )
-            CALL iom_rstput( kt, nitrst, numriw, 'sxrdg' ,   sxrdg(:,:) )
-            CALL iom_rstput( kt, nitrst, numriw, 'syrdg'  ,  syrdg(:,:) )
-            CALL iom_rstput( kt, nitrst, numriw, 'sxxrdg' , sxxrdg(:,:) )
-            CALL iom_rstput( kt, nitrst, numriw, 'syyrdg' , syyrdg(:,:) )
-            CALL iom_rstput( kt, nitrst, numriw, 'sxyrdg' , sxyrdg(:,:) )
+            CALL iom_rstput( kt, nitrst, numriw, 'sxvrdg' ,   sxrdg(:,:) )
+            CALL iom_rstput( kt, nitrst, numriw, 'syvrdg'  ,  syrdg(:,:) )
+            CALL iom_rstput( kt, nitrst, numriw, 'sxxvrdg' , sxxrdg(:,:) )
+            CALL iom_rstput( kt, nitrst, numriw, 'syyvrdg' , syyrdg(:,:) )
+            CALL iom_rstput( kt, nitrst, numriw, 'sxyvrdg' , sxyrdg(:,:) )
          ENDIF
          !
          !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN                       !  melt pond fraction

@@ -521,161 +521,173 @@ CONTAINS
       !!
       !!----------------------------------------------------------------------
       INTEGER, INTENT(in) ::   kt   ! ocean time step
+      INTEGER             ::   jk_zt   ! vertical level of the atmospheric forcing fields at "zt" (1 = bulk, 2 = ABL)
       !!----------------------------------------------------------------------
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('oss_flx_write')
-      !$acc data present( sfx, fmmflx, emp, qns, qsr, taum, wndm, qsr_oce, qns_oce, qemp_oce )
 
-      !                                                ! ---------------------------------------- !
-      !                                                !        Outputs and control print         !
-      !                                                ! ---------------------------------------- !
+#if defined _OPENACC || defined _OPENMP
+      IF( iom_use('iceconc').OR.iom_use('saltflx').OR.iom_use('taum').OR.iom_use('theta_zu') ) THEN
+         PRINT *, '    ***** `oss_flx_write()` activated for GPU at kt =', kt, ' *****'
+         !$acc data present( sfx, fmmflx, emp, qns, qsr, taum, wndm, qsr_oce, qns_oce, qemp_oce )
+#endif
+         !                                                ! ---------------------------------------- !
+         !                                                !        Outputs and control print         !
+         !                                                ! ---------------------------------------- !
+         !! LB => when coupled to ocean component via OASIS I rather save the exacts same fields (as saved here)
+         !!       right at the place where they are sent to OASIS, so technically in `oss_cpl_snd()@osscpl.F90` !
 
-      !! LB => when coupled to ocean component via OASIS I rather save the exacts same fields (as saved here)
-      !!       right at the place where they are sent to OASIS, so technically in `oss_cpl_snd()@osscpl.F90` !
+         IF( iom_use('saltflx' ) ) THEN
+            !$acc update self( sfx )
+            CALL iom_put( 'saltflx', sfx * xmskt         ) !#LOLOfixme  ! downward salt flux (includes virtual salt flux beneath ice in linear free surface case)
+         ENDIF
+         IF( iom_use('fmmflx' ) ) THEN
+            !$acc update self( fmmflx )
+            CALL iom_put( 'fmmflx' , fmmflx * xmskt ) ! Freezing-melting upward water flux for liquid ocean (`fmmflx>0` => LOSS for the liquid ocean)
+         ENDIF
+         IF( iom_use('emp' ) ) THEN
+            !$acc update self( emp )
+            CALL iom_put( 'emp'    , emp * xmskt )    ! E-P (net upward freshwater, (`emp>0` => LOSS for the liquid ocean)
+         ENDIF
 
-      IF( iom_use('saltflx' ) ) THEN
-         !$acc update self( sfx )
-         CALL iom_put( 'saltflx', sfx * xmskt         ) !#LOLOfixme  ! downward salt flux (includes virtual salt flux beneath ice in linear free surface case)
-      ENDIF
-      IF( iom_use('fmmflx' ) ) THEN
-         !$acc update self( fmmflx )
-         CALL iom_put( 'fmmflx' , fmmflx * xmskt ) ! Freezing-melting upward water flux for liquid ocean (`fmmflx>0` => LOSS for the liquid ocean)
-      ENDIF
-      IF( iom_use('emp' ) ) THEN
-         !$acc update self( emp )
-         CALL iom_put( 'emp'    , emp * xmskt )    ! E-P (net upward freshwater, (`emp>0` => LOSS for the liquid ocean)
-      ENDIF
+         !! In the following, a positive flux means a gain for the liquid ocean...
+         IF( iom_use('qt') ) THEN
+            !$acc update self( qns, qsr )
+            CALL iom_put( 'qt'  , (qns + qsr) * xmskt    )       ! total heat flux
+         ENDIF
+         IF( iom_use('qns' ) ) THEN
+            !$acc update self( qns )
+            CALL iom_put( 'qns'    , qns ) ! * xmskt )       ! non-solar heat flux
+         ENDIF
+         IF( iom_use('qsr' ) ) THEN
+            !$acc update self( qsr )
+            CALL iom_put( 'qsr'    , qsr * xmskt )       ! solar heat flux
+         ENDIF
+         IF( iom_use('taum' ) ) THEN
+            !$acc update self( taum )
+            CALL iom_put( 'taum'   ,  taum * xmskt )       ! wind stress module
+         ENDIF
+         !
+         IF( sn_loc_vct_tau=='T' ) THEN
+            IF( iom_use('utau_t') ) THEN
+               !$acc update self( utau )
+               CALL iom_put( 'utau_t',  utau * xmskt )
+            ENDIF
+            IF( iom_use('vtau_t') ) THEN
+               !$acc update self( vtau )
+               CALL iom_put( 'vtau_t',  vtau * xmskt )
+            ENDIF
+         ENDIF
+         IF( sn_loc_vct_tau=='C' ) THEN
+            IF( iom_use('utau_u') ) THEN
+               !$acc update self( utau )
+               CALL iom_put( 'utau_u',  utau * umask(:,:,1) )
+            ENDIF
+            IF( iom_use('vtau_v') ) THEN
+               !$acc update self( vtau )
+               CALL iom_put( 'vtau_v',  vtau * vmask(:,:,1) )
+            ENDIF
+         ENDIF
+         !
+         IF( iom_use('wspd' ) ) THEN
+            !$acc update self( wndm )
+            CALL iom_put( 'wspd',     wndm * xmskt ) ! wind speed  module over free ocean or leads in presence of sea-ice
+         ENDIF
+         !
+         ! Atmospheric forcing input fields for bulk forcing (for debugging purposes)
+         ! **************************************************************************
+         ! Level index of the forcing fields at "zt" (height of air temperature & humidity):
+         !  * bulk (ln_abl=F): `sf(...)` are 2D, so level 1 is the only one
+         !  * ABL  (ln_abl=T): `sf(jp_tair)`, `sf(jp_humi)`, `sf(jp_wndi)` & `sf(jp_wndj)` are 3D, and the ABL first level
+         !                     (`ght_abl(2)` = `rn_zqt`) is level 2. Level 1 is not used by the ABL.
+         jk_zt = MERGE( 2 , 1 , ln_abl )
 
-      !! In the following, a positive flux means a gain for the liquid ocean...
-      IF( iom_use('qt') ) THEN
-         !$acc update self( qns, qsr )
-         CALL iom_put( 'qt'  , (qns + qsr) * xmskt    )       ! total heat flux
+         IF( iom_use('theta_zt') ) CALL iom_put('theta_zt', (sf(jp_tair)%fnow(:,:,jk_zt) -rt0) * xmskt ) ! absolute temperature at z=zt
+         IF( iom_use('q_zt')     ) THEN
+            !$acc update self( sf(jp_humi)%fnow(:,:,jk_zt) )
+            CALL                        iom_put('q_zt',      sf(jp_humi)%fnow(:,:,jk_zt)       * xmskt ) ! specific humidity    at z=zt
+         ENDIF
+
+         IF( iom_use("wnd_x") )   CALL iom_put( "wnd_x",     sf(jp_wndi)%fnow(:,:,jk_zt)*xmskt(:,:) )
+         IF( iom_use("wnd_y") )   CALL iom_put( "wnd_y",     sf(jp_wndj)%fnow(:,:,jk_zt)*xmskt(:,:) )
+
+         ! `snowpre` & `precip` are written by `ossmod` only (the ABL module no longer writes them)
+         IF( iom_use("snowpre" ) ) CALL iom_put( "snowpre",  sf(jp_snow)%fnow(:,:,1)*xmskt(:,:) )    ! output solid precipitation [kg/m2/s]
+         IF( iom_use("precip" ) )  CALL iom_put( "precip" ,  sf(jp_prcp)%fnow(:,:,1)*xmskt(:,:) )    ! output total precipitation [kg/m2/s]
+
+         IF( iom_use('theta_zu') .OR. iom_use('dtheta_zu_zt')  ) THEN
+            !$acc update self(t_air_zu)
+            IF( iom_use('theta_zu') )     CALL iom_put('theta_zu', (t_air_zu -rt0) * xmskt) ! potential temperature at z=zu
+            IF( iom_use('dtheta_zu_zt') ) THEN
+               !! IF(ln_abl), we are comparing to what was read in the forcing field, not what has been updated by the ABL (because `t_air_zu` forced to that!)
+               !$acc update self( sf(jp_tair)%fnow(:,:,jk_zt) )
+               CALL iom_put('dtheta_zu_zt', (t_air_zu(:,:) - sf(jp_tair)%fnow(:,:,jk_zt)) * xmskt) ! diff potential temperature between z=zu and z=zt
+            ENDIF
+         ENDIF
+         IF( iom_use('q_zu')     .OR. iom_use('dq_zu_zt')      ) THEN
+            !$acc update self(q_air_zu)
+            IF( iom_use('q_zu') )     CALL iom_put('q_zu',      q_air_zu       * xmskt) ! specific humidity       '
+            IF( iom_use('dq_zu_zt') ) THEN
+               !! IF(ln_abl), we are comparing to what was read in the forcing field, not what has been updated by the ABL (because `q_air_zu` forced to that!)
+               !$acc update self( sf(jp_humi)%fnow(:,:,jk_zt) )
+               CALL iom_put('dq_zu_zt',  (q_air_zu(:,:) - sf(jp_humi)%fnow(:,:,jk_zt)) * xmskt) ! diff specific humidity between z=zu and z=zt
+            ENDIF
+         ENDIF
+
+         IF( iom_use("rad_sw" ) ) CALL iom_put( "rad_sw",  sf(jp_dqsw)%fnow(:,:,1)*xmskt(:,:) ) ! Downwelling shortwave radiative flux available at sea level
+         IF( iom_use("rad_lw" ) ) CALL iom_put( "rad_lw",  sf(jp_dqlw)%fnow(:,:,1)*xmskt(:,:) ) ! Downwelling  longwave radiative flux available at sea level
+         ! **************************************************************************
+
+
+         !ENDIF !IF( .NOT. ln_cpl_oce )
+
+         !! Arrays that exist because of presence of sea-ice
+         !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         IF( iom_use('Cd_oce') ) THEN
+            !$acc update self( CD_oce )
+            CALL iom_put( 'Cd_oce'    , CD_oce * REAL(1-kmsk_ice_t,wp) * xmskt )
+         ENDIF
+         IF( iom_use('Ch_oce') ) THEN
+            !$acc update self( CH_oce )
+            CALL iom_put( 'Ch_oce'    , CH_oce * REAL(1-kmsk_ice_t,wp) * xmskt )
+         ENDIF
+         IF( iom_use('Ce_oce') ) THEN
+            !$acc update self( CE_oce )
+            CALL iom_put( 'Ce_oce'    , CE_oce * REAL(1-kmsk_ice_t,wp) * xmskt )
+         ENDIF
+         IF( iom_use('qsr_oce') ) THEN
+            !$acc update self( qsr_oce )
+            CALL iom_put( 'qsr_oce'    , qsr_oce * REAL(1-kmsk_ice_t,wp) * xmskt ) ! solar flux availabe at open-ocean surface (computed as if no sea-ice was present)
+         ENDIF
+         IF( iom_use('qns_oce') ) THEN
+            !$acc update self( qns_oce )
+            CALL iom_put( 'qns_oce'    , qns_oce * REAL(1-kmsk_ice_t,wp) * xmskt ) ! non-solar flux at ocean surface (qlat+qsen+qlw) (computed as if no sea-ice was present)
+         ENDIF
+         IF( iom_use('qemp_oce') ) THEN
+            !$acc update self( qemp_oce )
+            CALL iom_put( 'qemp_oce'   , qemp_oce * REAL(1-kmsk_ice_t,wp) * xmskt ) ! Downward Heat Flux from E-P over open-ocean
+         ENDIF
+         IF( iom_use('qt_oce') ) THEN
+            !$acc update self( qsr_oce, qns_oce, qemp_oce )
+            IF( iom_use('qt_oce') ) CALL iom_put( 'qt_oce', (qsr_oce + qns_oce + qemp_oce) * REAL(1-kmsk_ice_t,wp) * xmskt )
+         ENDIF
+
+         IF(sn_cfctl%l_prtctl) THEN     ! print mean trends (used for debugging)
+            CALL prt_ctl(tab2d_1=CASTDP(qns)    , clinfo1=' qns      - : ', mask1=tmask )
+            CALL prt_ctl(tab2d_1=CASTDP(qsr)    , clinfo1=' qsr      - : ', mask1=tmask )
+            CALL prt_ctl(tab3d_1=CASTDP(tmask)  , clinfo1=' tmask    - : ', mask1=tmask, kdim=1 )
+            CALL prt_ctl(tab2d_1=CASTDP(utau)   , clinfo1=' utau     - : ', mask1=umask,        &
+               &         tab2d_2=CASTDP(vtau)   , clinfo2=' vtau     - : ', mask2=vmask )
+         ENDIF
+
+#if defined _OPENACC || defined _OPENMP
+         !$acc end data
       ENDIF
-      IF( iom_use('qns' ) ) THEN
-         !$acc update self( qns )
-         CALL iom_put( 'qns'    , qns ) ! * xmskt )       ! non-solar heat flux
-      ENDIF
-      IF( iom_use('qsr' ) ) THEN
-         !$acc update self( qsr )
-         CALL iom_put( 'qsr'    , qsr * xmskt )       ! solar heat flux
-      ENDIF
-      IF( iom_use('taum' ) ) THEN
-         !$acc update self( taum )
-         CALL iom_put( 'taum'   ,  taum * xmskt )       ! wind stress module
-      ENDIF
+#endif
       !
-      IF( sn_loc_vct_tau=='T' ) THEN
-         IF( iom_use('utau_t') ) THEN
-            !$acc update self( utau )
-            CALL iom_put( 'utau_t',  utau * xmskt )
-         ENDIF
-         IF( iom_use('vtau_t') ) THEN
-            !$acc update self( vtau )
-            CALL iom_put( 'vtau_t',  vtau * xmskt )
-         ENDIF
-      ENDIF
-      IF( sn_loc_vct_tau=='C' ) THEN
-         IF( iom_use('utau_u') ) THEN
-            !$acc update self( utau )
-            CALL iom_put( 'utau_u',  utau * umask(:,:,1) )
-         ENDIF
-         IF( iom_use('vtau_v') ) THEN
-            !$acc update self( vtau )
-            CALL iom_put( 'vtau_v',  vtau * vmask(:,:,1) )
-         ENDIF
-      ENDIF
-      !
-      IF( iom_use('wspd' ) ) THEN
-         !$acc update self( wndm )
-         CALL iom_put( 'wspd',     wndm * xmskt ) ! wind speed  module over free ocean or leads in presence of sea-ice
-      ENDIF
-      !
-
-      ! Atmospheric forcing input fields for bulk forcing (for debugging purposes)
-      ! **************************************************************************
-      IF( iom_use('theta_zt') ) CALL iom_put('theta_zt', (sf(jp_tair)%fnow(:,:,1) -rt0) * xmskt ) ! absolute temperature at z=zt
-      IF( iom_use('q_zt')     ) THEN
-         !$acc update self( sf(jp_humi)%fnow(:,:,1) )
-         CALL                        iom_put('q_zt',      sf(jp_humi)%fnow(:,:,1)       * xmskt ) ! specific humidity    at z=zt
-      ENDIF
-
-      IF( iom_use("wnd_x") )   CALL iom_put( "wnd_x",     sf(jp_wndi)%fnow(:,:,1)*xmskt(:,:) )
-      IF( iom_use("wnd_y") )   CALL iom_put( "wnd_y",     sf(jp_wndj)%fnow(:,:,1)*xmskt(:,:) )
-
-      IF( iom_use("snowpre" ) ) CALL iom_put( "snowpre",  sf(jp_snow)%fnow(:,:,1)*xmskt(:,:) )    ! output solid precipitation [kg/m2/s]
-      IF( iom_use("precip" ) )  CALL iom_put( "precip" ,  sf(jp_prcp)%fnow(:,:,1)*xmskt(:,:) )    ! output total precipitation [kg/m2/s]
-
-      IF( iom_use('theta_zu') .OR. iom_use('dtheta_zu_zt')  ) THEN
-         !$acc update self(t_air_zu)
-         IF( iom_use('theta_zu') )     CALL iom_put('theta_zu', (t_air_zu -rt0) * xmskt) ! potential temperature at z=zu
-         IF( iom_use('dtheta_zu_zt') ) THEN
-            !! IF(ln_abl), we are comparing to what was read in the forcing field, not what has been updated by the ABL (because `t_air_zu` forced to that!)
-            !$acc update self( sf(jp_tair)%fnow(:,:,1) )
-            CALL iom_put('dtheta_zu_zt', (t_air_zu(:,:) - sf(jp_tair)%fnow(:,:,1)) * xmskt) ! diff potential temperature between z=zu and z=zt
-         ENDIF
-      ENDIF
-      IF( iom_use('q_zu')     .OR. iom_use('dq_zu_zt')      ) THEN
-         !$acc update self(q_air_zu)
-         IF( iom_use('q_zu') )     CALL iom_put('q_zu',      q_air_zu       * xmskt) ! specific humidity       '
-         IF( iom_use('dq_zu_zt') ) THEN
-            !! IF(ln_abl), we are comparing to what was read in the forcing field, not what has been updated by the ABL (because `q_air_zu` forced to that!)
-            !$acc update self( sf(jp_humi)%fnow(:,:,1) )
-            CALL iom_put('dq_zu_zt',  (q_air_zu(:,:) - sf(jp_humi)%fnow(:,:,1)) * xmskt) ! diff specific humidity between z=zu and z=zt
-         ENDIF
-      ENDIF
-
-      IF( iom_use("rad_sw" ) ) CALL iom_put( "rad_sw",  sf(jp_dqsw)%fnow(:,:,1)*xmskt(:,:) ) ! Downwelling shortwave radiative flux available at sea level
-      IF( iom_use("rad_lw" ) ) CALL iom_put( "rad_lw",  sf(jp_dqlw)%fnow(:,:,1)*xmskt(:,:) ) ! Downwelling  longwave radiative flux available at sea level
-      ! **************************************************************************
-
-
-      !ENDIF !IF( .NOT. ln_cpl_oce )
-
-      !! Arrays that exist because of presence of sea-ice
-      !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-      IF( iom_use('Cd_oce') ) THEN
-         !$acc update self( CD_oce )
-         CALL iom_put( 'Cd_oce'    , CD_oce * REAL(1-kmsk_ice_t,wp) * xmskt )
-      ENDIF
-      IF( iom_use('Ch_oce') ) THEN
-         !$acc update self( CH_oce )
-         CALL iom_put( 'Ch_oce'    , CH_oce * REAL(1-kmsk_ice_t,wp) * xmskt )
-      ENDIF
-      IF( iom_use('Ce_oce') ) THEN
-         !$acc update self( CE_oce )
-         CALL iom_put( 'Ce_oce'    , CE_oce * REAL(1-kmsk_ice_t,wp) * xmskt )
-      ENDIF
-      IF( iom_use('qsr_oce') ) THEN
-         !$acc update self( qsr_oce )
-         CALL iom_put( 'qsr_oce'    , qsr_oce * REAL(1-kmsk_ice_t,wp) * xmskt ) ! solar flux availabe at open-ocean surface (computed as if no sea-ice was present)
-      ENDIF
-      IF( iom_use('qns_oce') ) THEN
-         !$acc update self( qns_oce )
-         CALL iom_put( 'qns_oce'    , qns_oce * REAL(1-kmsk_ice_t,wp) * xmskt ) ! non-solar flux at ocean surface (qlat+qsen+qlw) (computed as if no sea-ice was present)
-      ENDIF
-      IF( iom_use('qemp_oce') ) THEN
-         !$acc update self( qemp_oce )
-         CALL iom_put( 'qemp_oce'   , qemp_oce * REAL(1-kmsk_ice_t,wp) * xmskt ) ! Downward Heat Flux from E-P over open-ocean
-      ENDIF
-      IF( iom_use('qt_oce') ) THEN
-         !$acc update self( qsr_oce, qns_oce, qemp_oce )
-         IF( iom_use('qt_oce') ) CALL iom_put( 'qt_oce', (qsr_oce + qns_oce + qemp_oce) * REAL(1-kmsk_ice_t,wp) * xmskt )
-      ENDIF
-
-      IF(sn_cfctl%l_prtctl) THEN     ! print mean trends (used for debugging)
-         CALL prt_ctl(tab2d_1=CASTDP(qns)    , clinfo1=' qns      - : ', mask1=tmask )
-         CALL prt_ctl(tab2d_1=CASTDP(qsr)    , clinfo1=' qsr      - : ', mask1=tmask )
-         CALL prt_ctl(tab3d_1=CASTDP(tmask)  , clinfo1=' tmask    - : ', mask1=tmask, kdim=1 )
-         CALL prt_ctl(tab2d_1=CASTDP(utau)   , clinfo1=' utau     - : ', mask1=umask,        &
-            &         tab2d_2=CASTDP(vtau)   , clinfo2=' vtau     - : ', mask2=vmask )
-      ENDIF
-
-      !$acc end data
       IF( ln_timing )   CALL timing_stop('oss_flx_write')
       !
    END SUBROUTINE oss_flx_write
-
-
 
    !!======================================================================
 END MODULE ossmod

@@ -329,8 +329,8 @@ CONTAINS
          !$acc update device( e_i, e_s, szv_i )
       ENDIF
       IF( ln_damage ) THEN
-         PRINT *, '               ==> + brittle rheology: dmdt, dmdf, V_ts, SIGMAf, SI1t, SI2t, SI1f, SI2f'
-         !$acc update device( dmdt, dmdf, V_ts, SIGMAf, SI1t, SI2t, SI1f, SI2f )
+         PRINT *, '               ==> + brittle rheology: dmdt, dmdf, V_ts, SIGMAf, SI2t, SI2f'
+         !$acc update device( dmdt, dmdf, V_ts, SIGMAf, SI2t, SI2f )
       ENDIF
       IF( ln_icethd .AND. ln_age ) THEN
          PRINT *, '               ==> + ice age: `oa_i`'

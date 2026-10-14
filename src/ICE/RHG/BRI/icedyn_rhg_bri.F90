@@ -10,7 +10,7 @@ MODULE icedyn_rhg_bri
    USE phycst,  ONLY: rsqrt_nu_rhoi, rmuMC
    USE dom_oce
    USE par_ice
-   USE in_out_manager,   ONLY: nit000, ln_timing !, lwp
+   USE in_out_manager,   ONLY: ln_timing !, lwp
    USE timing
    USE lib_mpp, ONLY : ctl_stop
 
@@ -34,7 +34,7 @@ MODULE icedyn_rhg_bri
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE MC_ud_d_s( pdt, pxpCt, pxpCf, pScHt, pScHf, p1mdt, p1mdf, psgmt, psgmf )
+   SUBROUTINE MC_ud_d_s( pdt, pxpCt, pxpCf, pScHt, pScHf, pSI2t, pSI2f, p1mdt, p1mdf, psgmt, psgmf )
       !!======================================================================
       !! --- Mohr-Coulomb test and britle update of damage and stress tensors if necessary ---
       !!======================================================================
@@ -42,16 +42,17 @@ CONTAINS
       REAL(wp),                       INTENT(in)    :: pdt            ! (small) time-step [s]
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pxpCt, pxpCf
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pScHt, pScHf
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pSI2t, pSI2f
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmt ! vert.-integrated T-centric stress tensor (mind that `s12` is @F)
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmf ! vert.-integrated F-centric stress tensor (mind that `s12` is @T)
       !!======================================================================
-      REAL(wp) :: z1md, zs11, zs22, zs12
+      REAL(wp) :: z1md, zs1, zs2, zs12
       REAL(wp) :: zrr, zinc, zCohe, zTd, zsigI, zsigII
       INTEGER  :: ji, jj
       !!======================================================================
       IF( ln_timing ) CALL timing_start('MC_ud_d_s')
-      !$acc data present( pxpCt,pxpCf,pScHt,pScHf,p1mdt,p1mdf,psgmt,psgmf,res_grd_loc_t,res_grd_loc_f )
+      !$acc data present( pxpCt,pxpCf,pScHt,pScHf,pSI2t,pSI2f,p1mdt,p1mdf,psgmt,psgmf,res_grd_loc_t,res_grd_loc_f )
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
@@ -65,7 +66,7 @@ CONTAINS
    END SUBROUTINE MC_ud_d_s
 
 
-   SUBROUTINE MC_ud_d_s_mwp( pdt, pxpCt, pxpCf, pScHt, pScHf, p1mdt, p1mdf, psgmt, psgmf )
+   SUBROUTINE MC_ud_d_s_mwp( pdt, pxpCt, pxpCf, pScHt, pScHf, pSI2t, pSI2f, p1mdt, p1mdf, psgmt, psgmf )
       !!======================================================================
       !! Version using a common mid-point MC test (@ points located midway between T and F points)
       !!======================================================================
@@ -73,11 +74,12 @@ CONTAINS
       REAL(wp),                       INTENT(in)    :: pdt            ! (small) time-step [s]
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pxpCt, pxpCf
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pScHt, pScHf
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pSI2t, pSI2f
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmt ! vert.-integrated T-centric stress tensor (mind that `s12` is @F)
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmf ! vert.-integrated F-centric stress tensor (mind that `s12` is @T)
       !!======================================================================
-      REAL(wp) :: z1md, zs11, zs22, zs12, zdx, zrr, zE, zsqrtE, zinc
+      REAL(wp) :: z1md, zs1, zs2, zs12, zinc
       REAL(wp) :: zTd_t, zI1_t, zI2_t, zSc_t
       REAL(wp) :: zTd_f, zI1_f, zI2_f, zSc_f
       REAL(wp) :: zinc_se0, zinc_ne0, zinc_nw0, zinc_sw0, zinc_sex, zinc_nex, zinc_nwx
@@ -85,7 +87,7 @@ CONTAINS
       INTEGER  :: ji, jj, jit, jjt, jif, jjf
       !!======================================================================
       IF( ln_timing ) CALL timing_start('MC_ud_d_s_mwp')
-      !$acc data present( pxpCt,pxpCf,pScHt,pScHf,p1mdt,p1mdf,psgmt,psgmf,udMCxt,udMCxf,res_grd_loc_t,res_grd_loc_f )
+      !$acc data present( pxpCt,pxpCf,pScHt,pScHf,pSI2t,pSI2f,p1mdt,p1mdf,psgmt,psgmf,udMCxt,udMCxf,res_grd_loc_t,res_grd_loc_f )
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
@@ -110,18 +112,14 @@ CONTAINS
             !! For pSE0, pNE0, pNW0, pSW0 we use the T-value remains the same
             zTd_t = TimeDamagePropag( res_grd_loc_t(ji,jj), p1mdt(ji,jj), pxpCt(ji,jj) )
             zSc_t = pScHt(ji,jj)
-            zs11  = psgmt(ji,jj,1) ; zs22 = psgmt(ji,jj,2) ; zs12 = psgmf(ji,jj,3)
-            zrr   = 0.5_wp * (zs11 - zs22)
-            zI1_t = 0.5_wp * (zs11 + zs22)
-            zI2_t = SQRT( zrr*zrr + zs12*zs12 )
+            zI1_t = psgmt(ji,jj,1)
+            zI2_t = pSI2t(ji,jj)
 
             !! For pSEx, pNEx, pNWx       we use the F-value remains the same
             zTd_f = TimeDamagePropag( res_grd_loc_f(ji,jj), p1mdf(ji,jj), pxpCf(ji,jj) )
             zSc_f = pScHf(ji,jj)
-            zs11  = psgmf(ji,jj,1) ; zs22 = psgmf(ji,jj,2) ; zs12 = psgmt(ji,jj,3)
-            zrr   = 0.5_wp * (zs11 - zs22)
-            zI1_f = 0.5_wp * (zs11 + zs22)
-            zI2_f = SQRT( zrr*zrr + zs12*zs12 )
+            zI1_f = psgmf(ji,jj,1)
+            zI2_f = pSI2f(ji,jj)
 
             !! Characteristic time, stress tensor invariants and cohesion @ pSE0:
             jif = ji ; jjf = jj-1
@@ -187,27 +185,27 @@ CONTAINS
             zinc = udMCxt(ji,jj)
             !
             z1md = p1mdt(ji,jj)
-            zs11 = psgmt(ji,jj,1) ; zs22 = psgmt(ji,jj,2) ; zs12 = psgmf(ji,jj,3)
+            zs1 = psgmt(ji,jj,1) ; zs2 = psgmt(ji,jj,2) ; zs12 = psgmf(ji,jj,3)
             !
             p1mdt(ji,jj) = MIN( MAX( z1md - z1md * zinc , r_dmd_min ) , 1._wp )
-            zs11         =           zs11 - zs11 * zinc
-            zs22         =           zs22 - zs22 * zinc
-            zs12         =           zs12 - zs12 * zinc
+            zs1          =           zs1 - zs1  * zinc
+            zs2          =           zs2 - zs2  * zinc
+            zs12         =          zs12 - zs12 * zinc
             !
-            psgmt(ji,jj,1) = zs11 ; psgmt(ji,jj,2) = zs22 ; psgmf(ji,jj,3) = zs12
+            psgmt(ji,jj,1) = zs1 ; psgmt(ji,jj,2) = zs2 ; psgmf(ji,jj,3) = zs12
 
             !! MC adjustment at F-points
             zinc = udMCxf(ji,jj)
             !
             z1md = p1mdf(ji,jj)
-            zs11 = psgmf(ji,jj,1) ; zs22 = psgmf(ji,jj,2) ; zs12 = psgmt(ji,jj,3)
+            zs1 = psgmf(ji,jj,1) ; zs2 = psgmf(ji,jj,2) ; zs12 = psgmt(ji,jj,3)
             !
             p1mdf(ji,jj) = MIN( MAX( z1md - z1md * zinc , r_dmd_min ) , 1._wp )
-            zs11         =           zs11 - zs11 * zinc
-            zs22         =           zs22 - zs22 * zinc
-            zs12         =           zs12 - zs12 * zinc
+            zs1          =           zs1 - zs1  * zinc
+            zs2          =           zs2 - zs2  * zinc
+            zs12         =          zs12 - zs12 * zinc
             !
-            psgmf(ji,jj,1) = zs11 ; psgmf(ji,jj,2) = zs22 ; psgmt(ji,jj,3) = zs12
+            psgmf(ji,jj,1) = zs1 ; psgmf(ji,jj,2) = zs2 ; psgmt(ji,jj,3) = zs12
 
          END DO
       END DO
@@ -269,10 +267,6 @@ CONTAINS
       !!-------------------------------------------------------------------
       !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
       !!-------------------------------------------------------------------
-      INTEGER  :: ierror
-      REAL(wp) :: zr
-      REAL(wp), DIMENSION(:,:), ALLOCATABLE :: zt1, zt2, zt3, zt4
-      INTEGER :: jm
       !!-------------------------------------------------------------------
       l_CN = ( rn_crndg > 0._wp )
       rCNC_eff = rn_crndg / REAL( nbrttl, wp )
@@ -285,7 +279,7 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_t ! vert.-integrated T-centric stress tensor (mind that `s12` is @F)
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: pS_f ! vert.-integrated F-centric stress tensor (mind that `s12` is @T)
       !!========================================================================================================================
-      REAL(wp) :: zms, zrc, zml, zr1, zr2, zr3, zr4, zs11x, zs22x, zs12x
+      REAL(wp) :: zms, zml, zr1, zr2, zr3, zr4, zs11x, zs22x, zs12x
       INTEGER  :: ji, jj, i2, i3, i4, j2, j3, j4
       INTEGER  :: khep ! go `khep` points into the halo
       !!========================================================================================================================
@@ -436,8 +430,8 @@ CONTAINS
       MC_incrmt = MERGE( (1._wp - zdcrit) / pTd  ,  0._wp  ,  (zdcrit>0._wp).AND.(zdcrit<1._wp) )
       ! Comprehensive version:
       !zdcrit = 9999._wp
-      !IF( pSI < -zN ) THEN
-      !   zdcrit = -zN / pSI
+      !IF( pSI < zN ) THEN
+      !   zdcrit = zN / pSI
       !ELSEIF( ABS(zMC) > epsi10 ) THEN
       !   zdcrit = pC / zMC
       !ENDIF

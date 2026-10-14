@@ -722,8 +722,8 @@ CONTAINS
             CALL prt_ctl(tab2d_1=vt_s       , clinfo1=' vt_s        :', mask1=tmask)
             !CALL prt_ctl(tab2d_1=divu_i     , clinfo1=' divu_i      :', mask1=tmask)
             !CALL prt_ctl(tab2d_1=delta_i    , clinfo1=' delta_i     :', mask1=tmask)
-            CALL prt_ctl(tab2d_1=SIGMAt(:,:,1), clinfo1=' stress11_i :', mask1=tmask)
-            CALL prt_ctl(tab2d_1=SIGMAt(:,:,2), clinfo1=' stress22_i :', mask1=tmask)
+            CALL prt_ctl(tab2d_1=SIGMAt(:,:,1), clinfo1=' stress1_i :', mask1=tmask)
+            CALL prt_ctl(tab2d_1=SIGMAt(:,:,2), clinfo1=' stress2_i :', mask1=tmask)
             CALL prt_ctl(tab2d_1=SIGMAt(:,:,3), clinfo1=' stress12_i :')   ! should be fmask
             CALL prt_ctl(tab2d_1=strength   , clinfo1=' strength    :', mask1=tmask)
             !CALL prt_ctl(tab2d_1=delta_i    , clinfo1=' delta_i     :', mask1=tmask)

@@ -256,6 +256,20 @@ CONTAINS
       ENDIF
       IF( ioptio /= 1 )   CALL ctl_stop( 'sbc_blk_init: Choose one and only one type of air humidity' )
       !
+      ! ABL: the air humidity and temperature are read as 3D fields (`sf(jp_humi)` & `sf(jp_tair)`) and are used as is by the ABL
+      ! (`sbc_abl@sbcabl.F90` => `abl_stp@ablmod.F90`, `blk_oce_1@sbcblk.F90`), without any of the conversions that `sbc_blk()` applies
+      ! in bulk mode (dew-point or relative humidity => specific humidity, absolute => potential temperature).
+      ! The ABL needs specific humidity [kg/kg] and potential temperature [K], so we refuse any other choice instead of
+      ! silently running with inputs of the wrong nature (and wrong unit):
+      IF( ln_abl ) THEN
+         IF( .NOT. ln_humi_sph ) &
+            &   CALL ctl_stop( 'sbc_blk_init: with ln_abl=T the air humidity must be SPECIFIC HUMIDITY [kg/kg] (ln_humi_sph=T),', &
+            &                  '   no conversion from dew-point or relative humidity is done in ABL mode!' )
+         IF( .NOT. ln_tair_pot ) &
+            &   CALL ctl_stop( 'sbc_blk_init: with ln_abl=T the air temperature must be POTENTIAL temperature [K] (ln_tair_pot=T),', &
+            &                  '   no conversion from absolute to potential temperature is done in ABL mode!' )
+      ENDIF
+      !
       IF( ln_dm2dc ) THEN                 !* check: diurnal cycle on Qsr
          IF( sn_qsr%freqh /= 24. )   CALL ctl_stop( 'sbc_blk_init: ln_dm2dc=T only with daily short-wave input' )
          IF( sn_qsr%ln_tint ) THEN
@@ -638,7 +652,9 @@ CONTAINS
       !! ** Outputs : - psssq    : surface humidity used to compute latent heat flux (kg/kg)
       !!              - pcd_du  : Cd x |dU| at T-points  (m/s)
       !!              - prhoa   : air density (kg/m^3)
-      !!              - pwndm   : bulk wind speed at z=zu @ T-points (or `U_zu_oce` when ABL is used!) (m/s)
+      !!              - pwndm   : absolute wind speed at z=zu @ T-points, |U10m| (m/s), same definition in bulk and ABL modes
+      !!                          (in ABL mode, temporarily holds `U_zu_oce`, the absolute wind at zu adjusted by the bulk algorithm, to compute ustar2 in `abl_stp`,
+      !!                           then it is overwritten by `abl_stp` with the absolute wind)
       !!              - psen    : sensible heat flux (W/m^2)
       !!              - plat    : latent heat flux   (W/m^2)
       !!              - pevap    : evaporation, `<0`  (mm/s == kg/m^2/s)
@@ -729,11 +745,11 @@ CONTAINS
             !zsspt(ji,jj) = theta_exner( pssst(ji,jj), pslp(ji,jj) )
 
             ! ----------------------------------------------------------------------------- !
-            !      0   Wind components and module at T-point relative to the moving ocean   !
+            !      0   Absolute wind module at T-point (NOT relative to the ocean current or ice drift)   !
             ! ----------------------------------------------------------------------------- !
 
-            ! ... components ( U10m - U_oce ) at T-point (unmasked)
-            ! ... scalar wind module at T-point (not masked)
+            ! ... scalar wind module at T-point (not masked): |U10m|, computed from the absolute wind components
+            ! ... (the ocean current is NOT subtracted here; the bulk algorithms below use this absolute wind as well)
             pwndm(ji,jj) = SQRT(  pwndi(ji,jj) * pwndi(ji,jj) + pwndj(ji,jj) * pwndj(ji,jj)  )
 
             ! ----------------------------------------------------------------------------- !
@@ -829,26 +845,27 @@ CONTAINS
       !  Turbulent fluxes over ocean  => BULK_FORMULA @ sbc_phy.F90
       ! -------------------------------------------------------------
 
-      IF( ln_abl ) THEN         !==  ABL formulation  ==!   multiplication by rho_air and turbulent fluxes computation done in ablstp
+      IF( ln_abl ) THEN  !==  ABL formulation  ==!   multiplication by rho_air and turbulent fluxes computation done in ablstp
          ! Just to avoid NaN occuring on the halo:
          !CALL fill_halo_0( 'blk_oce_1', pwndm, pcd_du, psen, pevap, prhoa, CD_oce, CH_oce, CE_oce )
          !
          !$acc parallel loop collapse(2)
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
-               zztmp = U_zu_oce(ji,jj)
-               pwndm(ji,jj)  = zztmp                   ! Store U_zu_oce in pwndm to compute ustar2 in ablmod
+               zmsk = xmskt(ji,jj)
+               zztmp = U_zu_oce(ji,jj) * zmsk
+               pwndm(ji,jj)  = zztmp                  ! Store U_zu_oce in pwndm to compute ustar2 in ablmod
                pcd_du(ji,jj) = zztmp * CD_oce(ji,jj)  ! => Cd * U10m !
                psen(ji,jj)   = zztmp * CH_oce(ji,jj)  ! => Ch * U10m !
                pevap(ji,jj)  = zztmp * CE_oce(ji,jj)  ! => Ce * U10m !
                plat(ji,jj)   = 0._wp ! `plat` not required !
-               prhoa(ji,jj)  = rho_air( ptair(ji,jj), pqair(ji,jj), pslp(ji,jj) ) ! #LOLOfixme: we use `potential temperature: ptair` when we should rather
-               !                                                                  !             use absolute temp. here, but difference is nothing in this context
+               prhoa(ji,jj)  = rho_air( ptair(ji,jj), pqair(ji,jj), pslp(ji,jj) )* zmsk ! #LOLOfixme: we use `potential temperature: ptair` when we should rather
+               !                                                                        !             use absolute temp. here, but difference is nothing in this context
             END DO
          END DO
          !$acc end parallel loop
 
-      ELSE                      !==  BLK formulation  ==!   turbulent fluxes computation
+      ELSE               !==  BLK formulation  ==!   turbulent fluxes computation
 
          !$acc parallel loop collapse(2)
          DO jj=Njs0, Nje0
@@ -872,66 +889,68 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-         !! `utau` & `vtau` at T-points:
-         !! ----------------------------
-         IF( l_uvtau ) THEN
-            !$acc parallel loop collapse(2) present(putau,pvtau)
-            DO jj=Njs0, Nje0
-               DO ji=Nis0, Nie0
-                  zztmp = ptaum(ji,jj)/MAX(pwndm(ji,jj),1.E-12_wp)*xmskt(ji,jj)
-                  putau(ji,jj) =  zztmp*pwndi(ji,jj)
-                  pvtau(ji,jj) =  zztmp*pwndj(ji,jj)
-               END DO
-            END DO
-            !$acc end parallel loop
-         ENDIF
+      ENDIF ! ln_blk / ln_abl
 
-         ! Saving open-ocean air-water fluxes:
-         ! -----------------------------------
-         IF( iom_use('taum_oce' ) ) THEN
-            !$acc update self( ptaum )
-            CALL iom_put( "taum_oce",   ptaum * REAL(1-kmsk_ice_t,wp) )   ! output wind stress module
-         ENDIF
-         IF( iom_use('rho_air' ) ) THEN
-            !$acc update self( prhoa )
-            CALL iom_put( "rho_air"  ,  prhoa )     ! output air density [kg/m^3]
-         ENDIF
-         IF( iom_use('evap_oce' ) ) THEN
-            !$acc update self( pevap )
-            CALL iom_put( "evap_oce" ,  pevap * REAL(1-kmsk_ice_t,wp) )     ! evaporation
-         ENDIF
-         IF( iom_use('qsb_oce' ) ) THEN
-            !$acc update self( psen )
-            CALL iom_put( "qsb_oce"  ,  psen * REAL(1-kmsk_ice_t,wp) )     ! output downward sensible heat over the ocean
-         ENDIF
-         IF( iom_use('qla_oce' ) ) THEN
-            !$acc update self( plat )
-            CALL iom_put( "qla_oce"  ,  plat * REAL(1-kmsk_ice_t,wp) )     ! output downward latent   heat over the ocean
-         ENDIF
-         IF( iom_use('utau_oce' ) .AND. l_uvtau ) THEN
+      !! `utau` & `vtau` at T-points:
+      !! ----------------------------
+      IF( l_uvtau ) THEN
+         !$acc parallel loop collapse(2) present(putau,pvtau)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               zztmp = ptaum(ji,jj)/MAX(pwndm(ji,jj),1.E-12_wp)*xmskt(ji,jj)
+               putau(ji,jj) =  zztmp*pwndi(ji,jj)
+               pvtau(ji,jj) =  zztmp*pwndj(ji,jj)
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
+
+      ! Saving open-ocean air-water fluxes:
+      ! -----------------------------------
+      IF( l_taum .AND. iom_use('taum_oce' ) ) THEN
+         !$acc update self( ptaum )
+         CALL iom_put( "taum_oce",   ptaum * REAL(1-kmsk_ice_t,wp) )   ! output wind stress module
+      ENDIF
+      IF( iom_use('rho_air' ) ) THEN
+         !$acc update self( prhoa )
+         CALL iom_put( "rho_air"  ,  prhoa )     ! output air density [kg/m^3]
+      ENDIF
+      IF( iom_use('evap_oce' ) ) THEN
+         !$acc update self( pevap )
+         CALL iom_put( "evap_oce" ,  pevap * REAL(1-kmsk_ice_t,wp) )     ! evaporation
+      ENDIF
+      IF( iom_use('qsb_oce' ) ) THEN
+         !$acc update self( psen )
+         CALL iom_put( "qsb_oce"  ,  psen * REAL(1-kmsk_ice_t,wp) )     ! output downward sensible heat over the ocean
+      ENDIF
+      IF( iom_use('qla_oce' ) ) THEN
+         !$acc update self( plat )
+         CALL iom_put( "qla_oce"  ,  plat * REAL(1-kmsk_ice_t,wp) )     ! output downward latent   heat over the ocean
+      ENDIF
+      IF( l_uvtau ) THEN
+         IF( iom_use('utau_oce' ) ) THEN
             !$acc update self( putau )
             CALL iom_put( "utau_oce" ,  putau * REAL(1-kmsk_ice_t,wp) )
          ENDIF
-         IF( iom_use('vtau_oce' ) .AND. l_uvtau  ) THEN
+         IF( iom_use('vtau_oce' )  ) THEN
             !$acc update self( pvtau )
             CALL iom_put( "vtau_oce" ,  pvtau * REAL(1-kmsk_ice_t,wp) )
          ENDIF
+      ENDIF
 
-         IF(sn_cfctl%l_prtctl) THEN
-            CALL prt_ctl( tab2d_1=psssq, clinfo1=' blk_oce_1: sssq    : ', mask1=tmask )
-            CALL prt_ctl( tab2d_1=pwndm, clinfo1=' blk_oce_1: pwndm   : ', mask1=tmask )
-            CALL prt_ctl( tab2d_1=putau, clinfo1=' blk_oce_1: putau   : ', mask1=umask,   &
-               &          tab2d_2=pvtau, clinfo2='            pvtau   : ', mask2=vmask )
-            CALL prt_ctl( tab2d_1=CD_oce, clinfo1=' blk_oce_1: Cd    : ', mask1=tmask )
-         ENDIF
-
-      ENDIF ! ln_blk / ln_abl
+      IF(sn_cfctl%l_prtctl) THEN
+         CALL prt_ctl( tab2d_1=psssq, clinfo1=' blk_oce_1: sssq    : ', mask1=tmask )
+         CALL prt_ctl( tab2d_1=pwndm, clinfo1=' blk_oce_1: pwndm   : ', mask1=tmask )
+         CALL prt_ctl( tab2d_1=putau, clinfo1=' blk_oce_1: putau   : ', mask1=umask,   &
+            &          tab2d_2=pvtau, clinfo2='            pvtau   : ', mask2=vmask )
+         CALL prt_ctl( tab2d_1=CD_oce, clinfo1=' blk_oce_1: Cd    : ', mask1=tmask )
+      ENDIF
 
       !$acc end data
       IF( ln_timing )   CALL timing_stop('blk_oce_1')
       !
    END SUBROUTINE blk_oce_1
-   ! CD_oce,CH_oce,CE_oce
+
 
    SUBROUTINE blk_oce_2( ptair, pdqlw, pprec, psnow, pssst, psen, plat, pevap )   ! <<= in
       !!---------------------------------------------------------------------
@@ -1130,11 +1149,8 @@ CONTAINS
 
       CASE( np_ice_stab )  ! Take into account stability via Monin-Obukhov stuff...
          !
-#if defined _OPENACC || defined _OPENMP
-         CALL ctl_stop( 'blk_ice_1: ADAPT `turb_ice_stab` for GPU before using it!')
-#endif
-         CALL turb_ice_stab( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm,       &
-            &                      rn_Cd_i, rn_Ch_i, rn_Ce_i,                           &
+         CALL turb_ice_stab( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm,    &
+            &                      rn_Cd_i, rn_Ch_i, rn_Ce_i,                    &
             &                      CD_ice, CH_ice, CE_ice, t_air_zu_i, q_air_zu_i )
 
 
@@ -1269,7 +1285,10 @@ CONTAINS
       !! `emp_ice,emp_oce,evap_ice,qemp_ice,qemp_oce,
       !!  qla_ice,qsb_ice,qns_ice,qprec_ice,qsr_ice,qlw_ice,qtr_ice_top`
       !!
-      !!  *** NEVER CALLED BY THE ABL ***
+      !!  *** CALLED IN BOTH BULK AND ABL MODES (from `ice_sbc_flx@icesbc.F90`) ***
+      !!      `ptair` & `pqair` must be the air potential temperature and specific humidity at the first air level:
+      !!        - bulk: the prescribed 2D fields
+      !!        - ABL : the ABL state at its first level (`t_air_zu` & `q_air_zu`)
       !!
       !!---------------------------------------------------------------------
       REAL(wp), DIMENSION(jpi,jpj,jpl), INTENT(in) ::   ptsu   ! sea ice surface temperature [K]

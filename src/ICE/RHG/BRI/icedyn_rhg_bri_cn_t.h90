@@ -4,25 +4,29 @@
                !!
                !!  A.1/ F2T ! `F-located components of stress tensor * h` interpolated at T-point:
                i2=ji-1; j2=jj; i3=ji-1; j3=jj-1; i4=ji; j4=jj-1
-               zms = xmskf(ji,jj) + xmskf(i2,j2) + xmskf(i3,j3) + xmskf(i4,j4)
-               zrc = r1_e1e2t(ji,jj)
-               zml = zrc * MIN( zms , 1._wp ) / MAX( zms , 1.E-12_wp )
+               ! The weights `zr1..zr4` are the areas of the 4 surrounding F cells (0 over land, as masked above).
+               ! The average is normalized by the sum of these weights (and not by `4*e1e2t` or by the number of wet
+               ! points), so that the result is a true area-weighted mean: a constant field is left unchanged on ANY
+               ! grid, not only on a uniform one. The target T-point mask `xmskt` forces the result to 0 on land.
                zr1 = e1e2f(ji,jj)
                zr2 = e1e2f(i2,j2)
                zr3 = e1e2f(i3,j3)
                zr4 = e1e2f(i4,j4)
+               zms = zr1 + zr2 + zr3 + zr4
+               zml = xmskt(ji,jj) / MAX( zms , 1.E-12_wp ) ! if the 4 F cells are dry the weighted sum below is 0 anyway
                zs11x = ( pS_f(ji,jj,1)*zr1 + pS_f(i2,j2,1)*zr2 + pS_f(i3,j3,1)*zr3 + pS_f(i4,j4,1)*zr4 ) * zml ! @T
                zs22x = ( pS_f(ji,jj,2)*zr1 + pS_f(i2,j2,2)*zr2 + pS_f(i3,j3,2)*zr3 + pS_f(i4,j4,2)*zr4 ) * zml ! @T
                !!
                !! A.2/ T2F ! `T-located components of stress tensor * h` interpolated at F-point:
                i2=ji+1; j2=jj; i3=ji; j3=jj+1; i4=ji+1; j4=jj+1
-               zms = xmskt(ji,jj) + xmskt(i2,j2) + xmskt(i3,j3) + xmskt(i4,j4)
-               zrc = r1_e1e2f(ji,jj)
-               zml = zrc * MIN( zms , 1._wp ) / MAX( zms , 1.E-12_wp )
+               ! Same as above but with the areas of the 4 surrounding T cells as weights; the target F-point mask
+               ! `xmskf` forces the result to 0 where the F-point is on land.
                zr1 = e1e2t(ji,jj)
                zr2 = e1e2t(i2,j2)
                zr3 = e1e2t(i3,j3)
                zr4 = e1e2t(i4,j4)
+               zms = zr1 + zr2 + zr3 + zr4
+               zml = xmskf(ji,jj) / MAX( zms , 1.E-12_wp )
                zs12x = ( pS_f(ji,jj,3)*zr1 + pS_f(i2,j2,3)*zr2 + pS_f(i3,j3,3)*zr3 + pS_f(i4,j4,3)*zr4 ) * zml ! @F
                !!
                !! B) Cross-nudging (Only T-centric stress comp. are corrected w.r.t F-centric stress comp.)

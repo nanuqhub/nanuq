@@ -56,7 +56,9 @@ CONTAINS
       !!-------------------------------------------------------------------
       INTEGER                     , INTENT(in   ) ::   kt                   ! ocean time step
       INTEGER                     , INTENT(in   ) ::   ksbc                 ! type of sbc flux
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(  out) ::   ptaux_ai, ptauy_ai   ! air-ice stress at T-point  [N/m2]
+      ! `INTENT(inout)`: in ABL mode, `ptaux_ai` & `ptauy_ai` are already filled by `sbc_abl()` (before `ice_stp()`) and are only
+      ! passed through `ice_sbc_tau()`. Declaring them `INTENT(out)` would make their values undefined on entry.
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   ptaux_ai, ptauy_ai   ! air-ice stress at T-point  [N/m2]
       !!-------------------------------------------------------------------
       !$acc data present( ptaux_ai, ptauy_ai, CH_ice, CE_ice )
       !
@@ -77,10 +79,14 @@ CONTAINS
       !!
       !! ** Action  : It provides the following fields:
       !!              ptaux_ai, ptauy_ai : surface ice stress (U- & V-points) [N/m2]
+      !!                 - bulk (`jp_blk`): computed here by `blk_ice_1()`
+      !!                 - ABL  (`jp_abl`): already computed by `abl_stp()` (via `sbc_abl()`) and only passed through here
       !!-------------------------------------------------------------------
       INTEGER                     , INTENT(in ) ::   kt                   ! ocean time step
       INTEGER                     , INTENT(in ) ::   ksbc                 ! type of sbc flux
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   ptaux_ai, ptauy_ai   ! air-ice stress at T-points  [N/m2]
+      ! `INTENT(inout)` for the stresses: in ABL mode they are filled by `sbc_abl()` before this routine is called, so their
+      ! values must be kept on entry (see the `jp_abl` case below). `pCHi` & `pCEi` are always computed here.
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   ptaux_ai, ptauy_ai   ! air-ice stress at T-points  [N/m2]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pCHi                 ! sensible heat transfer coefficient [-]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) ::   pCEi                 ! evap/sublim. transfer coefficient  [-]
       !!
@@ -109,7 +115,8 @@ CONTAINS
       CASE( jp_abl ) !
          !! This call of `blk_ice_1` is solely done to obtain `CHi` & `CEi` (even if right now they are constant and that's therefore useless)!
          !!  => `blk_ice_1` is also called into `sbc_abl()@sbcabl.F90` to obtaine Qsens, Evap & CDi*U !!
-         !!  `ptaux_ai` & `ptauy_ai` are computed in ablmod
+         !!  `ptaux_ai` & `ptauy_ai` are computed in ablmod (`abl_stp()`, via `sbc_abl()`) BEFORE this routine is called:
+         !!  they must NOT be overwritten here (no `putaui`/`pvtaui` arguments below), only their halos are updated at the end.
          CALL blk_ice_1(  u_abl(:,:,2,nt_n)      ,  v_abl(:,:,2,nt_n) ,      &  !   <<= in
             &            tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa), &  !   <<= in
             &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su    ,   &  !   <<= in
@@ -205,9 +212,23 @@ CONTAINS
       CALL TRDBG( 'ice_sbc_flx@icesbc.F90: `blk_ice_2:in`',  'pCHi, pCEi', pCHi, pCEi )
 #endif
 
-      CALL blk_ice_2( t_su, h_s, h_i, alb_ice, sf(jp_tair)%fnow(:,:,1), sf(jp_humi)%fnow(:,:,1),       &
-         &            sf(jp_mslp)%fnow(:,:,1), sf(jp_dqlw)%fnow(:,:,1), sf(jp_prcp)%fnow(:,:,1), sf(jp_snow)%fnow(:,:,1), &
-         &            pCHi, pCEi )
+      ! Heat and mass fluxes at the air-ice interface. The air potential temperature and specific humidity given to
+      ! `blk_ice_2()` depend on the atmosphere option:
+      !  * bulk (`jp_blk`): the 2D prescribed fields read in files (`sf(...)%fnow(:,:,1)`)
+      !  * ABL  (`jp_abl`): `sf(jp_tair)` & `sf(jp_humi)` are 3D forcing fields whose level 1 is NOT the first level of the ABL
+      !                     (the ABL is integrated from level 2) and which are not the state evolved by the ABL anyway.
+      !                     We must use the ABL state at its first level, which `ice_sbc_tau()` has just copied into
+      !                     `t_air_zu` & `q_air_zu` (same air as the one used by the ABL for its own air-ice coupling)
+      SELECT CASE( ksbc )
+      CASE( jp_abl )
+         CALL blk_ice_2( t_su, h_s, h_i, alb_ice, t_air_zu, q_air_zu,                                                   &
+            &            sf(jp_mslp)%fnow(:,:,1), sf(jp_dqlw)%fnow(:,:,1), sf(jp_prcp)%fnow(:,:,1), sf(jp_snow)%fnow(:,:,1), &
+            &            pCHi, pCEi )
+      CASE DEFAULT
+         CALL blk_ice_2( t_su, h_s, h_i, alb_ice, sf(jp_tair)%fnow(:,:,1), sf(jp_humi)%fnow(:,:,1),                    &
+            &            sf(jp_mslp)%fnow(:,:,1), sf(jp_dqlw)%fnow(:,:,1), sf(jp_prcp)%fnow(:,:,1), sf(jp_snow)%fnow(:,:,1), &
+            &            pCHi, pCEi )
+      END SELECT
 
       !                        !    compute conduction flux and surface temperature (as in Jules surface module)
       IF( ln_cndflx .AND. .NOT.ln_cndemulate ) THEN

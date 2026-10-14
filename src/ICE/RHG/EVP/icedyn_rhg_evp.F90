@@ -55,7 +55,6 @@ MODULE icedyn_rhg_evp
    !
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zds                             ! shear
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zten_i, zshear                  ! tension, shear
-   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   xS1, xS2, xS12                  ! stress tensor components
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zsshdyn                         ! array used for the calculation of ice surface slope:
    !                                                                           !    ocean surface (ssh_m) if ice is not embedded
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zfU  , zfV                      ! internal stresses
@@ -132,6 +131,7 @@ CONTAINS
       INTEGER ::   ji, jj       ! dummy loop indices
       INTEGER ::   jter         ! local integers
       !
+      REAL(wp) ::   zS1, zS2, zS12
       REAL(wp) ::   zswitch, zmask, z1_A
       REAL(wp) ::   zrhoco                                              ! rho0 * rn_Cd_io
       REAL(wp) ::   ztau_ai                                             ! ice-atm. stress at U-V points
@@ -332,9 +332,9 @@ CONTAINS
          CALL lbc_lnk(     'icedyn_rhg_evp', zdelta, 'T', 1.0_wp, zp_delt, 'T', 1.0_wp )
 #endif
 
-         !$acc parallel loop collapse(2) present( zp_delt, zdt_m, xS1, xS2 )
+         !$acc parallel loop collapse(2) present( zp_delt, zdt_m, SIGMAt )
          DO jj = Njs0, Nje0+1
-            DO ji = Nis0, Nie0+1   ! loop ends at jpi,jpj so that no lbc_lnk are needed for xS1 and xS2
+            DO ji = Nis0, Nie0+1   ! loop ends at jpi,jpj so that no lbc_lnk are needed for S1 and S2
 
                ! divergence at T points (duplication to avoid communications)
                ! (brackets added to fix the order of floating point operations for halo 1 - halo 2 compatibility)
@@ -361,10 +361,18 @@ CONTAINS
                ! zalph2 = zalph1
 
                ! stress at T points (zkt/=0 if landfast)
-               xS1(ji,jj) = ( xS1(ji,jj)*zalph1 + zp_delt(ji,jj) * ( zdiv*(1._wp + zkt) - zdelta(ji,jj)*(1._wp - zkt) ) ) &
-                  &         * z1_alph1 * zmsk(ji,jj) ! zmsk is for reducing cpu
-               xS2(ji,jj) = ( xS2(ji,jj)*zalph2 + zp_delt(ji,jj) * ( zdt * z1_ecc2 * (1._wp + zkt) ) ) &
-                  &         * z1_alph2 * zmsk(ji,jj) ! zmsk is for reducing cpu
+               zS1  = SIGMAt(ji,jj,1)
+               zS2  = SIGMAt(ji,jj,2)
+               zS12 = SIGMAt(ji,jj,3)
+
+               ! `SIGMAt(:,:,1)` and `SIGMAt(:,:,2)` hold `sigma_1 = (s11+s22)/2` and `sigma_2 = (s11-s22)/2`.
+               ! The classical EVP source terms `zp_delt*(div-delta)` and `zp_delt*dt/e^2` are written for `s11+s22` and `s11-s22`,
+               ! hence the factor 0.5 in front of `zp_delt` so the stored values are the true `sigma_1` and `sigma_2`.
+               ! `zmsk` is for reducing cpu (no ice => 0) and `xmskt` is the land mask (same as what was applied at the end of the step before).
+               SIGMAt(ji,jj,1) = ( zS1*zalph1 + 0.5_wp * zp_delt(ji,jj) * ( zdiv*(1._wp + zkt) - zdelta(ji,jj)*(1._wp - zkt) ) ) &
+                  &         * z1_alph1 * zmsk(ji,jj) * xmskt(ji,jj)
+               SIGMAt(ji,jj,2) = ( zS2*zalph2 + 0.5_wp * zp_delt(ji,jj) * ( zdt * z1_ecc2 * (1._wp + zkt) ) ) &
+                  &         * z1_alph2 * zmsk(ji,jj) * xmskt(ji,jj)
 
             END DO
          END DO
@@ -379,7 +387,7 @@ CONTAINS
          END DO
          !$acc end parallel loop
 
-         !$acc parallel loop collapse(2) present( xS12 )
+         !$acc parallel loop collapse(2) present( SIGMAt )
          DO jj = Njs0-1, Nje0
             DO ji = Nis0-1, Nie0
 
@@ -395,8 +403,10 @@ CONTAINS
                zp_delf = 0.25_wp * ( (zp_delt(ji,jj) + zp_delt(ji+1,jj)) + (zp_delt(ji,jj+1) + zp_delt(ji+1,jj+1)) )
 
                ! stress at F points (zkt/=0 if landfast)
-               xS12(ji,jj)= ( xS12(ji,jj) * zalph2 + zp_delf * ( zds(ji,jj) * z1_ecc2 * (1._wp + zkt) ) * 0.5_wp ) &
-                  &         * z1_alph2
+               ! `sigma_12` is the true shear stress (the 0.5 is already there); it is masked with the F-point land mask `xmskf`,
+               ! as it was done at the end of the step before the move to `sigma_1` & `sigma_2`:
+               SIGMAt(ji,jj,3)= ( SIGMAt(ji,jj,3) * zalph2 + zp_delf * ( zds(ji,jj) * z1_ecc2 * (1._wp + zkt) ) * 0.5_wp ) &
+                  &         * z1_alph2 * xmskf(ji,jj)
 
             END DO
          END DO
@@ -407,21 +417,24 @@ CONTAINS
          !$acc parallel loop collapse(2) present( zfU, zfV )
          DO jj = Njs0, Nje0
             DO ji = Nis0, Nie0
-               !                   !--- U points
-               zfU(ji,jj) = 0.5_wp * ( (( xS1(ji+1,jj) - xS1(ji,jj) ) * e2u(ji,jj)                                             &
-                  &                  + ( xS2(ji+1,jj) * e2t(ji+1,jj) * e2t(ji+1,jj) - xS2(ji,jj) * e2t2(ji,jj)    &
-                  &                    ) * r1_e2u(ji,jj))                                                                      &
-                  &                  + ( xS12(ji,jj) * e1f2(ji,jj) - xS12(ji,jj-1) * e1f(ji,jj-1) * e1f(ji,jj-1)  &
-                  &                    ) * 2._wp * r1_e1u(ji,jj)                                                              &
-                  &                  ) * r1_e1e2u(ji,jj)
                !
-               !                !--- V points
-               zfV(ji,jj) = 0.5_wp * ( (( xS1(ji,jj+1) - xS1(ji,jj) ) * e1v(ji,jj)                                             &
-                  &                  - ( xS2(ji,jj+1) * e1t(ji,jj+1) * e1t(ji,jj+1) - xS2(ji,jj) * e1t2(ji,jj)    &
-                  &                    ) * r1_e1v(ji,jj))                                                                      &
-                  &                  + ( xS12(ji,jj) * e2f2(ji,jj) - xS12(ji-1,jj) * e2f(ji-1,jj) * e2f(ji-1,jj)  &
-                  &                    ) * 2._wp * r1_e2v(ji,jj)                                                              &
-                  &                  ) * r1_e1e2v(ji,jj)
+               zS1  = SIGMAt(ji,jj,1)
+               zS2  = SIGMAt(ji,jj,2)
+               zS12 = SIGMAt(ji,jj,3)
+               ! Divergence of the stress tensor using `P = sigma_1` and `D = sigma_2` directly: `d(s11)/dx = d(P)/dx + d(D)/dx`
+               ! with the metric terms `e2u*d(P)` + `d(e2t^2*D)/e2u` (same discretization as in BBM). The old form was written with
+               ! `S1 = 2*P` and `S2 = 2*D`, hence its outer 0.5 which cancelled with the `2._wp` of the `sigma_12` term: both are gone.
+               !                   !--- U points
+               zfU(ji,jj) = ( ( SIGMAt(ji+1,jj,1)                 - zS1                               ) *    e2u(ji,jj) &
+                  &         + ( SIGMAt(ji+1,jj,2) * e2t2(ji+1,jj) - zS2               * e2t2(ji,jj)   ) * r1_e2u(ji,jj) &
+                  &         + ( zS12              * e1f2(ji,jj)   - SIGMAt(ji,jj-1,3) * e1f2(ji,jj-1) ) * r1_e1u(ji,jj) &
+                  &         ) * r1_e1e2u(ji,jj)
+               !
+               !                !--- V points (`s22 = P - D`, hence the minus sign in front of the `D` term)
+               zfV(ji,jj) = ( ( SIGMAt(ji,jj+1,1)                 - zS1                               ) *    e1v(ji,jj) &
+                  &         - ( SIGMAt(ji,jj+1,2) * e1t2(ji,jj+1) - zS2               * e1t2(ji,jj)   ) * r1_e1v(ji,jj) &
+                  &         + ( zS12              * e2f2(ji,jj)   - SIGMAt(ji-1,jj,3) * e2f2(ji-1,jj) ) * r1_e2v(ji,jj) &
+                  &         ) * r1_e1e2v(ji,jj)
                !
             END DO
          END DO
@@ -540,23 +553,11 @@ CONTAINS
       !$acc end parallel loop
 
 #if defined _OPENACC || defined _OPENMP
-      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i, zten_i, zshear, zdelta, xS1, xS2, xS12 )
+      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i, zten_i, zshear, zdelta, SIGMAt(:,:,1), SIGMAt(:,:,2), SIGMAt(:,:,3) )
 #else
       CALL lbc_lnk(     'icedyn_rhg_evp', pshear_i,'T',1._wp, pdivu_i,'T',1._wp, pdelta_i,'T',1._wp, zten_i,'T',1._wp, &
-         &                                zshear  ,'T',1._wp, zdelta ,'T',1._wp, xS1     ,'T',1._wp, xS2   ,'T',1._wp, xS12,'F',1._wp )
+         &                                zshear  ,'T',1._wp, zdelta ,'T',1._wp, SIGMAt(:,:,1),'T',1._wp, SIGMAt(:,:,2),'T',1._wp, SIGMAt(:,:,3),'F',1._wp )
 #endif
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            !! Vertically-integrated components of the T-centric stress tensor (in Pa.m):
-            SIGMAt(ji,jj,1) = 0.5_wp*( xS1(ji,jj) + xS2(ji,jj) ) * xmskt(ji,jj)
-            SIGMAt(ji,jj,2) = 0.5_wp*( xS1(ji,jj) - xS2(ji,jj) ) * xmskt(ji,jj)
-            SIGMAt(ji,jj,3) =                 xS12(ji,jj)        * xmskf(ji,jj)
-         END DO
-      END DO
-      !$acc end parallel loop
-
 
       ! 5) diagnostics
       !------------------------------------------------------------------------------!
@@ -665,14 +666,14 @@ CONTAINS
       ENDIF
 
       ALLOCATE( zdelta(jpi,jpj), zp_delt(jpi,jpj), zbeta(jpi,jpj), zdt_m(jpi,jpj), zmU_dt(jpi,jpj), zmV_dt(jpi,jpj), &
-         &      zds(jpi,jpj), zten_i(jpi,jpj), zshear(jpi,jpj), xS1(jpi,jpj), xS2(jpi,jpj), xS12(jpi,jpj), &
+         &      zds(jpi,jpj), zten_i(jpi,jpj), zshear(jpi,jpj), &
          &      zsshdyn(jpi,jpj), zfU(jpi,jpj), zfV(jpi,jpj), zspgU(jpi,jpj), zspgV(jpi,jpj),   &
          &      zmsk(jpi,jpj), kmsk01x(jpi,jpj), kmsk01y(jpi,jpj), kmsk00x(jpi,jpj), kmsk00y(jpi,jpj), &
          &      ztaux_base(jpi,jpj), ztauy_base(jpi,jpj), ztaux_bi(jpi,jpj), ztauy_bi(jpi,jpj), &
          &      STAT = ierr(1) )
       !
       zdelta(:,:) = 0._wp ;  zp_delt(:,:) = 0._wp ;  zbeta(:,:) = 0._wp ;  zdt_m(:,:) = 0._wp ;  zmU_dt(:,:) = 0._wp ;  zmV_dt(:,:) = 0._wp
-      zds(:,:) = 0._wp ;  zten_i(:,:) = 0._wp ;  zshear(:,:) = 0._wp ;  xS1(:,:) = 0._wp ;  xS2(:,:) = 0._wp ;  xS12(:,:) = 0._wp
+      zds(:,:) = 0._wp ;  zten_i(:,:) = 0._wp ;  zshear(:,:) = 0._wp
       zsshdyn(:,:) = 0._wp ;  zfU(:,:) = 0._wp ;  zfV(:,:) = 0._wp ;  zspgU(:,:) = 0._wp ;  zspgV(:,:) = 0._wp
       zmsk(:,:) = 0._wp
       ztaux_base(:,:) = 0._wp ;  ztauy_base(:,:) = 0._wp ;  ztaux_bi(:,:) = 0._wp ;  ztauy_bi(:,:) = 0._wp
@@ -681,8 +682,8 @@ CONTAINS
       PRINT *, ' * info GPU: ice_dyn_rhg_evp_init() => adding aEVP work arrays to memory!'
       !$acc enter data copyin( zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zds )
       PRINT *, '    ==> zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zds'
-      !$acc enter data copyin( zten_i, zshear, xS1, xS2, xS12, zsshdyn, zfU, zfV, zspgU, zspgV )
-      PRINT *, '    ==> zten_i, zshear, xS1, xS2, xS12, zsshdyn, zfU, zfV, zspgU, zspgV'
+      !$acc enter data copyin( zten_i, zshear, zsshdyn, zfU, zfV, zspgU, zspgV )
+      PRINT *, '    ==> zten_i, zshear, zsshdyn, zfU, zfV, zspgU, zspgV'
       !$acc enter data copyin( zmsk, kmsk01x, kmsk01y, kmsk00x, kmsk00y, ztaux_base, ztauy_base, ztaux_bi, ztauy_bi )
       PRINT *, '    ==> zmsk, kmsk01x, kmsk01y, kmsk00x, kmsk00y, ztaux_base, ztauy_base, ztaux_bi, ztauy_bi'
 #endif
@@ -698,16 +699,6 @@ CONTAINS
       k_alloc = MAXVAL( ierr(:) )
       CALL mpp_sum ( 'ice_dyn_rhg_evp_init', k_alloc )
       IF( k_alloc > 0 ) CALL ctl_stop('STOP', 'ice_dyn_rhg_evp_init: unable to allocate work arrays for EVP')
-
-      !! If it is a restarted run, then we must initialize xS1, xS2 & xS12 with content of restart-filled `SIGMAt(:,:,:)`:
-      IF( ln_rstart ) THEN
-#if defined key_verbose
-         IF(lwp) PRINT *, 'LOLO/restart: `ice_dyn_rhg_evp_init` updating xS1, xS2 & xS12 with SIGMAt !!!'
-#endif
-         xS1(:,:)  = SIGMAt(:,:,1) + SIGMAt(:,:,2)  ! @T
-         xS2(:,:)  = SIGMAt(:,:,1) - SIGMAt(:,:,2)  ! @T
-         xS12(:,:) =        SIGMAt(:,:,3)           ! @F
-      ENDIF
 
    END SUBROUTINE ice_dyn_rhg_evp_init
 

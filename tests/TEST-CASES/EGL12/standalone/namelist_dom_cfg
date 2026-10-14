@@ -139,15 +139,15 @@
    !___________!____________!___________!__________!_____________!________!___________!_____________________________________________________________!__________!_______________!
    !           !  file name ! freq. (h) ! variable ! time interp.!  clim  ! 'yearly'/ !       weights filename                                      ! rotation ! land/sea mask !
    !           !            !           !   name   !   (logical) !  (T/F) ! 'monthly' !                                                             ! pairing  !    filename   !
-   sn_wndi = 'ERA5_u10',      1.,  'u10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Uwnd'   , ''
-   sn_wndj = 'ERA5_v10',      1.,  'v10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Vwnd'   , ''
-   sn_qsr  = 'ERA5_msdwswrf', 1., 'msdwswrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_qlw  = 'ERA5_msdwlwrf', 1., 'msdwlwrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_tair = 'ERA5_t2m',      1.,  't2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_humi = 'ERA5_d2m',      1.,  'd2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_prec = 'ERA5_mtpr',     1.,  'mtpr'   ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_snow = 'ERA5_msr',      1.,  'msr'    ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_slp  = 'ERA5_msl',      1.,  'msl'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_wndi = 'ERA5_Arctic_u10',      1.,  'u10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Uwnd'   , ''
+   sn_wndj = 'ERA5_Arctic_v10',      1.,  'v10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Vwnd'   , ''
+   sn_qsr  = 'ERA5_Arctic_msdwswrf', 1., 'msdwswrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_qlw  = 'ERA5_Arctic_msdwlwrf', 1., 'msdwlwrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_tair = 'ERA5_Arctic_t2m',      1.,  't2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_humi = 'ERA5_Arctic_d2m',      1.,  'd2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_prec = 'ERA5_Arctic_mtpr',     1.,  'mtpr'   ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_snow = 'ERA5_Arctic_msr',      1.,  'msr'    ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_slp  = 'ERA5_Arctic_msl',      1.,  'msl'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
 /
 !!
 !!======================================================================
@@ -201,8 +201,8 @@
    ln_nnogather =  .false.
 !!   jpni        =   2       !  number of processors following i (set automatically if < 1), see also ln_listonly = T
 !!   jpnj        =   2       !  number of processors following j (set automatically if < 1), see also ln_listonly = T
-   nn_hls      =   3            !  halo width (applies to both rows and columns)
-   nn_comm     =   1            !  comm choice
+   nn_hls      =   3         !  halo width (applies to both rows and columns)
+   nn_comm     =   1         !  comm choice
 /
 !-----------------------------------------------------------------------
 &namctl        !   Control prints                                       (default: OFF)

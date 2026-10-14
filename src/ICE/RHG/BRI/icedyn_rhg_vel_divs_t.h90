@@ -1,23 +1,32 @@
                ! *** T-centric cell:
-               !                              !--- ds11/dx + ds12/dy
-               zds11_dx = ( pSt(ji+1,jj,1)*e2t2(ji+1,jj) - pSt(ji,jj,1)  *e2t2(ji,jj)   ) * r1_e2u(ji,jj)  ! @ U, needs to be * by `r1_e1e2u` !
-               zds12_dy = ( pSt(ji,jj,3)  *e1f2(ji,jj)   - pSt(ji,jj-1,3)*e1f2(ji,jj-1) ) * r1_e1u(ji,jj)  !     "     "     "     "     "
-               !
-               zdivSx_t = ( zds11_dx + zds12_dy ) * zmltU
+               zS1  = pSt(ji,jj,1)
+               zS2  = pSt(ji,jj,2)
+               zS12 = pSt(ji,jj,3)  ! @F
 
-               !                              !--- ds22/dy + ds12/dx
-               zds22_dy = ( pSt(ji,jj+1,2)*e1t2(ji,jj+1) - pSt(ji,jj,2)  *e1t2(ji,jj)   ) * r1_e1v(ji,jj)  ! @ V, needs to be * by `r1_e1e2v` !
-               zds12_dx = ( pSt(ji,jj,3)  *e2f2(ji,jj)   - pSt(ji-1,jj,3)*e2f2(ji-1,jj) ) * r1_e2v(ji,jj)  !     "     "     "     "     "
-               !
-               zdivSy_t = ( zds22_dy + zds12_dx ) * zmltV
+               !                              !--- ds11/dx + ds12/dy  (@ U)
+               ! The normal stress `s11` is split into its isotropic part `S1 = (s11+s22)/2` and its deviatoric part `S2 = (s11-s22)/2`,
+               ! because in curvilinear coordinates they do not carry the same metric terms: `e2u*d(S1)` + `d(e2t^2*S2)/e2u`.
+               ! Using `d(e2t^2*s11)/e2u` (previous form) adds a false force `~2*S1*d(e2)/e2u` wherever `e2` varies along `i`.
+               ! With the current storage convention, `pSt(:,:,1)` is already `S1` (=sigma_1) and `pSt(:,:,2)` is already `S2` (=sigma_2),
+               ! so they are used as is: no conversion from `s11` & `s22` is needed here.
+
+               zdivSx_t = ( ( pSt(ji+1,jj,1)                 - zS1                            ) *    e2u(ji,jj) &
+                  &       + ( pSt(ji+1,jj,2) * e2t2(ji+1,jj) - zS2            * e2t2(ji,jj)   ) * r1_e2u(ji,jj) &
+                  &       + ( zS12           * e1f2(ji,jj)   - pSt(ji,jj-1,3) * e1f2(ji,jj-1) ) * r1_e1u(ji,jj) &
+                  &       ) * zmltU
+
+               !                              !--- ds22/dy + ds12/dx  (@ V)
+               ! Same split for `s22 = S1 - S2` (hence the minus sign in front of the `S2` term): `e1v*d(S1)` - `d(e1t^2*S2)/e1v`.
+               ! `S1` & `S2` at the `j+1` T-point are read directly from the stored `sigma_1` & `sigma_2`.
+
+               zdivSy_t = ( ( pSt(ji,jj+1,1)                 - zS1                            ) *    e1v(ji,jj) &
+                   &      - ( pSt(ji,jj+1,2) * e1t2(ji,jj+1) - zS2            * e1t2(ji,jj)   ) * r1_e1v(ji,jj) &
+                   &      + ( zS12           * e2f2(ji,jj)   - pSt(ji-1,jj,3) * e2f2(ji-1,jj) ) * r1_e2v(ji,jj) &
+                   &      ) * zmltV
 
 #if defined key_dbgvel
                !------ for debugging only / CPP key `key_dbgvel` -------
                divSx_t(ji,jj) = zdivSx_t
                divSy_t(ji,jj) = zdivSy_t
-               ds11t_dx_u(ji,jj) = zds11_dx * zmltU
-               ds12f_dy_u(ji,jj) = zds12_dy * zmltU
-               ds22t_dy_v(ji,jj) = zds22_dy * zmltV
-               ds12f_dx_v(ji,jj) = zds12_dx * zmltV
                !--------------------------------------------------------
 #endif

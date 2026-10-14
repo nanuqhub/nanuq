@@ -1,0 +1,4 @@
+            !! Update the 2 stress tensor invariants @T within a [ji,jj] loop...
+            zs12 = psgmf(ji,jj,3)
+            zs2  = psgmt(ji,jj,2)
+            pSI2t(ji,jj) = SQRT( zs2*zs2 + zs12*zs12 )

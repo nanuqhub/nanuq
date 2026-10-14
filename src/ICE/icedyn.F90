@@ -328,13 +328,15 @@ CONTAINS
          WRITE(numout,*) '         relax time scale (s-1) to reach static friction     rn_lf_relax     = ', rn_lf_relax
          WRITE(numout,*) '         isotropic tensile strength                          rn_lf_tensile   = ', rn_lf_tensile
          WRITE(numout,*)
-      ENDIF
+      ENDIF !IF(lwp)
       !
       IF( ln_dynALL .AND. (.NOT. ln_icethd) ) THEN
          ln_dynALL    = .FALSE.
          ln_dynRHGADV = .TRUE.
          CALL ctl_warn( 'ice_dyn_init: forcing `ln_dynALL=F` & `ln_dynRHGADV=T` because thermo is OFF!' )
       ENDIF
+      !
+      IF( nn_rk3_iter_v<=0 ) CALL ctl_stop( 'ice_dyn_init: `nn_rk3_iter_v` must be >=1 !' )
       !
       !                             !== set the choice of ice dynamics ==!
       ioptio = 0

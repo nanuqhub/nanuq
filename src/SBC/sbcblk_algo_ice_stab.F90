@@ -44,7 +44,7 @@ CONTAINS
 
    SUBROUTINE turb_ice_stab( zt, zu, pts_i, pt_zt, pqs_i, pq_zt, pU_zu, &
       &                      pCdN, pChN, pCeN,                          &
-      &                      pCd_i, pCh_i, pCe_i, pt_zu_i, pq_zu_i ) !, &
+      &                      pCd_i, pCh_i, pCe_i, pt_zu_i, pq_zu_i )
       !&                      xz0, xu_star, xL, xUN10 )
       !!----------------------------------------------------------------------
       !!                      ***  ROUTINE  turb_ice_stab  ***
@@ -93,7 +93,7 @@ CONTAINS
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: pt_zt  ! potential air temperature              [Kelvin]
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: pqs_i  ! sat. spec. hum. at ice/air interface    [kg/kg]
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: pq_zt  ! spec. air humidity at zt               [kg/kg]
-      REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: pU_zu  ! relative wind module at zu                [m/s]
+      REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: pU_zu  ! absolute wind module at zu (not corrected for ice drift) [m/s]
       REAL(wp), INTENT(in )                     :: pCdN, pChN, pCeN  ! neutral coefficients             [-]
       REAL(wp), INTENT(out), DIMENSION(jpi,jpj) :: pCd_i  ! drag coefficient over sea-ice
       REAL(wp), INTENT(out), DIMENSION(jpi,jpj) :: pCh_i  ! transfert coefficient for heat over ice
@@ -113,7 +113,7 @@ CONTAINS
       CHARACTER(len=40), PARAMETER :: crtnm = 'turb_ice_stab@sbcblk_algo_ice_stab.f90'
       !!----------------------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('turb_ice_stab')
-      !$acc data present( pts_i, pt_zt, pqs_i, pq_zt, pU_zu, pCdN, pChN, pCeN, pCd_i, pCh_i, pCe_i, pt_zu_i, pq_zu_i )
+      !$acc data present( pts_i,pt_zt,pqs_i,pq_zt,pU_zu,pCd_i,pCh_i,pCe_i,pt_zu_i,pq_zu_i ) copyin( pCdN,pChN,pCeN )
 
       l_zt_equal_zu = ( ABS(zu - zt) < 0.01_wp )
 
@@ -188,7 +188,7 @@ CONTAINS
                zzeta_t = zt*z1_L
                zzeta_u = SIGN( MIN(ABS(zzeta_u),50.0_wp), zzeta_u )
                zzeta_t = SIGN( MIN(ABS(zzeta_t),50.0_wp), zzeta_t )
-               
+
                !! Update C_D:
                zdum = 1._wp + zsqrtCDN*z1_vkarmn*(zlog2 - psi_m_ice(zzeta_u))
                zCD  = MAX( pCdN / ( zdum*zdum ) , Cx_min )
@@ -261,7 +261,7 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, 2020 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
       !!----------------------------------------------------------------------------------
       REAL(wp)             :: psi_m_ice
       REAL(wp), INTENT(in) :: pzeta
@@ -302,7 +302,7 @@ CONTAINS
       !!
       !! ** Author: L. Brodeau, 2020 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
-      !$acc routine
+      !$acc routine seq
       !!----------------------------------------------------------------------------------
       REAL(wp)             :: psi_h_ice
       REAL(wp), INTENT(in) :: pzeta

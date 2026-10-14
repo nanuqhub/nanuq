@@ -137,7 +137,7 @@ CONTAINS
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
-            !            
+            !
             p1mdt(ji,jj) = MERGE( p1mdt(ji,jj) , 1._wp , pAt(ji,jj)>=rAmin_dmg )
             pSt(ji,jj,1) = MERGE( pSt(ji,jj,1) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
             pSt(ji,jj,2) = MERGE( pSt(ji,jj,2) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
@@ -196,7 +196,7 @@ CONTAINS
                ENDIF
 
 
-               
+
             ENDIF
             IF( pAf(ji,jj) <= rAmin_dmg ) THEN
                p1mdf(ji,jj) = 1._wp ! => damage=0 max where almost no sea-ice left...
@@ -211,7 +211,7 @@ CONTAINS
       !$acc end data
    END SUBROUTINE lbc_sig_small_a
 
-   
+
 
 
 
@@ -452,73 +452,6 @@ CONTAINS
 
 
 
-   SUBROUTINE div_stress_tensor_v2( cgt,  pe2x, pe1y, pe1e1, pe2e2,  pe1e1_e, pe2e2_e,  p1_e2x, p1_e1x, p1_e1y, p1_e2y, p1_e1e2x, p1_e1e2y,  &
-      &                               ps11h, ps22h, ps12h,  pdivSx, pdivSy )
-      !! => use the same discretization approach as what's being done in EVP, using `sigma_1` and `sigma_2` rather than `sigma_11` and `sigma_22`...
-      !!----------------------------------------------------------------------------------------------
-      !! Computes the vector (pdivSx,pdivSy) = divergence of the h-integrated internal stress tensor
-      !!
-      !!   depending on the grid: T-centric grid => cgt='T' or F-centric grid => cgt='F'
-      !!
-      !! INPUT:                                               |     cgt=='T'   |    cgt=='F'    |
-      !!   * ps11h, ps22h: sigma11*h, sigma22*h           =>  ! @ point T[i,j] | @ point F[i,j] |
-      !!   * ps12h       :       sigma12*h                =>  ! @ point F[i,j] | @ point T[i,j] |
-      !!
-      !! RETURNS:                                             |     cgt=='T'   |    cgt=='F'    |
-      !!   * pdivSx: x-component of the div of the tensor =>  | @ point U[i,j] | @ point V[i,j] |
-      !!   * pdivSy: y-component of the div of the tensor =>  | @ point V[i,j] | @ point U[i,j] |
-      !!
-      !!----------------------------------------------------------------------------------------------
-      CHARACTER(len=1),         INTENT(in)  :: cgt
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pe2x, pe1y
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pe1e1, pe2e2, pe1e1_e, pe2e2_e
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: p1_e2x, p1_e1x, p1_e1y, p1_e2y
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: p1_e1e2x, p1_e1e2y
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: ps11h, ps22h, ps12h ! components of stress tensors on T- or F-centric grids x h !!!
-      REAL(wp), DIMENSION(:,:), INTENT(out) :: pdivSx, pdivSy      ! x,y components of the divergence of the tensor
-      !!
-      REAL(wp), DIMENSION(jpi,jpj) :: zs1, zs2, zs3
-      INTEGER  :: ip, im, jp, jm, ji, jj
-      !!--------------------------------------------------------------------------------------------
-      IF ( cgt == 'T' ) THEN
-         ip =  1
-         im =  0
-         jp =  0
-         jm = -1
-      ELSEIF ( cgt == 'F' ) THEN
-         ip =  0
-         im = -1
-         jp =  1
-         jm =  0
-      ELSE
-         CALL ctl_stop( 'STOP', 'div_stress_tensor_v2(): unknown grid-point type: '//cgt//'!')
-      ENDIF
-      !
-      pdivSx(:,:) = 0._wp
-      pdivSy(:,:) = 0._wp
-      !
-      zs1(:,:) = ps11h(:,:) + ps22h(:,:) ! h * sigma_1
-      zs2(:,:) = ps11h(:,:) - ps22h(:,:) ! h * sigma_2
-      zs3(:,:) = 2._wp * ps12h(:,:)      ! 2 * h * sigma_12
-      !
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            !                   !--- U points
-            pdivSx(ji,jj) = 0.5_wp * ( (( zs1(ji+ip,jj)                   - zs1(ji+im,jj)                  ) *   pe2x(ji,jj)  &
-               &                      + ( zs2(ji+ip,jj)*pe2e2(ji+ip,jj)   - zs2(ji+im,jj)*pe2e2(ji+im,jj)  ) * p1_e2x(ji,jj)) &
-               &                      + ( zs3(ji,jj+jp)*pe1e1_e(ji,jj+jp) - zs3(ji,jj+jm)*pe1e1_e(ji,jj+jm)) * p1_e1x(ji,jj)  &
-               &                      ) * p1_e1e2x(ji,jj)
-            !
-            !                !--- V points
-            pdivSy(ji,jj) = 0.5_wp * ( (( zs1(ji,jj-jm)                   - zs1(ji,jj-jp)                  ) *   pe1y(ji,jj)  &
-               &                      - ( zs2(ji,jj-jm)*pe1e1(ji,jj-jm)   - zs2(ji,jj-jp)*pe1e1(ji,jj-jp)  ) * p1_e1y(ji,jj)) &
-               &                      + ( zs3(ji-im,jj)*pe2e2_e(ji-im,jj) - zs3(ji-ip,jj)*pe2e2_e(ji-ip,jj)) * p1_e2y(ji,jj)  &
-               &                      ) * p1_e1e2y(ji,jj)
-            !
-         END DO
-      END DO
-      !
-   END SUBROUTINE div_stress_tensor_v2
 
 
 

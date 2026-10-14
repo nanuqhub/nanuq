@@ -53,9 +53,9 @@ CONTAINS
       !!-------------------------------------------------------------------
       !!               ***  ROUTINE ice_dyn_rhg  ***
       !!
-      !! ** Purpose :   compute ice velocity
+      !! ** Purpose : compute ice velocity
       !!
-      !! ** Action  : comupte - ice velocity (u_ice, v_ice)
+      !! ** Action  : compute - ice velocity (u_ice, v_ice)
       !!                      - 3 components of the stress tensor (SIGMAt(:,:,:))
       !!--------------------------------------------------------------------
       INTEGER, INTENT(in) ::   kt     ! ice time step
@@ -81,7 +81,7 @@ CONTAINS
          CALL ice_dyn_rhg_evp( kt, shear_i, divu_i, delta_i )
          !
          !                             !-------------------------!
-      CASE( np_rhgMEB )                ! Brittle Bingham Maxwell !
+      CASE( np_rhgMEB )                ! Maxwell Elasto Brittle  !
          !                             !-------------------------!
          CALL ice_dyn_rhg_meb( kt, shear_i, divu_i, delta_i )
          !
@@ -184,7 +184,6 @@ CONTAINS
             WRITE(numout,*) '         ice cohesion value at the lab scale                    rn_c_ref = ', rn_c_ref, 'Pa'
             WRITE(numout,*) '         scaling parameter for cohesion                         rn_l_ref = ', rn_l_ref, 'm'
             WRITE(numout,*) '         cancel `div(SIGMA)` where tiny conc. @U & V points   ln_cdsttic = ', ln_cdsttic
-            IF( rn_N_ref >= 0._wp ) CALL ctl_stop( 'ice_dyn_rhg_init: `rn_N_ref` must be < 0 !!!' )
 
          END IF ! IF( ln_rhg_brittle )
 
@@ -201,6 +200,8 @@ CONTAINS
          WRITE(numout,*) ''
       ENDIF!IF(lwp)
 
+      IF( rn_N_ref >= 0._wp ) CALL ctl_stop( 'ice_dyn_rhg_init: `rn_N_ref` must be < 0 !!!' ) 
+      
       !! Min value for `1-d`:
       r_dmd_min = 1._wp - rn_dmg_max
       !WRITE(numout,*) '         `r_dmd_min` set to = ', r_dmd_min, ' on proc #', narea

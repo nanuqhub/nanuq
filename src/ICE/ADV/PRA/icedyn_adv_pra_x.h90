@@ -25,7 +25,9 @@
          zs1max  = 1.5_wp * zslpmax
          zs1new  = MIN( zs1max, MAX( -zs1max, zpsx ) )
          zs2new  = MIN( 2._wp * zslpmax - 0.3334_wp * ABS( zs1new ), MAX( ABS( zs1new ) - zslpmax, zpsxx ) )
-         zswitch = ( 1._wp - MERGE( 1._wp, 0._wp,  zslpmax<0._wp )  ) * zmask ! Case of empty boxes & Apply mask
+         ! A box with no tracer (S0 = 0) must carry no moment at all (otherwise left-over moments, e.g. `Sy` & `Syy` here, would be
+         ! advected into the neighbouring boxes): `zswitch` is 0 for empty boxes, and for the masked points (land):
+         zswitch = MERGE( 1._wp, 0._wp,  zslpmax>0._wp ) * zmask
 
          zps0  = zslpmax
          zpsx  = zs1new * zswitch
@@ -131,10 +133,14 @@
          ztemp = zalf * zps0 - zalf1 * zf0(ji-1,jj)
          !
          zps0  =  zbt  * ( zps0 + zf0(ji-1,jj) ) + zbt1 * zps0
-         zpsx  =  zbt  * ( zalf * zfx(ji-1,jj) + zalf1 * zpsx + 3._wp * ztemp ) + zbt1 * zpsx
+         ! Second-order moment of the merged box, Eq.(21) of Prather (1986). It must be computed BEFORE `zpsx` is
+         ! updated below: the term `zalf*zalf1*( zpsx - zfx )` is the difference between the first-order moments of
+         ! the 2 boxes being merged, i.e. their values before the merge. Using the already-merged `zpsx` gives a wrong `Sxx`.
          zpsxx =  zbt  * ( zalf * zalf * zfxx(ji-1,jj) + zalf1 * zalf1 * zpsxx                            &
             &            + 5._wp * ( zalf * zalf1 * ( zpsx - zfx(ji-1,jj) ) - ( zalf1 - zalf ) * ztemp ) ) &
             &            + zbt1 * zpsxx
+         ! First-order moment of the merged box, Eq.(21) of Prather (1986) (done after `zpsxx`, which needs the old `zpsx`):
+         zpsx  =  zbt  * ( zalf * zfx(ji-1,jj) + zalf1 * zpsx + 3._wp * ztemp ) + zbt1 * zpsx
          zpsxy =  zbt  * ( zalf * zfxy(ji-1,jj) + zalf1 * zpsxy            &
             &            + 3._wp * (- zalf1*zfy(ji-1,jj) + zalf * zpsy ) )  &
             &            + zbt1 * zpsxy
@@ -150,10 +156,14 @@
          ztemp = - zalf * zps0 + zalf1 * zf0(ji,jj)
          !
          zps0  = zbt * zps0  + zbt1 * ( zps0 + zf0(ji,jj) )
-         zpsx  = zbt * zpsx  + zbt1 * ( zalf * zfx(ji,jj) + zalf1 * zpsx + 3._wp * ztemp )
+         ! Second-order moment of the merged box, Eq.(21) of Prather (1986). It must be computed BEFORE `zpsx` is
+         ! updated below: the term `zalf*zalf1*( zfx - zpsx )` is the difference between the first-order moments of
+         ! the 2 boxes being merged, i.e. their values before the merge. Using the already-merged `zpsx` gives a wrong `Sxx`.
          zpsxx = zbt * zpsxx + zbt1 * ( zalf * zalf * zfxx(ji,jj) + zalf1 * zalf1 * zpsxx  &
             &                         + 5._wp * ( zalf * zalf1 * ( - zpsx + zfx(ji,jj) )   &
             &                         + ( zalf1 - zalf ) * ztemp ) )
+         ! First-order moment of the merged box, Eq.(21) of Prather (1986) (done after `zpsxx`, which needs the old `zpsx`):
+         zpsx  = zbt * zpsx  + zbt1 * ( zalf * zfx(ji,jj) + zalf1 * zpsx + 3._wp * ztemp )
          zpsxy = zbt * zpsxy + zbt1 * ( zalf * zfxy(ji,jj) + zalf1 * zpsxy  &
             &                         + 3._wp * ( zalf1 * zfy(ji,jj) - zalf * zpsy ) )
          zpsy  = zbt * zpsy  + zbt1 * ( zpsy  + zfy (ji,jj) )

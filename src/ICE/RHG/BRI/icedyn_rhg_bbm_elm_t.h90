@@ -1,7 +1,7 @@
    
                !! T-centric cell
                !! ~~~~~~~~~~~~~~
-               zsigI  = pSI1t(ji,jj)
+               zsigI  = psgmt(ji,jj,1)
                zsigII = pSI2t(ji,jj)
    
                zxpC = pxpCt(ji,jj)  ! `expC` [Eq.8]

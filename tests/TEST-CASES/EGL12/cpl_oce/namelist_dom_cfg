@@ -17,7 +17,7 @@
       !                          !    = 0 nn_date0 read in namelist ; nn_it000 : read in namelist
       !                          !    = 1 nn_date0 read in namelist ; nn_it000 : check consistancy between namelist and restart
       !                          !    = 2 nn_date0 read in restart  ; nn_it000 : check consistancy between namelist and restart
-   nn_istate   = 0  !  output the initial state (1) or not (0)
+   nn_istate   =       0   !  output the initial state (1) or not (0)
    ln_rst_list = .false.   !  output restarts at list of times using nn_stocklist (T) or at set frequency with nn_stock (F)
    nn_stock    = 4464  !  frequency of creation of a restart file (modulo referenced to 1)
    nn_write    = 4464   !  frequency of write in the output file   (modulo referenced to nn_it000)
@@ -79,7 +79,7 @@
    sn_tem      = 'CPL_init_EGL12_gridT' ,         -12.        , 'sosstsst',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_sal      = 'CPL_init_EGL12_gridT' ,         -12.        , 'sosaline',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_ssh      = 'CPL_init_EGL12_gridT' ,         -12.        , 'sossheig',   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
-   sn_mld = 'NOT USED'                  ,         -12.        , 'mld_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
+   sn_mld      = 'NOT_USED'             ,         -12.        , 'mld_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_e3t      = 'CPL_init_EGL12_gridT' ,         -12.        , 'e3t_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
    sn_frq      = 'CPL_init_EGL12_gridT' ,         -12.        , 'frq_m'   ,   .false.   , .true. , 'yearly'  ,    ''            ,    ''    ,    ''
 /
@@ -117,11 +117,12 @@
    ln_humi_rlh = .false. !  humidity "sn_humi" is relative humidity     [%]
    ln_tair_pot = .false. !  air temperature read in "sn_tair" is already POTENTIAL TEMPERATURE, NOT ABSOLUTE (ECMWF => ln_tair_pot=.false.)
    !!
-   !! Bulk transfer coefficients over sea-ice:
-   ln_Cx_ice_cst = .true.     ! use constant ice-air bulk transfer coefficients (value given below)
+   !! Bulk transfer coefficients over sea-ice, 5 options:
+   ln_Cx_ice_cst = .false.    ! use constant ice-air bulk transfer coefficients (value given below)
       rn_Cd_i  = 1.6e-3       ! sea-ice drag coefficient
       rn_Ce_i  = 1.4e-3       !    "    sublimation coefficient
       rn_Ch_i  = 1.4e-3       !    "    sensible heat flux coefficient
+   ln_Cx_ice_STAB  = .true.   !  NANUQ's own flavor, taking into account near-surface atmospheric stability
    ln_Cx_ice_AN05  = .false.  !  (Andreas et al. 2005)
    ln_Cx_ice_LU12  = .false.  !  (Lupkes et al. 2012)
    ln_Cx_ice_LG15  = .false.  !  (Lupkes & Gryanik 2015)
@@ -130,15 +131,15 @@
    !___________!____________!___________!__________!_____________!________!___________!_____________________________________________________________!__________!_______________!
    !           !  file name ! freq. (h) ! variable ! time interp.!  clim  ! 'yearly'/ !       weights filename                                      ! rotation ! land/sea mask !
    !           !            !           !   name   !   (logical) !  (T/F) ! 'monthly' !                                                             ! pairing  !    filename   !
-   sn_wndi = 'ERA5_u10',      1.,  'u10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Uwnd'   , ''
-   sn_wndj = 'ERA5_v10',      1.,  'v10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Vwnd'   , ''
-   sn_qsr  = 'ERA5_msdwswrf', 1., 'msdwswrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_qlw  = 'ERA5_msdwlwrf', 1., 'msdwlwrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_tair = 'ERA5_t2m',      1.,  't2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_humi = 'ERA5_d2m',      1.,  'd2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_prec = 'ERA5_mtpr',     1.,  'mtpr'   ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_snow = 'ERA5_msr',      1.,  'msr'    ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
-   sn_slp  = 'ERA5_msl',      1.,  'msl'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_wndi = 'ERA5_Arctic_u10',      1.,  'u10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Uwnd'   , ''
+   sn_wndj = 'ERA5_Arctic_v10',      1.,  'v10'    ,    .true.   , .false. , 'yearly' , 'weight_bicubic_ERA5_Arctic-box_1440x264-EGL12.nc'  , 'Vwnd'   , ''
+   sn_qsr  = 'ERA5_Arctic_msdwswrf', 1., 'msdwswrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_qlw  = 'ERA5_Arctic_msdwlwrf', 1., 'msdwlwrf',    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_tair = 'ERA5_Arctic_t2m',      1.,  't2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_humi = 'ERA5_Arctic_d2m',      1.,  'd2m'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_prec = 'ERA5_Arctic_mtpr',     1.,  'mtpr'   ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_snow = 'ERA5_Arctic_msr',      1.,  'msr'    ,    .false.  , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
+   sn_slp  = 'ERA5_Arctic_msl',      1.,  'msl'    ,    .true.   , .false. , 'yearly' , 'weight_bilinear_ERA5_Arctic-box_1440x264-EGL12.nc' , ''       , ''
 /
 !!
 !!======================================================================

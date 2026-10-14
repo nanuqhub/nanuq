@@ -21,7 +21,7 @@ MODULE icerst
    !
    USE remap_classic, ONLY: rmpU2V, rmpV2U
    !
-   USE icedyn_rhg_tools, ONLY: update_invariants_Egrid
+   USE icedyn_rhg_tools, ONLY: update_sigmaII_Egrid
    !
    USE in_out_manager ! I/O manager
    USE iom            ! I/O manager library
@@ -208,8 +208,8 @@ CONTAINS
       CALL iom_rstput( iter, nitrst, numriw, 'u_ice', u_ice )
       CALL iom_rstput( iter, nitrst, numriw, 'v_ice', v_ice )
       ! Used by EVP & BBM:
-      CALL iom_rstput( iter, nitrst, numriw, 'sgm11t' , SIGMAt(:,:,1) )
-      CALL iom_rstput( iter, nitrst, numriw, 'sgm22t' , SIGMAt(:,:,2) )
+      CALL iom_rstput( iter, nitrst, numriw, 'sgm1t'  , SIGMAt(:,:,1) )
+      CALL iom_rstput( iter, nitrst, numriw, 'sgm2t'  , SIGMAt(:,:,2) )
       CALL iom_rstput( iter, nitrst, numriw, 'sgm12f' , SIGMAt(:,:,3) )
 
       ! Brittle rheology / E-grid:
@@ -218,8 +218,8 @@ CONTAINS
          CALL iom_rstput( iter, nitrst, numriw, 'dmdt' , dmdt  )
          CALL iom_rstput( iter, nitrst, numriw, 'dmdf' , dmdf  )
          !
-         CALL iom_rstput( iter, nitrst, numriw, 'sgm11f' , SIGMAf(:,:,1) )
-         CALL iom_rstput( iter, nitrst, numriw, 'sgm22f' , SIGMAf(:,:,2) )
+         CALL iom_rstput( iter, nitrst, numriw, 'sgm1f'  , SIGMAf(:,:,1) )
+         CALL iom_rstput( iter, nitrst, numriw, 'sgm2f'  , SIGMAf(:,:,2) )
          CALL iom_rstput( iter, nitrst, numriw, 'sgm12t' , SIGMAf(:,:,3) )
          !
          CALL iom_rstput( iter, nitrst, numriw, 'uVice' , uVice )
@@ -358,15 +358,15 @@ CONTAINS
          CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'v_ice', v_ice, cd_type = 'V', psgn = -1._wp )
 
          ! Used by EVP & BBM:
-         id1 = iom_varid( 'ice_rst_read',numrir, 'sgm11t' , ldstop = .FALSE. )
-         id2 = iom_varid( 'ice_rst_read',numrir, 'sgm22t' , ldstop = .FALSE. )
+         id1 = iom_varid( 'ice_rst_read',numrir, 'sgm1t'  , ldstop = .FALSE. )
+         id2 = iom_varid( 'ice_rst_read',numrir, 'sgm2t'  , ldstop = .FALSE. )
          id3 = iom_varid( 'ice_rst_read',numrir, 'sgm12f' , ldstop = .FALSE. )
          IF( MIN( id1, id2, id3 ) > 0 ) THEN      ! fields exist
 #if defined key_verbose
-            IF(lwp) PRINT *, 'LOLO/restart: filling `SIGMAt` with `sgm11t`, `sgm22t`, sgm12f` of restarts!'
+            IF(lwp) PRINT *, 'LOLO/restart: filling `SIGMAt` with `sgm1t`, `sgm2t`, sgm12f` of restarts!'
 #endif
-            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm11t', SIGMAt(:,:,1), cd_type = 'T' )
-            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm22t', SIGMAt(:,:,2), cd_type = 'T' )
+            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm1t' , SIGMAt(:,:,1), cd_type = 'T' )
+            CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm2t' , SIGMAt(:,:,2), cd_type = 'T' )
             CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm12f', SIGMAt(:,:,3), cd_type = 'F' )
          ELSE
             IF(lwp) WRITE(numout,*)
@@ -380,8 +380,8 @@ CONTAINS
             !
             ! Brittle rheology / E-grid:
             !
-            id4 = iom_varid( 'ice_rst_read',numrir, 'sgm11f' , ldstop = .FALSE. )
-            id5 = iom_varid( 'ice_rst_read',numrir, 'sgm22f' , ldstop = .FALSE. )
+            id4 = iom_varid( 'ice_rst_read',numrir, 'sgm1f'  , ldstop = .FALSE. )
+            id5 = iom_varid( 'ice_rst_read',numrir, 'sgm2f'  , ldstop = .FALSE. )
             id6 = iom_varid( 'ice_rst_read',numrir, 'sgm12t' , ldstop = .FALSE. )
             !
             id7 = iom_varid( 'ice_rst_read',numrir, 'uVice' , ldstop = .FALSE. )
@@ -406,8 +406,8 @@ CONTAINS
             ENDIF
 
             IF( MIN( id4, id5, id6 ) > 0 ) THEN      ! fields exist
-               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm11f', SIGMAf(:,:,1), cd_type = 'F' )
-               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm22f', SIGMAf(:,:,2), cd_type = 'F' )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm1f', SIGMAf(:,:,1), cd_type = 'F' )
+               CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm2f', SIGMAf(:,:,2), cd_type = 'F' )
                CALL iom_get( 'ice_rst_read', numrir, jpdom_auto, 'sgm12t', SIGMAf(:,:,3), cd_type = 'T' )
             ELSE
                IF(lwp) WRITE(numout,*)
@@ -440,7 +440,7 @@ CONTAINS
                V_ts(:,:,4) = vUice(:,:)
             ENDIF
             !
-            CALL update_invariants_Egrid( SIGMAt, SIGMAf,  SI1t, SI2t, SI1f, SI2f )
+            CALL update_sigmaII_Egrid( SIGMAt, SIGMAf, SI2t, SI2f )
             !
          ENDIF !IF( ln_damage )
 

@@ -16,6 +16,9 @@ MODULE sbcabl
    USE par_abl        ! abl parameters
    USE ablmod
    USE ablrst
+#if ! defined key_xios
+   USE diawri, ONLY : dia_wri_alloc_abl   ! allocation of the ABL output index arrays (IOIPSL output only)
+#endif
 
    USE phycst         ! physical constants
    USE fldread        ! read input fields
@@ -141,6 +144,12 @@ CONTAINS
       jpkam1 = jpka - 1
 
       IF( abl_alloc() /= 0 )   CALL ctl_stop( 'STOP', 'abl_init : unable to allocate arrays' )
+#if ! defined key_xios
+      ! The IOIPSL output of the ABL (`dia_wri_tp()` in `diawri.F90`) uses the index arrays `ndex_hA` & `ndex_A`, which are
+      ! allocated only here. Without this call, the first ABL output would write through unallocated arrays.
+      ! Must be called on all processes (it contains a collective `mpp_sum`), which is the case since `sbc_abl_init` is called by all.
+      IF( dia_wri_alloc_abl() /= 0 )   CALL ctl_stop( 'STOP', 'abl_init : unable to allocate ABL output index arrays' )
+#endif
       CALL iom_get( 'sbc_abl_init', inum, jpdom_unknown, 'e3t_abl', e3t_abl(:) )
       CALL iom_get( 'sbc_abl_init', inum, jpdom_unknown, 'e3w_abl', e3w_abl(:) )
       CALL iom_get( 'sbc_abl_init', inum, jpdom_unknown, 'ght_abl', ght_abl(:) )
@@ -308,7 +317,7 @@ CONTAINS
       ENDIF
 
       !$acc update device( u_abl, v_abl, tq_abl, tke_abl, avm_abl, avt_abl, pblh, mxlm_abl, mxld_abl )
-      
+
 #if defined _ABLDBG
       CALL TRDBG( 'sbc_abl_init: OUT',  'u_abl, v_abl', u_abl(:,:,2,nt_n),  v_abl(:,:,2,nt_n) )
 #endif
@@ -353,9 +362,6 @@ CONTAINS
 
       !$acc update device( sf(jp_mslp)%fnow(:,:,1), sf(jp_prcp)%fnow(:,:,1), sf(jp_snow)%fnow(:,:,1), sf(jp_dqsw)%fnow(:,:,1), sf(jp_dqlw)%fnow(:,:,1) )
       !$acc update device( sf(jp_wndi)%fnow(:,:,:), sf(jp_wndj)%fnow(:,:,:), sf(jp_tair)%fnow(:,:,:), sf(jp_humi)%fnow(:,:,:), sf(jp_hpgi)%fnow(:,:,:), sf(jp_hpgj)%fnow(:,:,:) )
-      
-      IF( iom_use('snowpre') ) CALL iom_put( 'snowpre', sf(jp_prcp)%fnow(:,:,1) )                  ! Snow precipitation
-      IF( iom_use('precip' ) ) CALL iom_put( 'precip' , sf(jp_snow)%fnow(:,:,1) )                  ! Total precipitation
 
 
 
@@ -363,7 +369,7 @@ CONTAINS
 
 
 
-      
+
       !!-------------------------------------------------------------------------------------------
       !! 2 - Compute Cd x ||U||, Ch x ||U||, Ce x ||U||, and SSQ using now fields
       !!-------------------------------------------------------------------------------------------
@@ -378,7 +384,8 @@ CONTAINS
          &                tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa),   &   !   <<= in
          &                sf(jp_mslp)%fnow(:,:,1) , sst_s, ssu_m, ssv_m     ,   &   !   <<= in
          &                sf(jp_dqsw)%fnow(:,:,1) , sf(jp_dqlw)%fnow(:,:,1) ,   &   !   <<= in
-         &                ssst, sssq, rhoa, wndm, zsen, zlat, zevap, pcd_du=zcd_du ) !   =>> in/out & out
+         &                ssst, sssq, rhoa, wndm, zsen, zlat, zevap,            &
+         &                pcd_du=zcd_du, pqsr=qsr ) !   =>> in/out & out
 #if defined _ABLDBG
       CALL TRDBG( 'sbc_abl: `blk_oce_1:out`',  'ssst, sssq, rhoa, wndm', ssst, sssq, rhoa, wndm   )
       CALL TRDBG( 'sbc_abl: `blk_oce_1:out`',  'Xsen, Xevap, Cd_du', zsen, zevap, zcd_du  )
@@ -394,7 +401,7 @@ CONTAINS
 
       CALL blk_ice_1(  u_abl(:,:,2,nt_n      ),  v_abl(:,:,2,nt_n      ),    &   !   <<= in
          &            tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa),    &   !   <<= in
-         &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su, &            !   <<= in  !#LOLOfixme:SURE? 
+         &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su, &            !   <<= in  !#LOLOfixme:SURE?
          &            pseni=zseni, pevapi=zevapi, pssqi=zssqi, pcd_dui=zcd_dui ) !   <<= out
 
 #if defined _ABLDBG

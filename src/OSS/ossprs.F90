@@ -250,8 +250,13 @@ CONTAINS
 
             z1_mld  = 1._wp / MAX( pmld_m(ji,jj), 0.1_wp )
 
-            zFWkg    = -pemp(ji,jj) * pdt            ! Mass of freshwater received/lost per surface area during `pdt` (kg/m2)
-            zinc =  zFWkg/rhow * z1_mld * psss_m(ji,jj) !  zFWkg/rhow ~ volume / m2 = m ; zFWkg/rhow * z1_mld ~ '-'
+            ! `pemp` follows the NANUQ convention `emp>0` => LOSS of freshwater for the liquid ocean (E-P, evaporation > 0).
+            ! `zFWkg` is therefore the freshwater GAINED by the slab during `pdt`: `zFWkg>0` => precip/melt, `zFWkg<0` => evaporation.
+            zFWkg    = -pemp(ji,jj) * pdt            ! Mass of freshwater received (>0) or lost (<0) per surface area during `pdt` (kg/m2)
+            ! Salinity increment of the slab: a freshwater gain dilutes the mixed layer (salinity decreases) and a freshwater
+            ! loss (evaporation) concentrates it (salinity increases), hence the minus sign in front of `zFWkg`:
+            !   dS = - S * (zFWkg/rhow) / mld     where `zFWkg/rhow` is a water thickness in m, and `/mld` makes it a relative volume change
+            zinc = -zFWkg/rhow * z1_mld * psss_m(ji,jj)
             zsss_n  = psss_s(ji,jj) + zinc              !  expected new salinity in the MLD...
             !
             !IF( ldebg ) THEN

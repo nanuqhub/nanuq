@@ -127,7 +127,7 @@ CONTAINS
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pt_zt    ! potential air temperature            [Kelvin]
       REAL(wp), INTENT(inout), DIMENSION(jpi,jpj) ::   pq_s     ! sea surface specific humidity         [kg/kg]
       REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pq_zt    ! specific air humidity at zt           [kg/kg]
-      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pU_zu    ! relative wind module at zu              [m/s]
+      REAL(wp), INTENT(in   ), DIMENSION(jpi,jpj) ::   pU_zu    ! absolute wind module at zu (not corrected for ocean current) [m/s]
       LOGICAL , INTENT(in   )                     ::   l_use_cs ! use the cool-skin parameterization
       LOGICAL , INTENT(in   )                     ::   l_use_wl ! use the warm-layer parameterization
       REAL(wp), INTENT(  out), DIMENSION(jpi,jpj) ::   pCd      ! transfer coefficient for momentum         [-]

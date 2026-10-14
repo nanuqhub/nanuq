@@ -34,7 +34,12 @@ MODULE icedyn_adv_pra_adv
    !!----------------------------------------------------------------------
 CONTAINS
 
-   SUBROUTINE adv_pra_2d( kt, pdt, pU, pV, pe1e2, p1_e1e2, pmsk,  pF, psx, psxx, psy, psyy, psxy )
+   SUBROUTINE adv_pra_2d( kt, pdt, pU, pV, pe1e2, p1_e1e2, pmsk,  pF, psx, psxx, psy, psyy, psxy,  ldintensive )
+      !!---------------------------------------------------------------------
+      !! `ldintensive`: set it to `.TRUE.` for an INTENSIVE field (a mixing ratio / fraction, such as `1-damage`), as opposed
+      !!                to the default (`.FALSE.`) for an extensive field (a quantity per unit area: `a_i`, `v_i`...).
+      !!                An intensive field is returned as `S0/V` with `V` the final volume of the box (as in Prather, 1986, where
+      !!                the mixing ratio is `f = S0/V`), so that a uniform field remains uniform in a divergent flow.
       !!---------------------------------------------------------------------
       INTEGER,                      INTENT(in   ) ::   kt                 ! time step
       REAL(wp),                     INTENT(in   ) ::   pdt                ! time step length [s]
@@ -46,7 +51,14 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   pF                 ! field to be advected
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   psx , psy          ! 1st moments
       REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   psxx, psyy, psxy   ! 2nd moments
+      LOGICAL, OPTIONAL,            INTENT(in   ) ::   ldintensive        ! the field is intensive (default: extensive)
       !!---------------------------------------------------------------------
+      INTEGER  ::   ji, jj
+      LOGICAL  ::   ll_intensive
+      !!---------------------------------------------------------------------
+      ll_intensive = .FALSE.
+      IF( PRESENT(ldintensive) ) ll_intensive = ldintensive
+      !
       IF( MOD( (kt - 1) , 2 ) == 0 ) THEN                           !==  odd ice time step:  adv_pra_x_2d then adv_pra_y_2d  ==!
          !                                                          !--------------------------------------------!
          CALL adv_pra_x_2d( pdt, pU, 1._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
@@ -57,6 +69,22 @@ CONTAINS
          CALL adv_pra_y_2d( pdt, pV, 1._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
          CALL adv_pra_x_2d( pdt, pU, 0._wp, pe1e2, p1_e1e2, pmsk,   sa2d, pF, psx, psxx, psy, psyy, psxy )
          !
+      ENDIF
+      !
+      IF( ll_intensive ) THEN
+         ! Intensive field: after the 2 passes, `pF` is `S0/A` (`A` being the original area of the box, in the 2 passes `pF`
+         ! is converted back and forth with `A`). But the box has been deformed by the divergence of the transport, and its
+         ! final volume is `sa2d` (=V, in km^2, cf `psm` in `adv_pra_x_2d`/`adv_pra_y_2d`). The mixing ratio is `S0/V`, so
+         ! we multiply by `A/V`. Only the points updated by the 2 passes are corrected, the halos are exchanged afterwards.
+         !$acc data present( pF, pe1e2, sa2d )
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               pF(ji,jj) = pF(ji,jj) * ( pe1e2(ji,jj) * 1.E-6_wp ) / MAX( sa2d(ji,jj), epsi20 )   ! `A` in km^2, as `sa2d`
+            END DO
+         END DO
+         !$acc end parallel loop
+         !$acc end data
       ENDIF
    END SUBROUTINE adv_pra_2d
 

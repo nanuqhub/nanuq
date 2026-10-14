@@ -98,7 +98,7 @@ CONTAINS
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: t_zt  ! potential air temperature              [Kelvin]
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: qs_i  ! sat. spec. hum. at ice/air interface    [kg/kg]
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: q_zt  ! spec. air humidity at zt               [kg/kg]
-      REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: U_zu  ! relative wind module at zu                [m/s]
+      REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: U_zu  ! absolute wind module at zu (not corrected for ice drift) [m/s]
       REAL(wp), INTENT(in ), DIMENSION(jpi,jpj) :: frice ! sea-ice concentration        (fraction)
       REAL(wp), INTENT(out), DIMENSION(jpi,jpj) :: Cd_i  ! drag coefficient over sea-ice
       REAL(wp), INTENT(out), DIMENSION(jpi,jpj) :: Ch_i  ! transfert coefficient for heat over ice

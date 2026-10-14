@@ -11,7 +11,7 @@ MODULE icedyn_rhg_meb
    !!----------------------------------------------------------------------
    USE phycst         ! Physical constant
    USE dom_oce        ! Ocean domain
-   USE oss_nnq , ONLY : ssh_m, ln_ice_embd
+   USE oss_nnq , ONLY : ssh_m
    USE sbc_ice , ONLY : taux_ai_t, tauy_ai_t, snwice_mass_b
    USE par_ice
    USE ice            ! sea-ice: ice variables
@@ -33,11 +33,11 @@ MODULE icedyn_rhg_meb
    USE timing
 
    !USE remap_weno   , ONLY: rmpT2U_wn5s, rmpT2V_wn5s
-   USE remap_classic, ONLY: rmpT2F, rmpT2U, rmpT2V, do_rmpT2F
+   USE remap_classic, ONLY: do_rmpT2F
 
    USE ice_util
 
-   USE icedyn_rhg_tools, ONLY: sigmaII_sclr, strain_rate_dsd
+   USE icedyn_rhg_tools, ONLY: strain_rate_dsd
    USE icedyn_rhg_bri
 
    USE icedyn_rhg_tools, ONLY: fcncl_low_conc
@@ -50,10 +50,10 @@ MODULE icedyn_rhg_meb
    PUBLIC   ice_dyn_rhg_meb       ! called by icedyn_rhg.F90
 
    REAL(wp), SAVE :: rk0  ! factor to stiffness matrix => 1._wp / ( 1._wp - rnup*rnup)
-   REAL(wp), SAVE :: rk11, rk22, rk12, rk33 ! elements of stiffness matrix
+   REAL(wp), SAVE :: rk11p12, rk11m12, rk12p22, rk12m22, rk33 ! elements of stiffness matrix
    REAL(wp), SAVE :: rsqrt_E0 ! Constant part of Eq.28
    REAL(wp), SAVE :: rdtbri, r1_dtbri !: small time step (time splitting) [s] and its inverse [1/s]
-   !$acc declare create( rk0, rk11, rk22, rk12, rk33, rsqrt_E0, rdtbri, r1_dtbri )
+   !$acc declare create( rk0, rk11p12, rk11m12, rk12p22, rk12m22, rk33, rsqrt_E0, rdtbri, r1_dtbri )
 
    !! Work arrays specific to MEB:
    INTEGER(1), ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   kmsk01x, kmsk01y     ! dummy arrays
@@ -119,7 +119,7 @@ CONTAINS
       REAL(wp) ::  zmassU, zmassV   ! ice/snow mass and volume
       REAL(wp) ::  zr, zr1, zr2, zr3, zmsk, zzt, zzf, zht, zhf, zravrg
       !!-------------------------------------------------------------------
-      !$acc data present( pshear_i,pdivu_i,pdelta_i,u_ice,v_ice,uVice,vUice,SIGMAt,SIGMAf,dmdt,dmdf,SI1t,SI2t,SI1f,SI2f,ucncl,vcncl )
+      !$acc data present( pshear_i,pdivu_i,pdelta_i,u_ice,v_ice,uVice,vUice,SIGMAt,SIGMAf,dmdt,dmdf,SI2t,SI2f,ucncl,vcncl )
 
       IF( ln_timing )   CALL timing_start(crtnm)
 
@@ -215,12 +215,16 @@ CONTAINS
          CALL cap_1md( at_i, af_i, dmdt, dmdf ) ! Capping for both  post-healing ("post-advection" is done in `icedyn_adv`):
          !
          !! => so that we avoid a `lbc_lnk` prior of cross-nudging into `update_sigma_d()`:
-         CALL lbc_lnk( crtnm, dmdt,'T',1._wp,  dmdf,'F',1._wp  )
+#if defined _OPENACC || defined _OPENMP
+         CALL lbc_lnk_gpu( crtnm, dmdt, dmdf )
+#else
+         CALL lbc_lnk(     crtnm, dmdt,'T',1._wp,  dmdf,'F',1._wp  )
+#endif
          !
       ENDIF !IF( l_apply_d_healing )
 
 
-      zravrg = 1._wp/REAL(nbrttl) ! going to average (set to 0 before accumulating during the `nbrttl` sub time steps)
+      zravrg = 1._wp/REAL(nbrttl,wp) ! going to average (set to 0 before accumulating during the `nbrttl` sub time steps)
 
 
       !! We do not want to update the following arrays`nbrttl` times in the insane upcoming
@@ -231,6 +235,28 @@ CONTAINS
       !!       `xxpCt` as wells as their F-point counterparts
       !!        so that we can avoid calling `nbrttl` times a `lbc_lnk` prior to calling
       !!        the cross-nudging into `update_sigma_d()`...
+
+
+
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+            !! Interpolate components of air-ice wind stress vector at relevant points:
+            zr1 = (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
+            zr2 = (2._wp-vmask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji,jj+1))
+            xtmp1(ji,jj) = 0.5_wp*(taux_ai_t(ji,jj) + taux_ai_t(ji+1,jj)) * zr1 ! x-component of air-ice wind stress at T-point to U-point [kg m^-1 s^-2]
+            xtmp2(ji,jj) = 0.5_wp*(tauy_ai_t(ji,jj) + tauy_ai_t(ji,jj+1)) * zr2 ! y-component of air-ice wind stress at T-point to V-point [kg m^-1 s^-2]
+            xtmp3(ji,jj) = 0.5_wp*(taux_ai_t(ji,jj) + taux_ai_t(ji,jj+1)) * zr2 ! x-component of air-ice wind stress at T-point to V-point [kg m^-1 s^-2]
+            xtmp4(ji,jj) = 0.5_wp*(tauy_ai_t(ji,jj) + tauy_ai_t(ji+1,jj)) * zr1 ! y-component of air-ice wind stress at T-point to U-point [kg m^-1 s^-2]
+            !
+            !! Cancel coefficients for divergence of stress tensors in extremely low ice conc:
+            ucncl(ji,jj) = MERGE( fcncl_low_conc( au_i(ji,jj) )  ,  1._wp  ,  ln_cdsttic )
+            vcncl(ji,jj) = MERGE( fcncl_low_conc( av_i(ji,jj) )  ,  1._wp  ,  ln_cdsttic )
+            !
+         ENDDO
+      ENDDO
+      !$acc end parallel loop
+
 
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -248,17 +274,6 @@ CONTAINS
             !
             xScHt(ji,jj)  = ( rn_l_ref / REAL(res_grd_loc_t(ji,jj),wp) )**rn_pow_scl_res * zht  ! to scale cohesion / Δx in Mohr-Coulomn test (! multiply with `h` "  " ")
             xScHf(ji,jj)  = ( rn_l_ref / REAL(res_grd_loc_f(ji,jj),wp) )**rn_pow_scl_res * zhf  !       "        "       "        "       "        "       "        "
-            !
-            ! Interpolate components of air-ice wind stress vector at relevant points:
-            zr1 = (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj))
-            zr2 = (2._wp-vmask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji,jj+1))
-            xtmp1(ji,jj) = 0.5_wp*(taux_ai_t(ji,jj) + taux_ai_t(ji+1,jj)) * zr1 ! x-component of air-ice wind stress at T-point to U-point [kg m^-1 s^-2]
-            xtmp2(ji,jj) = 0.5_wp*(tauy_ai_t(ji,jj) + tauy_ai_t(ji,jj+1)) * zr2 ! y-component of air-ice wind stress at T-point to V-point [kg m^-1 s^-2]
-            xtmp3(ji,jj) = 0.5_wp*(taux_ai_t(ji,jj) + taux_ai_t(ji,jj+1)) * zr2 ! x-component of air-ice wind stress at T-point to V-point [kg m^-1 s^-2]
-            xtmp4(ji,jj) = 0.5_wp*(tauy_ai_t(ji,jj) + tauy_ai_t(ji+1,jj)) * zr1 ! y-component of air-ice wind stress at T-point to U-point [kg m^-1 s^-2]
-            !
-            ucncl(ji,jj) = MERGE( fcncl_low_conc( au_i(ji,jj) )  ,  1._wp  ,  ln_cdsttic )
-            vcncl(ji,jj) = MERGE( fcncl_low_conc( av_i(ji,jj) )  ,  1._wp  ,  ln_cdsttic )
             !
          ENDDO
       ENDDO
@@ -282,7 +297,7 @@ CONTAINS
          ! ---  Updates the components of the vertically-integrated internal stress tensor and the damage in both T- & F-centric worlds ---
          !           => based on previously computed ice velocities...
          CALL update_sigma_d( kt, jter, rdtbri, V_ts, at_i, af_i, xxpCt, xxpCf, xScHt, xScHf, &
-            &                                   xht, xhf, SIGMAt, SIGMAf, dmdt, dmdf, SI1t, SI2t, SI1f, SI2f )
+            &                                   xht, xhf, SIGMAt, SIGMAf, dmdt, dmdf, SI2t, SI2f )
          !           => `sigmas` & `d` ok on whole `Nis0-1:Nie0+1,Njs0-1:Nje0+1` ! (provided `V_ts` was fully lbclinked!)
 
          ! --- Computation of ice velocity --- ! (`Nis0:Nie0,Njs0:Nje0`)
@@ -351,22 +366,29 @@ CONTAINS
       !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
       !!-------------------------------------------------------------------
       INTEGER  ::   ierr
-      REAL(wp) ::   ztmp, zdx_m, zce, zdts
-      REAL(wp), DIMENSION(jpi,jpj) :: zt1, zt2
+      REAL(wp) ::   zdx_m, zce, zdts
+      REAL(wp) ::   zk11, zk22, zk12
+      REAL(wp), DIMENSION(jpi,jpj) :: zt1
       !!-------------------------------------------------------------------
       IF( lwp ) THEN
          WRITE(numout,*) ''
          WRITE(numout,*) '**********************************************************************'
-         WRITE(numout,*) '    *** Initialization of BBM rheology ('//crtnm//'_init) ***'
+         WRITE(numout,*) '    *** Initialization of MEB rheology ('//crtnm//'_init) ***'
       ENDIF
 
       !! Stiffness matrix
       !! ****************
       rk0  = 1._wp / ( 1._wp - rnup*rnup)
-      rk11 = rk0
-      rk12 = rk0 * rnup
-      rk22 = rk0
+      zk11 = rk0
+      zk12 = rk0 * rnup
+      zk22 = rk0
       rk33 = rk0 * (1._wp - rnup)
+
+      ! Because we work with `sigma_1,sigma_2` rather than `sigma_11,sigma_22`:
+      rk11p12 = zk11 + zk12
+      rk11m12 = zk11 - zk12
+      rk12p22 = zk12 + zk22
+      rk12m22 = zk12 - zk22
 
       rsqrt_E0      = SQRT( rn_E0 )
 
@@ -384,7 +406,7 @@ CONTAINS
       zdts = 0.5_wp*(zdx_m/zce)                 ! largest theoretical small time-step to consider to resolve these waves
       zdts = rn_cfl_coeff * zdts                ! with user input
       nbrttl = INT( CEILING( rDt_ice / zdts ) ) ! number of iterations (local to init, cf below for nbrttl)
-      nbrttl = nbrttl + MOD(nbrttl, 2)          ! + make it an odd number
+      nbrttl = nbrttl + MOD(nbrttl, 2)          ! + make it an even number
 
       rdtbri   = rDt_ice/REAL(nbrttl,wp)
       r1_dtbri = 1._wp / rdtbri
@@ -427,7 +449,7 @@ CONTAINS
       IF( ierr /= 0 )   CALL ctl_stop('STOP', crtnm//'_init : unable to allocate work arrays')
 
 #if defined _OPENACC || defined _OPENMP
-      !$acc update device ( nbrttl, rk0, rk11, rk22, rk12, rk33, rsqrt_E0, rdtbri, r1_dtbri )
+      !$acc update device ( nbrttl, rk0, rk11p12, rk11m12, rk12p22, rk12m22, rk33, rsqrt_E0, rdtbri, r1_dtbri )
       PRINT *, ' * info GPU: '//crtnm//'_init() => adding work arrays to memory!'
       !$acc enter data copyin( kmsk01x, kmsk01y, kmsk00x, kmsk00y, xxmU, xxmV )
       PRINT *, '    ==> kmsk01x, kmsk01y, kmsk00x, kmsk00y, xxmU, xxmV'
@@ -435,11 +457,13 @@ CONTAINS
       PRINT *, '    ==> xxpCt, xxpCf, xgrdH, xScHt, xScHf'
 #endif
 
+      IF( ln_MCx_test )  CALL MC_ud_d_s_mwp_init()
+
    END SUBROUTINE ice_dyn_rhg_meb_init
 
 
    SUBROUTINE update_sigma_d( kt, kts, pdt, pV4, pAt, pAf, pxpCt, pxpCf, pScHt, pScHf, &
-      &                                     pht, phf, psgmt, psgmf, p1mdt, p1mdf, pSI1t, pSI2t, pSI1f, pSI2f )
+      &                                     pht, phf, psgmt, psgmf, p1mdt, p1mdf, pSI2t, pSI2f )
       !!----------------------------------------------------------------------
       !!                    ***  ROUTINE UPDATE_SIGMA_D  ***
       !! ** Purpose :
@@ -460,26 +484,19 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmt            ! T-centric vertically-integrated stress tensor [N/m^2*m]
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmf            ! F-centric vertically-integrated stress tensor [N/m^2*m]
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: p1mdt, p1mdf     ! `1 - ice damage` @T & @F
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: pSI1t, pSI2t, pSI1f, pSI2f ! 1st & 2nd invariants of vertically-integrated stress tensor [N/m^2*m]
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(inout) :: pSI2t, pSI2f     ! 2nd invariants of vertically-integrated stress tensor [N/m^2*m]
       !!----------------------------------------------------------------------
       REAL(wp) :: zfc, zml, zdum
-      REAL(wp) :: zs11, zs22, zs12
-      REAL(wp) :: zh, zE, zeta, zL, zang, zc0, zmul
+      REAL(wp) :: zs2, zs12
+      REAL(wp) :: zh, zE, zeta, zL, zmul
       REAL(wp) :: zE1, zE2
       REAL(wp) :: ze11t, ze22t, ze12t, ze11f, ze22f, ze12f
-      REAL(wp) :: zxpC, z1md, zsigI, zsigII
-      REAL(wp) :: z1_sigI, zecc, zCohe
-      REAL(wp) :: zrr
+      REAL(wp) :: zxpC, z1md
       !!----------------------------------------------------------------------
-      REAL(wp)               :: zxpCt, zScHt, zht, z1mdt, zmskt
-      REAL(wp)               :: zxpCf, zScHf, zhf, z1mdf, zmskf
-      REAL(wp)               :: zSI1t, zSI2t, zSI1f, zSI2f
-      REAL(wp), DIMENSION(6) :: zSR ! T- & F- centric strain-rate tensor components at time `t=k` [s^-1] // [1,2,6]@T [4,5,3]@F
-      REAL(wp), DIMENSION(3) :: zsgmt, zsgmf
-      REAL(wp), DIMENSION(6) :: zK
-      REAL(wp), DIMENSION(2) :: zG
+      REAL(wp)               :: zmskt
+      REAL(wp)               :: zmskf
       !!----------------------------------------------------------------------
-      INTEGER  :: ji, jj, jp
+      INTEGER  :: ji, jj
       INTEGER  :: khep ! go `khep` points into the halo
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('update_sigma_d')
@@ -537,11 +554,12 @@ CONTAINS
 
                ! --- Predictor estimate of stress tensor at k+1 ---
                !     ******************************************
+               !     => Eq.(20) of Olason et al. adapted for `sigma_1,sigma_2`, not `sigma_11,sigma_22`
                zml = zmul * zmskt
-               zfc =  zh * zE * pdt
-               psgmt(ji,jj,1) = zml * ( zfc * ( rk11*ze11t + rk12*ze22t) + psgmt(ji,jj,1) )
-               psgmt(ji,jj,2) = zml * ( zfc * ( rk12*ze11t + rk22*ze22t) + psgmt(ji,jj,2) )
-               psgmf(ji,jj,3) = zml * ( zfc *        rk33 * ze12t        + psgmf(ji,jj,3) )
+               zfc = zh * zE * pdt
+               psgmt(ji,jj,1) = zml * ( 0.5_wp * zfc * ( rk11p12*ze11t + rk12p22*ze22t ) + psgmt(ji,jj,1) )
+               psgmt(ji,jj,2) = zml * ( 0.5_wp * zfc * ( rk11m12*ze11t + rk12m22*ze22t ) + psgmt(ji,jj,2) )
+               psgmf(ji,jj,3) = zml * (          zfc *            rk33 * ze12t           + psgmf(ji,jj,3) )
 
             END DO !DO ji=Nis0, Nie0
          END DO !DO jj=Njs0, Nje0
@@ -569,11 +587,12 @@ CONTAINS
 
                ! --- Predictor estimate of stress tensor at k+1 ---
                !     ******************************************
+               !     => Eq.(20) of Olason et al. adapted for `sigma_1,sigma_2`, not `sigma_11,sigma_22`
                zml = zmul * zmskf
                zfc = zh * zE * pdt
-               psgmf(ji,jj,1) = zml * ( zfc * ( rk11*ze11f + rk12*ze22f) + psgmf(ji,jj,1) )
-               psgmf(ji,jj,2) = zml * ( zfc * ( rk12*ze11f + rk22*ze22f) + psgmf(ji,jj,2) )
-               psgmt(ji,jj,3) = zml * ( zfc *        rk33 * ze12f        + psgmt(ji,jj,3) )
+               psgmf(ji,jj,1) = zml * ( 0.5_wp * zfc * ( rk11p12*ze11f + rk12p22*ze22f ) + psgmf(ji,jj,1) )
+               psgmf(ji,jj,2) = zml * ( 0.5_wp * zfc * ( rk11m12*ze11f + rk12m22*ze22f ) + psgmf(ji,jj,2) )
+               psgmt(ji,jj,3) = zml * (          zfc *            rk33 * ze12f           + psgmt(ji,jj,3) )
 
             END DO !DO ji=Nis0, Nie0
          END DO !DO jj=Njs0, Nje0
@@ -595,12 +614,31 @@ CONTAINS
          !      !!          !        => @F uses `ji-1` & `jj-1`  result => ok on whole      "          "
       ENDIF
 
+
       ! ******** MOHR-COULOMB FAILURE TEST & UPDATE of damage and stress tensors  *********
+
+      ! * Update the 2 invariants for each of the 2 vertically-integrated stress tensors:
+      !$acc data present( pSI2t, pSI2f )
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0, Nje0+1
+         DO ji=Nis0, Nie0+1
+# include      "icedyn_rhg_udsti_t.h90"
+         END DO !DO ji=Nis0, Nie0
+      END DO !DO jj=Njs0, Nje0
+      !$acc end parallel loop
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0-1, Nje0
+         DO ji=Nis0-1, Nie0
+# include      "icedyn_rhg_udsti_f.h90"
+         END DO !DO ji=Nis0, Nie0
+      END DO !DO jj=Njs0, Nje0
+      !$acc end parallel loop
+      !$acc end data
+
       IF( ln_MCx_test ) THEN
-         IF( kt==nit000 .AND. kts==1 ) CALL MC_ud_d_s_mwp_init()
-         CALL MC_ud_d_s_mwp( pdt, pxpCt, pxpCf, pScHt, pScHf, p1mdt, p1mdf, psgmt, psgmf )
+         CALL MC_ud_d_s_mwp( pdt, pxpCt, pxpCf, pScHt, pScHf, pSI2t, pSI2f, p1mdt, p1mdf, psgmt, psgmf )
       ELSE
-         CALL MC_ud_d_s(     pdt, pxpCt, pxpCf, pScHt, pScHf, p1mdt, p1mdf, psgmt, psgmf )
+         CALL MC_ud_d_s(     pdt, pxpCt, pxpCf, pScHt, pScHf, pSI2t, pSI2f, p1mdt, p1mdf, psgmt, psgmf )
       ENDIF
       ! ***********************************************************************************
 
@@ -615,19 +653,13 @@ CONTAINS
 #endif
 
       !! Now that stress tensors are `lbc_lnk`ed, we can update invariants:
-      !$acc data present( pSI1t, pSI2t, pSI1f, pSI2f )
+      !$acc data present( pSI2t, pSI2f )
       !$acc parallel loop collapse(2)
-      DO jj=Njs0-nn_hls, Nje0+nn_hls
-         DO ji=Nis0-nn_hls, Nie0+nn_hls
-            zs11 = psgmt(ji,jj,1) ; zs22 = psgmt(ji,jj,2) ; zs12 = psgmf(ji,jj,3)
-            zrr          = 0.5_wp * ( zs11 - zs22 )
-            pSI1t(ji,jj) = 0.5_wp * ( zs11 + zs22 )
-            pSI2t(ji,jj) = SQRT( zrr*zrr + zs12*zs12 )
+      DO jj=Njs0-1, Nje0+1
+         DO ji=Nis0-1, Nie0+1
+# include   "icedyn_rhg_udsti_t.h90"
             !
-            zs11 = psgmf(ji,jj,1) ; zs22 = psgmf(ji,jj,2) ; zs12 = psgmt(ji,jj,3)
-            zrr          = 0.5_wp * ( zs11 - zs22 )
-            pSI1f(ji,jj) = 0.5_wp * ( zs11 + zs22 )
-            pSI2f(ji,jj) = SQRT( zrr*zrr + zs12*zs12 )
+# include   "icedyn_rhg_udsti_f.h90"
          END DO !DO ji=Nis0, Nie0
       END DO !DO jj=Njs0, Nje0
       !$acc end parallel loop
