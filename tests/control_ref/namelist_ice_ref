@@ -73,10 +73,11 @@
    !                                          => uses ocean velocities provided in netCDF SSX forcing as sea-ice velocities
       ln_pureADV2D  = .false.         !       `T` => only pure advection, do not apply any king of corrections on advected fields
    !
-   ln_bri_rk3       = .false.         ! Use an implicit RK3 implementation for the time integration of internal stress tensor & the momentum equations
+   ln_bri_rk3       = .true.          ! Use an implicit RK3 implementation for the time integration of internal stress tensor & the momentum equations
    !                                  !       => SDIRK3 method of Alexander (1977) for the momentum equation
    !                                  !       => when `false`, use the traditional 1st-order implicit Euler scheme
    !                                  !          (implicit in terms of ice velocity for the bottom ice-water drag though)
+   !                                  !  => MIND: RK3 is substantially more needy than Euler in terms of computation! 
    !
    rn_ishlat        =   2.            !  lbc : free slip (0) ; partial slip (0-2) ; no slip (2) ; strong slip (>2)
    ln_landfast_L16  = .false.         !  landfast: parameterization from Lemieux 2016
