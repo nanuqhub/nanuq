@@ -36,8 +36,8 @@ MODULE icerst
    PUBLIC   ice_rst_read    ! called by ice_init
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: icerst.F90 14239 2020-12-23 08:57:16Z smasson $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

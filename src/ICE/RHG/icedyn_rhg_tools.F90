@@ -36,9 +36,10 @@ MODULE icedyn_rhg_tools
    PUBLIC vel_maxshr_t
    !PUBLIC vel_delta_t
 
-
-
    !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 

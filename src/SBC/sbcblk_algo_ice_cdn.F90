@@ -32,10 +32,13 @@ MODULE sbcblk_algo_ice_cdn
    REAL(wp), PARAMETER :: rDmax_0 = 300._wp      ! Eq.(27)
    REAL(wp), PARAMETER :: rz0_w_0 = 3.27E-4   ! fixed roughness length over water (paragraph below Eq.36)
 
-   !!============================================================
    REAL(wp), PARAMETER ::   rce10_i_0 = 3.46e-3_wp ! (Eq.48) MIZ
    REAL(wp), PARAMETER ::   ralpha_0  = 0.2_wp     ! (Eq.12) (ECHAM6 value)
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 

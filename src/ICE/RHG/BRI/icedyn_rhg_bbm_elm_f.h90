@@ -11,8 +11,9 @@
                zE   = rn_E0 * zml                 ! elasticity [Pa] `E = E0*(1-d)*exp[-C*(1-A)]`
    
                zc0  = zml*zml                     !                   => `zc0 = [(1-d)*exp(-C*(1-A))]^2`
-               zeta = rn_eta0 * zc0 * zc0 * zml   ! viscosity [Pa.s]  => `zeta = rn_eta0 * [(1-d)*exp(-C*(1-A))]^5
-               zL = MAX( zeta / MAX( zE, epsi20 ) , pdt )  ! lambda [s]
+               ! Lambda [s] = viscosity/elasticity = `eta0*X^5 / (E0*X)` = `(eta0/E0)*X^4`, with `X = (1-d)*exp(-C*(1-A))`
+               !   => computed with the precomputed ratio `r_eta0_E0` to avoid a division at each grid point:
+               zL = MAX( r_eta0_E0 * zc0 * zc0 , pdt )
    
                z1_sigI = SIGN( 1._wp , zsigI ) / MAX( ABS(zsigI), epsi20 )   ! 1/SigI without the SigI=0 singularity...
    
@@ -20,8 +21,9 @@
                ! we want Pmax to be (pPmax_p) when PURE compression but decreases as shearing becomes
                ! increasingly important w.r.t to compression:
                zPmax = pPmax_f(ji,jj)                 ! `P_max * h` (<0)
-               zCohe = rn_c_ref * pScHf(ji,jj)        ! `C * h` cohesion scaled to the local `Δx` * h
-               zecc  = ABS(zPmax) / MAX(zCohe,epsi20) ! eccentricity of the "Pmax" ellipse that crosses the `sigma_II` axis right at the cohesion value
+               ! Eccentricity of the "Pmax" ellipse that crosses the `sigma_II` axis right at the cohesion value,
+               ! precomputed once per big time step as `|Pmax*h| / (C*h)` (saves a division at each sub-step):
+               zecc  = pEccf(ji,jj)
    
                zc0   = zecc * zsigII * z1_sigI
    

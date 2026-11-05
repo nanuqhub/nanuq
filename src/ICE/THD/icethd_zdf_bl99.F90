@@ -23,8 +23,8 @@ MODULE icethd_zdf_BL99
    PUBLIC   ice_thd_zdf_BL99   ! called by icethd_zdf
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! NEMO/ICE 5.0, NEMO Consortium (2024)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

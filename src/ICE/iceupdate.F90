@@ -39,8 +39,8 @@ MODULE iceupdate
    PUBLIC   ice_update_tau    ! called by ice_stp
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: iceupdate.F90 15385 2021-10-15 13:52:48Z clem $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

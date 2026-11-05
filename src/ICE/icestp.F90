@@ -82,8 +82,8 @@ MODULE icestp
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: icestp.F90 15023 2021-06-18 14:35:25Z gsamson $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

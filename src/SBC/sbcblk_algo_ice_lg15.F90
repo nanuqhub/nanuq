@@ -41,7 +41,12 @@ MODULE sbcblk_algo_ice_lg15
    LOGICAL,  PARAMETER :: l_dbg_print     = .FALSE.
 
    INTEGER , PARAMETER ::   nbit = 8        ! number of itterations
+   !!----------------------------------------------------------------------
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 

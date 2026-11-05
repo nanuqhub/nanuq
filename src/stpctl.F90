@@ -40,8 +40,8 @@ MODULE stpctl
    INTEGER, DIMENSION(jpvar)  ::   nvarid   ! netcdf variable id
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! NEMO/SAS 5.0, NEMO Consortium (2024)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

@@ -1,0 +1,56 @@
+               !!----------------------------------------------------------------------------------------------
+               !!   One SDIRK3 step (Alexander, 1977) for ONE 2D velocity pair at ONE point
+               !!   (included twice in `update_uv_rk3`: U-points pair (1),(4) and V-points pair (3),(2))
+               !!
+               !!   Equation:  dU/dt = A + B*|U_o - U|*(U_o - U)    with U = (zui,zvi), U_o = (zuo,zvo), A = (zAx,zAy), B = zBp
+               !!
+               !!   Each implicit stage `Y = R + γ*Δt*f(Y)` is solved exactly, with `W = U_o - Y` and `S = U_o - R - γ*Δt*A`:
+               !!       `W = 2*S / (1 + sqrt(1 + 4*γ*Δt*B*|S|))`
+               !!
+               !!   Scalars only and no CALL, so that the loop around it can be overlapped / vectorized by the compiler.
+               !!
+               !!   Inputs : zui, zvi, zuo, zvo, zAx, zAy, zBp, pdt
+               !!   Outputs: zun, zvn  (velocity at t+Δt, before masking)
+               !!   Work   : zDx, zDy, zk, zSx, zSy, zSn, zfct, zW1x, zW1y, zn1, zW2x, zW2y, zn2, zW3x, zW3y
+               !!----------------------------------------------------------------------------------------------
+
+               !! Ice-ocean slip at time t, `D = U_o - U(t)`: all the stages are written in terms of `W = U_o - Y`,
+               !! so `D` is the common starting point of the 3 stages
+               zDx = zuo - zui
+               zDy = zvo - zvi
+
+               !! Implicit coefficient `k = γ*Δt*B`: the same for the 3 stages because γ is the same for all stages
+               zk = rgam_sdk3 * pdt * zBp
+
+               !! STAGE 1: known part `S1 = D - γ*Δt*A`, then exact solution `W1 = 2*S1/(1 + sqrt(1 + 4*k*|S1|))`
+               !! and its norm `|W1|` (needed for `f(Y1) = A + B*|W1|*W1` in stages 2 and 3)
+               zSx  = zDx - rgam_sdk3*pdt*zAx
+               zSy  = zDy - rgam_sdk3*pdt*zAy
+               zSn  = SQRT( zSx*zSx + zSy*zSy )
+               zfct = 2._wp / ( 1._wp + SQRT( 1._wp + 4._wp*zk*zSn ) )
+               zW1x = zfct * zSx
+               zW1y = zfct * zSy
+               zn1  = zfct * zSn
+
+               !! STAGE 2: known part `S2 = D - (1+γ)/2*Δt*A - (1-γ)/2*Δt*B*|W1|*W1`, then the same exact solution
+               !! to get `W2` and its norm `|W2|` (needed for `f(Y2)` in stage 3)
+               zSx  = zDx - rc2_sdk3*pdt*zAx - ra21_sdk3*pdt*zBp*zn1*zW1x
+               zSy  = zDy - rc2_sdk3*pdt*zAy - ra21_sdk3*pdt*zBp*zn1*zW1y
+               zSn  = SQRT( zSx*zSx + zSy*zSy )
+               zfct = 2._wp / ( 1._wp + SQRT( 1._wp + 4._wp*zk*zSn ) )
+               zW2x = zfct * zSx
+               zW2y = zfct * zSy
+               zn2  = zfct * zSn
+
+               !! STAGE 3: known part `S3 = D - Δt*A - Δt*B*( b1*|W1|*W1 + b2*|W2|*W2 )` (using `γ + b1 + b2 = 1`),
+               !! then the same exact solution to get `W3`
+               zSx  = zDx - pdt*zAx - pdt*zBp*( rb1_sdk3*zn1*zW1x + rb2_sdk3*zn2*zW2x )
+               zSy  = zDy - pdt*zAy - pdt*zBp*( rb1_sdk3*zn1*zW1y + rb2_sdk3*zn2*zW2y )
+               zSn  = SQRT( zSx*zSx + zSy*zSy )
+               zfct = 2._wp / ( 1._wp + SQRT( 1._wp + 4._wp*zk*zSn ) )
+               zW3x = zfct * zSx
+               zW3y = zfct * zSy
+
+               !! New velocity: SDIRK3 is stiffly accurate, so the last stage is the solution at `t+Δt`: `U(t+Δt) = U_o - W3`
+               zun = zuo - zW3x
+               zvn = zvo - zW3y

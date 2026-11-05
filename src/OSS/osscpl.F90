@@ -129,8 +129,8 @@ MODULE osscpl
    !! Substitution
 #  include "single_precision_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! NEMO/OCE 5.0, NEMO Consortium (2024)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

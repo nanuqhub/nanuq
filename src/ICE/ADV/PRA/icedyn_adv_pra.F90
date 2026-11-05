@@ -52,7 +52,8 @@ MODULE icedyn_adv_pra
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   sei_max, ses_max, sszi_max
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -92,7 +93,7 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj)           , INTENT(inout) ::   prdgc  ! ridged-ice fraction
       !!----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk, jl          ! dummy loop indices
-      REAL(wp) ::   zdt, zati2
+      REAL(wp) ::   zdt, zA
       REAL(wp) ::   z1_dt, zds
       REAL(wp) ::   zvt                     ! total ice volume (sum over the categories) of a box
       !REAL(wp) ::   zcfl, zcflmax          ! Courant number of a box, and its maximum over the domain
@@ -302,13 +303,13 @@ CONTAINS
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             !
-            zati2 = 0._wp
+            zA = 0._wp
             !$acc loop seq
             DO jl=1, jpl
-               zati2 = zati2 + pa_i(ji,jj,jl)
+               zA = zA + pa_i(ji,jj,jl)
             END DO
             !
-            pato_i(ji,jj) = pato_i(ji,jj) - ( zati2 - sati1(ji,jj) ) &
+            pato_i(ji,jj) = pato_i(ji,jj) - ( zA - sati1(ji,jj) ) &
                &                          - ( pUu(ji,jj) - pUu(ji-1,jj) + pVv(ji,jj) - pVv(ji,jj-1) ) * r1_scl_fct * r1_e1e2t(ji,jj) * zdt
          END DO
       END DO

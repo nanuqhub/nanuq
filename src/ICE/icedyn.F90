@@ -52,9 +52,9 @@ MODULE icedyn
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: icedyn.F90 14997 2021-06-16 06:43:57Z smasson $
-   !! Software governed by the CeCILL licence     (./LICENSE)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
@@ -294,7 +294,7 @@ CONTAINS
       TYPE(FLD_N)        ::   sn_icbmsk  ! informations about the grounded icebergs field to be read
       !!
       NAMELIST/namdyn/ ln_dynALL, ln_dynRHGADV, ln_dynADV1D, ln_dynADV2D, ln_pureADV2D, &
-         &             ln_bri_rk3, nn_rk3_iter_v, rn_ishlat, ln_landfast_L16, rn_lf_depfra, &
+         &             ln_bri_rk3, rn_ishlat, ln_landfast_L16, rn_lf_depfra, &
          &             rn_lf_bfr, rn_lf_relax, rn_lf_tensile, sn_icbmsk, cn_dir
       !!-------------------------------------------------------------------
       !
@@ -317,7 +317,6 @@ CONTAINS
          WRITE(numout,*) '      Temporal integration scheme for momentume equation     ln_bri_rk3      = ', ln_bri_rk3
          IF( ln_bri_rk3) THEN
             WRITE(numout,*) '               ==> will use RK3 !'
-            WRITE(numout,*) '               ==> n. iterations for convergence of ice-oce stress term   = ', nn_rk3_iter_v
          ELSE
             WRITE(numout,*) '               ==> will use 1st-order Euler !'
          ENDIF
@@ -335,8 +334,6 @@ CONTAINS
          ln_dynRHGADV = .TRUE.
          CALL ctl_warn( 'ice_dyn_init: forcing `ln_dynALL=F` & `ln_dynRHGADV=T` because thermo is OFF!' )
       ENDIF
-      !
-      IF( nn_rk3_iter_v<=0 ) CALL ctl_stop( 'ice_dyn_init: `nn_rk3_iter_v` must be >=1 !' )
       !
       !                             !== set the choice of ice dynamics ==!
       ioptio = 0
@@ -461,7 +458,7 @@ CONTAINS
             IF(lwp) WRITE(numout,*) '  *** since EVP used forcing `rn_delta_ecc` to `rn_ecc`! => rn_delta_ecc=',rn_delta_ecc
          ENDIF
 
-         !$acc update device ( rn_creepl, rn_delta_ecc, nn_rk3_iter_v )
+         !$acc update device ( rn_creepl, rn_delta_ecc )
 
       ENDIF
 

@@ -92,8 +92,8 @@ MODULE oss_nnq
    !                                                                   !:  => basically `sst_m` & `sss_m` corrected when `ln_slab_sst=T`
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: oss_nnq.F90 15372 2021-10-14 15:47:24Z davestorkey $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

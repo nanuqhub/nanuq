@@ -27,7 +27,34 @@ MODULE icedyn_rhg_vel
    PUBLIC update_uv_eul
    PUBLIC update_uv_rk3
 
+   !! Coefficients of the SDIRK3 method of Alexander (1977), used in `icedyn_rhg_vel_sdirk3.h90`:
+   !!   => 3 stages, order 3, L-stable, stiffly accurate (last stage = new solution)
+   !!   => Butcher tableau:
+   !!            γ      |    γ       0      0
+   !!         (1+γ)/2   | (1-γ)/2    γ      0
+   !!            1      |    b1      b2     γ
+   !!         ----------+-----------------------
+   !!                   |    b1      b2     γ
+   !!   => γ is the root of `γ^3 - 3γ^2 + 3/2γ - 1/6 = 0` that lies in ]1/6,1/2[:
+   !!         γ = 1 - sqrt(2)*cos( π/3 + acos(2*sqrt(2)/3)/3 ) ≈ 0.435866521508459
+   !!   => b1 = -(6γ^2 - 16γ + 1)/4 ≈  1.208496649
+   !!      b2 =  (6γ^2 - 20γ + 5)/4 ≈ -0.644363171
+   !!      and b1 + b2 = 1 - γ
+   REAL(wp), PARAMETER :: rgam_sdk3 = 0.43586652150845899941601945_wp                                    ! γ (diagonal coefficient)
+   REAL(wp), PARAMETER :: ra21_sdk3 = 0.5_wp*(1._wp - rgam_sdk3)                                         ! a21 = (1-γ)/2
+   REAL(wp), PARAMETER :: rc2_sdk3  = 0.5_wp*(1._wp + rgam_sdk3)                                         ! c2  = (1+γ)/2 = a21 + γ
+   REAL(wp), PARAMETER :: rb1_sdk3  = -0.25_wp*(6._wp*rgam_sdk3*rgam_sdk3 - 16._wp*rgam_sdk3 + 1._wp)    ! b1
+   REAL(wp), PARAMETER :: rb2_sdk3  =  0.25_wp*(6._wp*rgam_sdk3*rgam_sdk3 - 20._wp*rgam_sdk3 + 5._wp)    ! b2
+
+   !! Work array of `update_uv_rk3`: the 4 components of `A` (all the terms of RHS/mass except the ice-ocean stress)
+   !!   => filled by the 1st loop of `update_uv_rk3` (stress divergence + RHS), read by the 2nd loop (SDIRK3 step)
+   !!   => allocated at the first call of `update_uv_rk3`
+   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: xA_sdk3   ! [m.s-2]
+
    !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
@@ -143,12 +170,17 @@ CONTAINS
    !! RK3 IMPLICIT !!
    !! ************ !!
 
-   SUBROUTINE update_uv_rk3( kts, pdt, pAu, pAv, p1_Mu, p1_Mv, pSt, pSf, pgrdH, pVoce, &
-      &                                     ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u,         &
+   SUBROUTINE update_uv_rk3( kts, pdt, pAu, pAv, p1_Mu, p1_Mv, pSt, pSf, pgrdH, pVoce,  &
+      &                                     ptaux_i_u, ptauy_i_v, ptaux_i_v, ptauy_i_u, &
       &                                     pm01x, pm01y, pm00x, pm00y, pucncl, pvcncl, pVice )
       !!----------------------------------------------------------------------------------------------
       !!   Implicit RK3 method for ice velocities update
-      !!     => using the coefficients of "Lobatto IIIA"
+      !!     => SDIRK3 method of Alexander (1977), see `icedyn_rhg_vel_sdirk3.h90`
+      !!
+      !!   2 loops on purpose (for performance on CPU):
+      !!     1. stress divergence + all the terms `A` of RHS/mass except the ice-ocean stress => `xA_sdk3`
+      !!     2. SDIRK3 step + masking, with scalars only and no CALL, so that the CPU can work on several
+      !!        grid points at the same time (the 3 stages form a long chain of dependent SQRT and divisions)
       !!----------------------------------------------------------------------------------------------
       INTEGER,                          INTENT(in)    :: kts       ! current small time step
       REAL(wp),                         INTENT(in)    :: pdt       ! (small) time-step [s]
@@ -165,21 +197,36 @@ CONTAINS
       REAL(wp) :: zS1, zS2, zS12
       REAL(wp) :: zdivSx_t, zdivSy_t, zdivSx_f, zdivSy_f
       REAL(wp) :: zms0x, zmsax, zmsbx, zms0y, zmsay, zmsby, zrhoco, zAu, zAv, z1_Mu, z1_Mv, zcorio_u, zCorio_v
-      INTEGER  :: ji, jj, jz, jp
+      INTEGER  :: ji, jj, jp
       REAL(wp), DIMENSION(4) :: zTau_ai      ! air-ice windstress components at relevant points [N/m^2]
       REAL(wp), DIMENSION(4) :: zgrdH
-      REAL(wp), DIMENSION(4) :: zVice, zVoce ! ice & ocean surface velocities at time k                                             [m.s-1]
-      REAL(wp), DIMENSION(4) :: zVice_n      ! ice velocities at time k+1                                                           [m.s-1]
-      REAL(wp), DIMENSION(4) :: zRHSi        ! all the content of the RHS exluding the `-rho_o*CD_o*||U_oce-U_ice||*u_i` at time k  [m.s-2]
-      REAL(wp), DIMENSION(4) :: zZ           ! the `rho_o*CD_o*||U_oce-U_ice||/mass` at time k (`mass` is in `kg.m-2`)               [s-1]
+      REAL(wp), DIMENSION(4) :: zVice        ! ice velocities at time k (for the Coriolis term)                                     [m.s-1]
+      REAL(wp), DIMENSION(4) :: zA           ! all the terms of the RHS/mass except the ice-ocean stress (at time k)                [m.s-2]
       REAL(wp) :: zmltU, zmltV
+      !! Scalars of the SDIRK3 step (loop 2 and `icedyn_rhg_vel_sdirk3.h90`):
+      REAL(wp) :: zui, zvi, zuo, zvo, zAx, zAy, zBp, zun, zvn     ! inputs / outputs of the step for one 2D pair
+      REAL(wp) :: zDx, zDy, zk, zSx, zSy, zSn, zfct               ! slip, `γ*Δt*B`, known part `S` of a stage, `|S|`, closed-form factor
+      REAL(wp) :: zW1x, zW1y, zn1, zW2x, zW2y, zn2, zW3x, zW3y    ! `W = U_o - Y` of stages 1,2,3 and norms `|W|` of stages 1,2
+      REAL(wp) :: zUu_n, zVu_n, zUv_n, zVv_n                      ! new velocities before masking: U-pair (1),(4) and V-pair (3),(2)
       !!----------------------------------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('update_uv_rk3')
-      !$acc data present( pAu,pAv,p1_Mu,p1_Mv,pSt,pSf,pgrdH,pVoce,ptaux_i_u,ptauy_i_v,ptaux_i_v,ptauy_i_u,pm01x,pm01y,pm00x,pm00y,pVice ) create( zTau_ai,zgrdH,zVice,zVice_n,zVoce,zRHSi,zZ )
 
-      !! Divergence of the 2 stress tensors
-      !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-      !$acc parallel loop collapse(2) private(zTau_ai,zgrdH,zVice,zVice_n,zVoce,zRHSi,zZ)
+      !! Allocate the work array `xA_sdk3` at the first call (kept for all the next calls)
+      IF( .NOT. ALLOCATED(xA_sdk3) ) THEN
+         ALLOCATE( xA_sdk3(jpi,jpj,4) )
+         !$acc enter data create( xA_sdk3 )
+      ENDIF
+
+      !$acc data present( pAu,pAv,p1_Mu,p1_Mv,pSt,pSf,pgrdH,pVoce,ptaux_i_u,ptauy_i_v,ptaux_i_v,ptauy_i_u,pm01x,pm01y,pm00x,pm00y,pVice,xA_sdk3 ) create( zTau_ai,zgrdH,zVice,zA )
+
+      !! `rho_o*CD_o`: constant, needed in loop 2 to compute `B = A_ice*rho_o*CD_o/mass`
+      zrhoco = rho0*rn_Cd_io
+
+      !! LOOP 1: divergence of the 2 stress tensors + the terms `A` of RHS/mass => `xA_sdk3`
+      !! ~~~~~~
+      !!   This loop reads neighbour points of the stress tensors but never reads `pVice` at other points,
+      !!   so splitting it from loop 2 (which writes `pVice`) does not change the results.
+      !$acc parallel loop collapse(2) private(zTau_ai,zgrdH,zVice,zA)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
@@ -198,23 +245,14 @@ CONTAINS
 
             !! RHS of the momentum equation
             !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            zrhoco   = rho0*rn_Cd_io
             z1_Mu    = p1_Mu(ji,jj)
             z1_Mv    = p1_Mv(ji,jj)
             zCorio_u = ff_u(ji,jj)
             zCorio_v = ff_v(ji,jj)
-            !
-            zms0x = pm00x(ji,jj)
-            zmsax = pm01x(ji,jj)
-            zmsbx = 1._wp - zmsax
-            zms0y = pm00y(ji,jj)
-            zmsay = pm01y(ji,jj)
-            zmsby = 1._wp - zmsay
             !$acc loop seq
             DO jp=1, 4
                ! Because of a `ld.lld: error: undefined symbol: _FortranAAssign` bug!
                zVice(jp) = pVice(ji,jj,jp)
-               zVoce(jp) = pVoce(ji,jj,jp)
                zgrdH(jp) = pgrdH(ji,jj,jp)
             END DO
 
@@ -224,40 +262,68 @@ CONTAINS
             zTau_ai(3) = ptaux_i_v(ji,jj)
             zTau_ai(4) = ptauy_i_u(ji,jj)
 
-            !! Part of the RHS that is explicit and the `Z` term:
-            !!    `d(u)/dt = RHSi(u[k]) - Z*u[k+1]`
+            !! Term `A` of the momentum equation `dU/dt = A + B*|U_o - U|*(U_o - U)`:
+            !!   all the terms of RHS/mass except the ice-ocean stress, at time k (Coriolis included)
+            !!   (`B` is computed directly in loop 2, cheaper than storing it)
+            CALL RHS_vel_sdirk3( ridlzd, zAu, zAv, z1_Mu, z1_Mv, zdivSx_t, zdivSy_t, zdivSx_f, zdivSy_f, &
+               &                 zgrdH, zTau_ai, zVice, zCorio_u, zCorio_v,  zA )
 
-            CALL RHS_vel_implicit( ridlzd, zrhoco, zAu, zAv, z1_Mu, z1_Mv, zdivSx_t, zdivSy_t, zdivSx_f, zdivSy_f, &
-               &                   zgrdH, zVoce, zTau_ai, zVice, zCorio_u, zCorio_v,  zRHSi, zZ )
-
-
-            !! Convergence on the ocean-ice stress:
-            !!   - 1 itteration is okay for most applications
-            !!   - 4 iterations and the term `rho_o*CD_o*||U_oce-U_ice||/mass` is generally fully converged...
-            DO jz=1, nn_rk3_iter_v
-
-               !IF( ji==20 .AND. jj==15 ) PRINT *, ' * Z term for jz =',INT(jz,1),'=>',REAL(zZ(1),4)
-
-               zVice_n = zVice  +  pdt * IncV_rk3_impl( pdt, zVice, zRHSi, zZ )
-
-               !! Apply masking:
-               zVice_n(1) = ( zmsax * zVice_n(1)  +  zmsbx * pVoce(ji,jj,1) * 0.01_wp ) * zms0x
-               zVice_n(2) = ( zmsay * zVice_n(2)  +  zmsby * pVoce(ji,jj,2) * 0.01_wp ) * zms0y
-               zVice_n(3) = ( zmsay * zVice_n(3)  +  zmsby * pVoce(ji,jj,3) * 0.01_wp ) * zms0y
-               zVice_n(4) = ( zmsax * zVice_n(4)  +  zmsbx * pVoce(ji,jj,4) * 0.01_wp ) * zms0x
-
-               !! Okay we have the velocity forecast at k+1: `zVice_n`, we can update the term `zZ`:
-               IF(jz<nn_rk3_iter_v) CALL update_Z_term( zrhoco, zAu, zAv, z1_Mu, z1_Mv, zVoce, zVice_n,  zZ )
-
-            END DO
-
+            !! Store `A` for loop 2
             !$acc loop seq
             DO jp=1, 4
-               ! Because of a `ld.lld: error: undefined symbol: _FortranAAssign` bug!
-               pVice(ji,jj,jp) = zVice_n(jp)
+               xA_sdk3(ji,jj,jp) = zA(jp)
             END DO
 
-            !IF( ji==20 .AND. jj==15 ) PRINT *, ''
+         END DO
+      END DO
+      !$acc end parallel loop
+
+      !! LOOP 2: SDIRK3 step for the 2 velocity pairs + masking
+      !! ~~~~~~
+      !!   Scalars only and no CALL (the SDIRK3 step is in `icedyn_rhg_vel_sdirk3.h90`), so that the CPU can
+      !!   overlap the long chain of SQRT and divisions of several grid points, and the compiler can vectorize it.
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+
+            !! U-points pair: (1) u@U and (4) v@U, coupled by the norm `|U_o - U|` at U-points
+            !! `B = A_ice*rho_o*CD_o/mass` at U-points
+            zui = pVice(ji,jj,1)
+            zvi = pVice(ji,jj,4)
+            zuo = pVoce(ji,jj,1)
+            zvo = pVoce(ji,jj,4)
+            zAx = xA_sdk3(ji,jj,1)
+            zAy = xA_sdk3(ji,jj,4)
+            zBp = zrhoco * pAu(ji,jj) * p1_Mu(ji,jj)
+#           include "icedyn_rhg_vel_sdirk3.h90"
+            zUu_n = zun
+            zVu_n = zvn
+
+            !! V-points pair: (3) u@V and (2) v@V, coupled by the norm `|U_o - U|` at V-points
+            !! `B = A_ice*rho_o*CD_o/mass` at V-points
+            zui = pVice(ji,jj,3)
+            zvi = pVice(ji,jj,2)
+            zuo = pVoce(ji,jj,3)
+            zvo = pVoce(ji,jj,2)
+            zAx = xA_sdk3(ji,jj,3)
+            zAy = xA_sdk3(ji,jj,2)
+            zBp = zrhoco * pAv(ji,jj) * p1_Mv(ji,jj)
+#           include "icedyn_rhg_vel_sdirk3.h90"
+            zUv_n = zun
+            zVv_n = zvn
+
+            !! Apply masking and store the new velocities (same masking as before)
+            zms0x = pm00x(ji,jj)
+            zmsax = pm01x(ji,jj)
+            zmsbx = 1._wp - zmsax
+            zms0y = pm00y(ji,jj)
+            zmsay = pm01y(ji,jj)
+            zmsby = 1._wp - zmsay
+            pVice(ji,jj,1) = ( zmsax * zUu_n  +  zmsbx * pVoce(ji,jj,1) * 0.01_wp ) * zms0x
+            pVice(ji,jj,2) = ( zmsay * zVv_n  +  zmsby * pVoce(ji,jj,2) * 0.01_wp ) * zms0y
+            pVice(ji,jj,3) = ( zmsay * zUv_n  +  zmsby * pVoce(ji,jj,3) * 0.01_wp ) * zms0y
+            pVice(ji,jj,4) = ( zmsax * zVu_n  +  zmsbx * pVoce(ji,jj,4) * 0.01_wp ) * zms0x
+
          END DO
       END DO
       !$acc end parallel loop
@@ -267,221 +333,54 @@ CONTAINS
    END SUBROUTINE update_uv_rk3
 
 
-   SUBROUTINE RHS_vel_implicit( pidlzd, prhoco, pAu, pAv, p1_Mu, p1_Mv, pdivSx_t, pdivSy_t, pdivSx_f, pdivSy_f, &
-      &                         pgrdH, pVoce, pTau_ai, pV, zcor_u, zcor_v,  pRHSi, pZ )
+   SUBROUTINE RHS_vel_sdirk3( pidlzd, pAu, pAv, p1_Mu, p1_Mv, pdivSx_t, pdivSy_t, pdivSx_f, pdivSy_f, &
+      &                       pgrdH, pTau_ai, pV, pcor_u, pcor_v,  pA )
       !!----------------------------------------------------------------------------------------------
       !$acc routine seq
       !!----------------------------------------------------------------------------------------------
-      !!   It's the RHS but without the term : ``-rho_o*CD_o*||U_oce-U_ice||*u_i``
+      !!   Terms of the momentum equation, in the form used by the SDIRK3 step (`icedyn_rhg_vel_sdirk3.h90`):
       !!
-      !!  Because implicitness is obrained by using the `u_i[k+1]` in the bottom stress
+      !!      `dU/dt = A + B*|U_o - U|*(U_o - U)`
       !!
+      !!   * `A = 1/mass * [ div(h*sigma) + A_ice*Tau_air ] + Coriolis(U[k]) + (-g*grad[SSH])`   [m.s-2]
+      !!        => all the terms except the ice-ocean stress
+      !!        => the Coriolis term uses the ice velocities at time k, so `A` is constant in terms of `U[k+1]`
+      !!   * `B = A_ice*rho_o*CD_o/mass`   [m-1]
+      !!        => coefficient of the ice-ocean stress term, NOT computed here:
+      !!           it is computed directly in loop 2 of `update_uv_rk3` (cheaper than storing it)
       !!
-      !!  * Traditional explicit RHS:
-      !!         d(u)/dt = RHS(u[k])
-      !!       with `RHS(u[k])  =  1/mass * [ div(h*sigma) + A*Tau_air(u[k]) + A*rho_o*CD_o*||u_o-u[k]||*(u_o-u[k]) + Coriolis(u[k]) ]  [m.s-2]
-      !!
-      !!
-      !!  * This "implicit" RHS, ""RHSi"":
-      !!         `d(u)/dt = RHSi(u[k]) - Z*u[k+1]`
-      !!       with `RHSi(u[k]) = 1/mass * [ div(h*sigma) + A*Tau_air(u[k]) + A*rho_o*CD_o*||u_o-u[k]||*u_o       + Coriolis(u[k]) ]   [m.s-2]
-      !!                     `Z = 1/mass * A*rho_o*CD_o*||u_o-u[k]||`    [s-1]
-      !!
-      !!
-      !!  `mass` is in [kg.m-2]
-      !!
-      !! For convenience, the term `rho_o*CD_o*||u_o-u[k]||` is called `zTo`   [kg.s-1.m-2]
-      !!
+      !!   Only `A` is computed here. `mass` is in [kg.m-2], `A_ice` is the ice concentration.
+      !!   The 4 components are: (1) u@U, (2) v@V, (3) u@V, (4) v@U
       !!----------------------------------------------------------------------------------------------
       REAL(wp),               INTENT(in)  :: pidlzd      ! idealized (0.) case, or not (1.)
-      REAL(wp),               INTENT(in)  :: prhoco      ! \rho_oce * CD_oce
-      REAL(wp),               INTENT(in)  :: pAu, pAv    ! Ice concentration
-      REAL(wp),               INTENT(in)  :: p1_Mu, p1_Mv  ! `1/mass` @U and @V                 [m2.kg-1]
+      REAL(wp),               INTENT(in)  :: pAu, pAv    ! Ice concentration @U and @V
+      REAL(wp),               INTENT(in)  :: p1_Mu, p1_Mv ! `1/mass` @U and @V                                [m2.kg-1]
       REAL(wp),               INTENT(in)  :: pdivSx_t, pdivSy_t, pdivSx_f, pdivSy_f ! 4 comp. of the divergence of the stress tensor
-      REAL(wp), DIMENSION(4), INTENT(in)  :: pgrdH    ! `-g*grad[SSH]` [m.s-2]
-      REAL(wp), DIMENSION(4), INTENT(in)  :: pVoce    ! the 4 ocean velocity components
-      REAL(wp), DIMENSION(4), INTENT(in)  :: pTau_ai   ! the 4 air-ice wind stress components
-      REAL(wp), DIMENSION(4), INTENT(in)  :: pV       ! the 4 sea-ice velocity components
-      REAL(wp),               INTENT(in)  :: zcor_u, zcor_v
-      REAL(wp), DIMENSION(4), INTENT(out) :: pRHSi    !  [m.s-2]
-      REAL(wp), DIMENSION(4), INTENT(out) :: pZ       !  [s-1]
+      REAL(wp), DIMENSION(4), INTENT(in)  :: pgrdH       ! `-g*grad[SSH]`                                     [m.s-2]
+      REAL(wp), DIMENSION(4), INTENT(in)  :: pTau_ai     ! the 4 air-ice wind stress components               [N.m-2]
+      REAL(wp), DIMENSION(4), INTENT(in)  :: pV          ! the 4 sea-ice velocity components at time k        [m.s-1]
+      REAL(wp),               INTENT(in)  :: pcor_u, pcor_v ! Coriolis parameter @U and @V                    [s-1]
+      REAL(wp), DIMENSION(4), INTENT(out) :: pA          ! all the terms except the ice-ocean stress          [m.s-2]
       !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zUu, zVu, zUu_o, zVu_o, zUv, zVv, zUv_o, zVv_o, z1_Mu, z1_Mv
-      REAL(wp) :: zTo, zcorio, zt1, zt2, zRHS
+      REAL(wp) :: zUu, zVv, zUv, zVu
       !!----------------------------------------------------------------------------------------------
-      !
-      z1_Mu  = p1_Mu ! 1/mass (ice+snow) per surface unit at u-points
-      zUu    = pV(1)    ! U at u-points!
-      zUu_o  = pVoce(1)   ! U ocean current at u-points!
-      zVu    = pV(4)   ! V at u-points!
-      zVu_o  = pVoce(4)   ! V ocean current at u-points!
-      !
-      z1_Mv  = p1_Mv ! 1/mass (ice+snow) per surface unit at v-points
-      zVv    = pV(2)    ! V at v-points!
-      zVv_o  = pVoce(2)   ! V ocean current at v-points!
-      zUv    = pV(3)   ! V at u-points!
-      zUv_o  = pVoce(3)   ! U ocean current at v-points!
 
-      !====================================q==========================================================
-      zt1 = zUu_o - zUu
-      zt2 = zVu_o - zVu
-      zTo = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      !
-      zCorio =   zcor_u * zVu ! Coriolis/m at Uu-points (no interpolation needed) [m.s-2]
-      !
-      !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
-      zRHS = pdivSx_t + pAu*( pTau_ai(1) + zTo*zUu_o )  ! [Pa] = [kg.m-1.s-2]
-      !
-      pRHSi(1) = z1_Mu * zRHS  +  pidlzd*(zCorio + pgrdH(1)) ! [m.s-2]
-      pZ(1)    = z1_Mu * pAu * zTo
-      !==============================================================================================
+      !! Ice velocities at time k, needed for the Coriolis term
+      zUu = pV(1)   ! U at U-points
+      zVv = pV(2)   ! V at V-points
+      zUv = pV(3)   ! U at V-points
+      zVu = pV(4)   ! V at U-points
 
-      !==============================================================================================
-      zt1 = zVv_o - zVv
-      zt2 = zUv_o - zUv
-      zTo = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
+      !! (1) u@U: stress divergence + wind stress, then Coriolis (uses V@U, no interpolation needed) + SSH gradient
+      pA(1) = p1_Mu * ( pdivSx_t + pAu*pTau_ai(1) )  +  pidlzd*(   pcor_u*zVu + pgrdH(1) )
+      !! (2) v@V: stress divergence + wind stress, then Coriolis (uses U@V, no interpolation needed) + SSH gradient
+      pA(2) = p1_Mv * ( pdivSy_t + pAv*pTau_ai(2) )  +  pidlzd*( - pcor_v*zUv + pgrdH(2) )
+      !! (3) u@V: stress divergence + wind stress, then Coriolis (uses V@V, no interpolation needed) + SSH gradient
+      pA(3) = p1_Mv * ( pdivSx_f + pAv*pTau_ai(3) )  +  pidlzd*(   pcor_v*zVv + pgrdH(3) )
+      !! (4) v@U: stress divergence + wind stress, then Coriolis (uses U@U, no interpolation needed) + SSH gradient
+      pA(4) = p1_Mu * ( pdivSy_f + pAu*pTau_ai(4) )  +  pidlzd*( - pcor_u*zUu + pgrdH(4) )
       !
-      zCorio = - zcor_v * zUv ! Coriolis/m at Vv-points (no interpolation needed) [m.s-2]
-      !
-      !                 !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
-      zRHS = pdivSy_t + pAv*( pTau_ai(2) + zTo*zVv_o ) ! [Pa] = [kg.m-1.s-2]
-      !
-      pRHSi(2) = z1_Mv * zRHS  +  pidlzd*(zCorio + pgrdH(2))  ![m.s-2]
-      pZ(2)    = z1_Mv * pAv * zTo
-      !==============================================================================================
-
-      !==============================================================================================
-      zt1 = zUv_o - zUv
-      zt2 = zVv_o - zVv
-      zTo = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      !
-      zCorio =   zcor_v * zVv ! Coriolis/m at Uv-points (no interpolation needed) [m.s-2]
-      !
-      !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
-      zRHS = pdivSx_f + pAv*( pTau_ai(3) + zTo*zUv_o ) ! [Pa] = [kg.m-1.s-2]
-      !
-      pRHSi(3) = z1_Mv * zRHS  +  pidlzd*(zCorio + pgrdH(3)) ![m.s-2]
-      pZ(3)    = z1_Mv * pAv * zTo
-      !==============================================================================================
-
-      !==============================================================================================
-      zt1   = zVu_o - zVu
-      zt2   = zUu_o - zUu
-      zTo = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      !
-      zCorio = - zcor_u * zUu ! Coriolis/m at Vu-points (no interpolation needed) [m.s-2]
-      !
-      !--- Sum of external forces (explicit solution) = F + tau_ia + Coriolis + spg + tau_io
-      zRHS = pdivSy_f + pAu*( pTau_ai(4) + zTo*zVu_o ) ! [Pa] = [kg.m-1.s-2]
-      !
-      pRHSi(4) = z1_Mu * zRHS  +  pidlzd*(zCorio + pgrdH(4)) ![m.s-2]
-      pZ(4)    = z1_Mu * pAu * zTo
-      !==============================================================================================
-
-   END SUBROUTINE RHS_vel_implicit
-
-
-
-   SUBROUTINE update_Z_term( prhoco, pAu, pAv, p1_Mu, p1_Mv, pVoce, pV,  pZ )
-      !!----------------------------------------------------------------------------------------------
-      !$acc routine seq
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp),               INTENT(in)  :: prhoco      ! \rho_oce * CD_oce
-      REAL(wp),               INTENT(in)  :: pAu, pAv    ! Ice concentration
-      REAL(wp),               INTENT(in)  :: p1_Mu, p1_Mv  ! `1/mass` @U and @V                 [m2.kg-1]
-      REAL(wp), DIMENSION(4), INTENT(in)  :: pVoce    ! the 4 ocean velocity components
-      REAL(wp), DIMENSION(4), INTENT(in)  :: pV       ! the 4 sea-ice velocity components
-      REAL(wp), DIMENSION(4), INTENT(out) :: pZ       !  [s-1]
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zUu, zVu, zUu_o, zVu_o, zUv, zVv, zUv_o, zVv_o, z1_Mu, z1_Mv, zTo, zt1, zt2
-      !!----------------------------------------------------------------------------------------------
-      !
-      z1_Mu  = p1_Mu ! 1/mass (ice+snow) per surface unit at u-points
-      zUu    = pV(1)    ! U at u-points!
-      zUu_o  = pVoce(1)   ! U ocean current at u-points!
-      zVu    = pV(4)   ! V at u-points!
-      zVu_o  = pVoce(4)   ! V ocean current at u-points!
-      !
-      z1_Mv  = p1_Mv ! 1/mass (ice+snow) per surface unit at v-points
-      zVv    = pV(2)    ! V at v-points!
-      zVv_o  = pVoce(2)   ! V ocean current at v-points!
-      zUv    = pV(3)   ! V at u-points!
-      zUv_o  = pVoce(3)   ! U ocean current at v-points!
-      !====================================q==========================================================
-      zt1   = zUu_o - zUu
-      zt2   = zVu_o - zVu
-      zTo   = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      pZ(1) = z1_Mu * pAu * zTo
-      !==============================================================================================
-      zt1   = zVv_o - zVv
-      zt2   = zUv_o - zUv
-      zTo   = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      pZ(2) = z1_Mv * pAv * zTo
-      !==============================================================================================
-      zt1   = zUv_o - zUv
-      zt2   = zVv_o - zVv
-      zTo   = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      pZ(3) = z1_Mv * pAv * zTo
-      !==============================================================================================
-      zt1   = zVu_o - zVu
-      zt2   = zUu_o - zUu
-      zTo = prhoco * SQRT( zt1*zt1 + zt2*zt2 )
-      pZ(4)    = z1_Mu * pAu * zTo
-      !==============================================================================================
-   END SUBROUTINE update_Z_term
-
-
-   FUNCTION IncV_rk3_impl( pdt, pV, pRHS, pZ )
-      !!----------------------------------------------------------------------------------------------
-      !$acc routine seq
-      !!----------------------------------------------------------------------------------------------
-      !!   Implicit RK3 operator for ice velocities update
-      !!     => using the coefficients of "Lobatto IIIA"
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(4)             :: IncV_rk3_impl
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp),               INTENT(in) :: pdt   ! small time-step [s]
-      REAL(wp), DIMENSION(4), INTENT(in) :: pV    ! velocities at time k                                                             [m.s-1]
-      REAL(wp), DIMENSION(4), INTENT(in) :: pRHS  ! all the content of the RHS exluding the `-rho_o*CD_o*||U_oce-U_ice||*u_i` at time k  [m.s-2]
-      REAL(wp), DIMENSION(4), INTENT(in) :: pZ    ! the `rho_o*CD_o*||U_oce-U_ice||/mass` at time k (`mass` is in `kg.m-2`)              [s-1]
-      !!
-      REAL(wp) :: Uuk, Vvk, Uvk, Vuk
-      REAL(wp) :: Ruu, Rvv, Ruv, Rvu
-      REAL(wp) :: Zxx, Zyy, Zxy, Zyx
-      REAL(wp) :: zdum
-      !!----------------------------------------------------------------------------------------------
-      !
-      Uuk = pV(1)
-      Vvk = pV(2)
-      Uvk = pV(3)
-      Vuk = pV(4)
-      !
-      Ruu = pRHS(1)
-      Rvv = pRHS(2)
-      Ruv = pRHS(3)
-      Rvu = pRHS(4)
-      !
-      Zxx = pZ(1)
-      Zyy = pZ(2)
-      Zxy = pZ(3)
-      Zyx = pZ(4)
-      !
-      zdum = pdt*Zxx
-      IncV_rk3_impl(1) = (12._wp*(Ruu - Uuk*Zxx)) / (12._wp + 6._wp*zdum + zdum*zdum)
-
-      zdum = pdt*Zyy
-      IncV_rk3_impl(2) = (12._wp*(Rvv - Vvk*Zyy)) / (12._wp + 6._wp*zdum + zdum*zdum)
-
-      zdum = pdt*Zxy
-      IncV_rk3_impl(3) = (12._wp*(Ruv - Uvk*Zxy)) / (12._wp + 6._wp*zdum + zdum*zdum)
-
-      zdum = pdt*Zyx
-      IncV_rk3_impl(4) = (12._wp*(Rvu - Vuk*Zyx)) / (12._wp + 6._wp*zdum + zdum*zdum)
-      !
-   END FUNCTION IncV_rk3_impl
-
-
-
+   END SUBROUTINE RHS_vel_sdirk3
 
 
 

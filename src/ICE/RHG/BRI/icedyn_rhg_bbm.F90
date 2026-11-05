@@ -52,8 +52,11 @@ MODULE icedyn_rhg_bbm
    REAL(wp), SAVE :: rk0  ! factor to stiffness matrix => 1._wp / ( 1._wp - rnup*rnup)
    REAL(wp), SAVE :: rk11p12, rk11m12, rk12p22, rk12m22, rk33 ! elements of stiffness matrix
    REAL(wp), SAVE :: rsqrt_E0 ! Constant part of Eq.28
+   ! Ratio `eta0/E0` [s]: since `eta = eta0*X^5` and `E = E0*X` (with `X = (1-d)*exp(-C*(1-A))`),
+   ! lambda = eta/E = (eta0/E0)*X^4 => precomputing this ratio removes one division per grid point.
+   REAL(wp), SAVE :: r_eta0_E0
    REAL(wp), SAVE :: rdtbri, r1_dtbri !: small time step (time splitting) [s] and its inverse [1/s]
-   !$acc declare create( rk0, rk11p12, rk11m12, rk12p22, rk12m22, rk33, rsqrt_E0, rdtbri, r1_dtbri )
+   !$acc declare create( rk0, rk11p12, rk11m12, rk12p22, rk12m22, rk33, rsqrt_E0, r_eta0_E0, rdtbri, r1_dtbri )
 
    !! Work arrays specific to BBM:
    INTEGER(1), ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   kmsk01x, kmsk01y     ! dummy arrays
@@ -61,6 +64,9 @@ MODULE icedyn_rhg_bbm
    REAL(wp),   ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   xxpCt, xxpCf
    REAL(wp),   ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   xPmax_t, xPmax_f
    REAL(wp),   ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   xScHt, xScHf     ! factors to scale cohesion and `Nlim` to local grid resolution
+   ! Eccentricity of the "Pmax" ellipse, `|Pmax*h| / (C*h)` @T & @F: it only depends on fields that do not change
+   ! during the `jter=1,nbrttl` sub-time-step loop, so we compute it once per big time step rather than at each sub-step:
+   REAL(wp),   ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   xEcct, xEccf
    REAL(wp),   ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   xxmU, xxmV           ! `ln_bri_rk3=F` => `ice-snow_mass / dt` on U/V points
    !                                                                         ! `ln_bri_rk3=T` => `1/ice-snow_mass`
    REAL(wp),   ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   xgrdH               ! surface pressure gradient at U/V points
@@ -70,7 +76,8 @@ MODULE icedyn_rhg_bbm
    CHARACTER(len=15), PARAMETER :: crtnm = 'ice_dyn_rhg_bbm'
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -279,6 +286,12 @@ CONTAINS
             xScHt(ji,jj)  = ( rn_l_ref / REAL(res_grd_loc_t(ji,jj),wp) )**rn_pow_scl_res * zht  ! to scale cohesion / Δx in Mohr-Coulomn test (! multiply with `h` "  " ")
             xScHf(ji,jj)  = ( rn_l_ref / REAL(res_grd_loc_f(ji,jj),wp) )**rn_pow_scl_res * zhf  !       "        "       "        "       "        "       "        "
             !
+            ! Eccentricity of the "Pmax" ellipse that crosses the `sigma_II` axis right at the cohesion value `C*h`
+            ! (cohesion scaled to the local `Δx` * h). Computed here, once per big time step, because `Pmax*h` and
+            ! `C*h` do not change during the sub-time-step loop => saves 2 divisions per point at each sub-step:
+            xEcct(ji,jj) = ABS(xPmax_t(ji,jj)) / MAX( rn_c_ref*xScHt(ji,jj) , epsi20 )
+            xEccf(ji,jj) = ABS(xPmax_f(ji,jj)) / MAX( rn_c_ref*xScHf(ji,jj) , epsi20 )
+            !
          ENDDO
       ENDDO
       !$acc end parallel loop
@@ -300,13 +313,13 @@ CONTAINS
 
          ! ---  Updates the components of the vertically-integrated internal stress tensor and the damage in both T- & F-centric worlds ---
          !           => based on previously computed ice velocities...
-         CALL update_sigma_d( kt, jter, rdtbri, V_ts, at_i, af_i, xxpCt, xxpCf, xScHt, xScHf, xPmax_t, xPmax_f, &
+         CALL update_sigma_d( kt, jter, rdtbri, V_ts, at_i, af_i, xxpCt, xxpCf, xScHt, xScHf, xEcct, xEccf, xPmax_t, xPmax_f, &
             &                                   xht, xhf, SIGMAt, SIGMAf, dmdt, dmdf, SI2t, SI2f )
          !           => `sigmas` & `d` ok on whole `Nis0-1:Nie0+1,Njs0-1:Nje0+1` ! (provided `V_ts` was fully lbclinked!)
 
          ! --- Computation of ice velocity --- ! (`Nis0:Nie0,Njs0:Nje0`)
          IF( ln_bri_rk3 ) THEN
-            ! ==> Update velocities using IMPLICIT RK3 scheme "Lobatto IIIA" (implicit in terms of ice velocity for the bottom ice-water drag)
+            ! ==> Update velocities using IMPLICIT RK3 scheme SDIRK3 of Alexander (1977) (each stage is solved exactly for the bottom ice-water drag)
             CALL update_uv_rk3( jter, rdtbri, au_i, av_i, xxmU, xxmV, SIGMAt, SIGMAf, xgrdH, V_oce, xtmp1, xtmp2, xtmp3, xtmp4, &
                &                              kmsk01x, kmsk01y, kmsk00x, kmsk00y, ucncl, vcncl, V_ts )
          ELSE
@@ -369,7 +382,7 @@ CONTAINS
       !!-------------------------------------------------------------------
       !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
       !!-------------------------------------------------------------------
-      INTEGER  ::   ierr
+      INTEGER  ::   ierr, nb_wet_cold, kold
       REAL(wp) ::   zdx_m, zce, zdts
       REAL(wp) ::   zk11, zk22, zk12
       REAL(wp), DIMENSION(jpi,jpj) :: zt1
@@ -396,18 +409,44 @@ CONTAINS
 
       rsqrt_E0      = SQRT( rn_E0 )
 
-      ! Find the smallest `Δx` of the whole WET domain:
-      zt1(:,:) = REAL( res_grd_loc_t(:,:) , 4 ) ! SQRT(Δx*Δy)
-      zt1(:,:) = MERGE( zt1(:,:) , 1.E12_wp , (xmskt(:,:) > 0.9_wp) )  ! => stupidly big value over continents...
-      zdx_m = MINVAL( zt1 )                        ! min of Δx local
-      CALL mpp_min( crtnm//'_init', zdx_m) ! min of dx over the whole domain
+      ! Ratio `eta0/E0` used to compute lambda = eta/E = (eta0/E0)*X^4 without a division at each grid point:
+      r_eta0_E0     = rn_eta0 / rn_E0
+
+      !! We need a bulk Δx of the grid to estimate the bulk propagation speed of compressional elastic waves
+      !!  => to deduce a CFL for the time-splitting of the brittle rheology
+      !!  * using the smallest Δx is not the best option (in global or Arctic confs it will use the tiny Δx in
+      !!    the Canadian archipelago, leading to an obscenely restrictive CFL !
+      !!  * instead, we rather use the the mean Δx of the wet domain where the presence of sea-ice is not silly: (ABS(latitude)> 55.)
+      zt1(:,:) = xmskt(:,:)
+      WHERE( ABS(gphit(:,:)) < 55._wp ) zt1(:,:) = 0._wp
+      nb_wet_cold = INT( SUM( zt1(Nis0:Nie0,Njs0:Nje0) ) ) ! number of wet & "cold" points over local MPI domain
+      zdx_m = MERGE( SUM( res_grd_loc_t(Nis0:Nie0,Njs0:Nje0) * zt1(Nis0:Nie0,Njs0:Nje0) ) / REAL(nb_wet_cold,wp)  ,  0._wp  ,  nb_wet_cold > 0 ) ! Mean Δx over local MPI domain
+      kold = MAX( MIN(nb_wet_cold,1) , 0 ) ! `1` if cold MPI domain `0` otherwize
+      CALL mpp_sum( crtnm//'_init', kold ) ! sum of cold domains
+      CALL mpp_sum( crtnm//'_init', zdx_m )
+      IF(lwp) WRITE(numout,'("   * ",i4.4," out of ",i4.4," MPI domains qualify as `cold climate` domains!")') kold, jpnij
+      !zdx_m = zdx_m / REAL( jpnij , wp ) !  Mean Δx over wet computational domain
+      zdx_m = zdx_m / REAL( kold , wp ) !  Mean Δx over wet "cold" computational domain
+      !
+      ! Find the smallest Δx of the whole WET domain:
+      !zt1(:,:) = REAL( res_grd_loc_t(:,:) , 4 ) ! SQRT(Δx*Δy)
+      !zt1(:,:) = MERGE( zt1(:,:) , 1.E12_wp , (xmskt(:,:) > 0.9_wp) )  ! => stupidly big value over continents...
+      !zdx_m = MINVAL( zt1 )                        ! min of Δx local
+      !CALL mpp_min( crtnm//'_init', zdx_m) ! min of dx over the whole domain
 
       ! time step adjusted automatically
       ! ********************************
       ! we look at the propagation speed of elastic waves (zce), 2) the time step to solve them (zdts)
       !        and the the number of iterations needed (`nbrttl`) to go from t to t+dt
-      zce = rsqrt_E0 / rsqrt_nu_rhoi            ! propagation speed of shearing elastic waves based on the mean `Δx`
-      zdts = 0.5_wp*(zdx_m/zce)                 ! largest theoretical small time-step to consider to resolve these waves
+      ! The criterion used to be based on the propagation speed of SHEAR elastic waves:
+      !     c_s = SQRT( E0 / (2*(1+nu)*rhoi) )  (= rsqrt_E0 / rsqrt_nu_rhoi)
+      ! It is now based on the propagation speed of COMPRESSIONAL elastic waves (plane stress), which are faster
+      ! (c_p/c_s = SQRT(2/(1-nu)) = SQRT(3) for nu=1/3) and therefore give the stricter (safer) stability limit,
+      ! since the stiffness matrix above (rk0, rk33) allows these waves to propagate in the scheme:
+      !     c_p = SQRT( E0 / ((1-nu^2)*rhoi) )  (= rsqrt_E0 * SQRT(rk0 / rhoi), as rk0 = 1/(1-nu^2))
+      ! Consequence: `nbrttl` is larger by a factor SQRT(3) (~ +73%) than with the former shear-wave criterion.
+      zce = rsqrt_E0 * SQRT( rk0 / rhoi )       ! propagation speed of compressional elastic waves based on the mean Δx
+      zdts = 0.45_wp*(zdx_m/zce)                ! largest theoretical small time-step to consider to resolve these waves (√2/π ≈ 0,45)
       zdts = rn_cfl_coeff * zdts                ! with user input
       nbrttl = INT( CEILING( rDt_ice / zdts ) ) ! number of iterations (local to init, cf below for nbrttl)
       nbrttl = nbrttl + MOD(nbrttl, 2)          ! + make it an even number
@@ -419,9 +458,9 @@ CONTAINS
 
       IF( lwp ) THEN
          WRITE(numout,*) '  * Big time step (advection & thermo)  => rDt_ice  =', REAL(rDt_ice,4), ' [s]'
-         WRITE(numout,*) '  * Min `dx` of wet computational domain = ', REAL(zdx_m/1000._wp,4), ' [km]'
-         WRITE(numout,*) '     ==> propagation speed of shearing elastic waves => c_e =', REAL(zce,4), '[m/s]'
-         WRITE(numout,*) '     ==> time-step requirement to resolve these waves: dt = 0.5*(dx/c_e) =', REAL(0.5_wp*(zdx_m/zce),4), ' [s]'
+         WRITE(numout,*) '  * Mean `dx` over wet "cold-climate" part of domain = ', REAL(zdx_m/1000._wp,4), ' [km]'
+         WRITE(numout,*) '     ==> propagation speed of compressional elastic waves => c_e =', REAL(zce,4), '[m/s]'
+         WRITE(numout,*) '     ==> time-step requirement to resolve these waves: dt = 0.45*(dx/c_e) =', REAL(0.45_wp*(zdx_m/zce),4), ' [s]'
          WRITE(numout,*) '     ==> adaptation of `dt` based on pick of `rn_cfl_coeff`  :        dt =', REAL(zdts,4), ' [s]'
          WRITE(numout,*) '         => implies a `nbrttl` =', INT(nbrttl,2)
          WRITE(numout,*) '         => implies a sub time step (rheology) => rdtbri =', REAL(rdtbri,4),  ' [s]'
@@ -444,22 +483,24 @@ CONTAINS
       ALLOCATE( kmsk01x(jpi,jpj), kmsk01y(jpi,jpj),  kmsk00x(jpi,jpj), kmsk00y(jpi,jpj),  &
          &      xxmU(jpi,jpj), xxmV(jpi,jpj),      xxpCt(jpi,jpj),   xxpCf(jpi,jpj),  &
          &      xgrdH(jpi,jpj,4), xScHt(jpi,jpj), xScHf(jpi,jpj),                    &
-         &      xPmax_t(jpi,jpj), xPmax_f(jpi,jpj),                                       &
+         &      xPmax_t(jpi,jpj), xPmax_f(jpi,jpj), xEcct(jpi,jpj), xEccf(jpi,jpj),       &
          &      STAT = ierr )
       !
       kmsk01x(:,:) = 0 ;  kmsk01y(:,:) = 0 ; kmsk00x(:,:) = 0 ; kmsk00y(:,:) = 0
       xgrdH(:,:,:) = 0._wp
+      ! Eccentricity arrays: set to 0 everywhere so that points never touched by the computation loop are defined:
+      xEcct(:,:) = 0._wp ; xEccf(:,:) = 0._wp
 
       CALL mpp_sum( crtnm//'_init', ierr )
       IF( ierr /= 0 )   CALL ctl_stop('STOP', crtnm//'_init : unable to allocate work arrays')
 
 #if defined _OPENACC || defined _OPENMP
-      !$acc update device ( nbrttl, rk0, rk11p12, rk11m12, rk12p22, rk12m22, rk33, rsqrt_E0, rdtbri, r1_dtbri )
+      !$acc update device ( nbrttl, rk0, rk11p12, rk11m12, rk12p22, rk12m22, rk33, rsqrt_E0, r_eta0_E0, rdtbri, r1_dtbri )
       PRINT *, ' * info GPU: '//crtnm//'_init() => adding work arrays to memory!'
       !$acc enter data copyin( kmsk01x, kmsk01y, kmsk00x, kmsk00y, xxmU, xxmV )
       PRINT *, '    ==> kmsk01x, kmsk01y, kmsk00x, kmsk00y, xxmU, xxmV'
-      !$acc enter data copyin( xxpCt, xxpCf, xgrdH, xPmax_t, xPmax_f, xScHt, xScHf )
-      PRINT *, '    ==> xxpCt, xxpCf, xgrdH, xPmax_t, xPmax_f, xScHt, xScHf'
+      !$acc enter data copyin( xxpCt, xxpCf, xgrdH, xPmax_t, xPmax_f, xScHt, xScHf, xEcct, xEccf )
+      PRINT *, '    ==> xxpCt, xxpCf, xgrdH, xPmax_t, xPmax_f, xScHt, xScHf, xEcct, xEccf'
 #endif
 
       IF( ln_MCx_test )  CALL MC_ud_d_s_mwp_init()
@@ -467,7 +508,7 @@ CONTAINS
    END SUBROUTINE ice_dyn_rhg_bbm_init
 
 
-   SUBROUTINE update_sigma_d( kt, kts, pdt, pV4, pAt, pAf, pxpCt, pxpCf, pScHt, pScHf, pPmax_t, pPmax_f, &
+   SUBROUTINE update_sigma_d( kt, kts, pdt, pV4, pAt, pAf, pxpCt, pxpCf, pScHt, pScHf, pEcct, pEccf, pPmax_t, pPmax_f, &
       &                                     pht, phf, psgmt, psgmf, p1mdt, p1mdf, pSI2t, pSI2f )
       !!----------------------------------------------------------------------
       !!                    ***  ROUTINE UPDATE_SIGMA_D  ***
@@ -484,7 +525,8 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj,4), INTENT(in)    :: pV4              ! the 4 components of sea-ice velocity
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pAt, pAf         ! Ice concentration @T & @F
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pxpCt, pxpCf     ! EXP( rn_C0*(1 - A) ) @T & @F
-      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pScHt, pScHf ! `Scaling factor * h` (w.r.t. local `Δx`) for the cohesion and `Nlim` @T & @F
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pScHt, pScHf ! `Scaling factor * h` (w.r.t. local Δx) for the cohesion and `Nlim` @T & @F
+      REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pEcct, pEccf     ! Eccentricity of the "Pmax" ellipse `|Pmax*h|/(C*h)` @T & @F
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pPmax_t, pPmax_f ! `Pmax * h`  @T & @F
       REAL(wp), DIMENSION(jpi,jpj),   INTENT(in)    :: pht, phf         ! Ice thickness @T & @F
       REAL(wp), DIMENSION(jpi,jpj,3), INTENT(inout) :: psgmt            ! T-centric vertically-integrated stress tensor [N/m^2*m]
@@ -494,17 +536,18 @@ CONTAINS
       !!----------------------------------------------------------------------
       REAL(wp) :: zfc, zml, zdum
       REAL(wp) :: zs2, zs12
-      REAL(wp) :: zh, zE, zeta, zL, zc0, zmul
+      REAL(wp) :: zh, zE, zL, zc0, zmul
       REAL(wp) :: zE1, zE2
       REAL(wp) :: ze11t, ze22t, ze12t, ze11f, ze22f, ze12f
       REAL(wp) :: zxpC, z1md, zsigI, zsigII
       REAL(wp) :: zPmax, zPtld
-      REAL(wp) :: z1_sigI, zecc, zCohe
+      REAL(wp) :: z1_sigI, zecc
       !!----------------------------------------------------------------------
-      REAL(wp)               :: zxpCt, zScHt, zht, z1mdt, zmskt
-      REAL(wp)               :: zxpCf, zScHf, zhf, z1mdf, zmskf
+      REAL(wp)               :: zxpCt, zEcct, zht, z1mdt, zmskt
+      REAL(wp)               :: zxpCf, zEccf, zhf, z1mdf, zmskf
       REAL(wp)               :: zPmax_t, zPmax_f
-      REAL(wp)               :: zSI1t, zSI2t, zSI1f, zSI2f
+      REAL(wp)               :: zfac_t, zfac_f ! RK3 implicit factors `12*dt/(12 + 6*dt*G + (dt*G)^2)` @T & @F
+      REAL(wp)               :: zSI2t, zSI2f
       REAL(wp), DIMENSION(6) :: zSR ! T- & F- centric strain-rate tensor components at time `t=k` [s^-1] // [1,2,6]@T [4,5,3]@F
       REAL(wp), DIMENSION(3) :: zsgmt, zsgmf
       REAL(wp), DIMENSION(6) :: zK
@@ -546,73 +589,74 @@ CONTAINS
          ! Update of stress tensors using implicit RK3 scheme "Lobatto IIIA"
          ! =================================================================
 
-         !$acc data present( pV4,pxpCt,pxpCf,pScHt,pScHf,pPmax_t,pPmax_f,pht,phf,psgmt,psgmf,p1mdt,p1mdf ) create( zSR,zsgmt,zsgmf,zK,zG )
+         !$acc data present( pV4,pxpCt,pxpCf,pEcct,pEccf,pPmax_t,pPmax_f,pht,phf,psgmt,psgmf,p1mdt,p1mdf ) create( zSR,zsgmt,zsgmf,zK,zG )
 
          !$acc parallel loop collapse(2) private( zSR,zsgmt,zsgmf,zK,zG )
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
 
+               ! Land-sea masks @T & @F (needed by the strain-rate includes below, and by the RHS):
                zmskt = xmskt(ji,jj) ; zmskf = xmskf(ji,jj)
 
-               !! *** T-centric grid ***
+               ! Strain-rate tensor components on the T-centric grid:
 #              include "icedyn_rhg_bri_strn_t.h90"
                !        => uses `ji-1` & `jj-1`
                ! ==> ze11t, ze22t, ze12t
 
-               !! *** F-centric grid ***
-
+               ! Strain-rate tensor components on the F-centric grid:
 #              include "icedyn_rhg_bri_strn_f.h90"
                !        => uses `ji+1` & `jj+1`
                ! ==> ze11f, ze22f, ze12f
 
+               ! Pack the 6 strain-rate components into one vector, in the order expected by `RHS_sigmah_impl`:
                zSR(1) = ze11t ; zSR(4) = ze11f
                zSR(2) = ze22t ; zSR(5) = ze22f
                zSR(6) = ze12t ; zSR(3) = ze12f
 
-               ! Now time for the RK3 stuff..
+               ! Copy the local values needed by the RHS into scalars (T & F):
                zxpCt    =   pxpCt(ji,jj)    ;   zxpCf    =   pxpCf(ji,jj)
-               zScHt    =   pScHt(ji,jj)    ;   zScHf    =   pScHf(ji,jj)
+               zEcct    =   pEcct(ji,jj)    ;   zEccf    =   pEccf(ji,jj)
                zPmax_t  = pPmax_t(ji,jj)    ;   zPmax_f  = pPmax_f(ji,jj)
                zht      =     pht(ji,jj)    ;   zhf      =     phf(ji,jj)
                z1mdt    =   p1mdt(ji,jj)    ;   z1mdf    =   p1mdf(ji,jj)
-               zmskt    =   xmskt(ji,jj)    ;   zmskf    =   xmskf(ji,jj)
+
+               ! Copy the stress tensors at time `k` into local vectors, element by element
+               ! (because of a `ld.lld: error: undefined symbol: _FortranAAssign` bug with array assignment!):
                !$acc loop seq
                DO jp=1, 3
-                  ! Because of a `ld.lld: error: undefined symbol: _FortranAAssign` bug!
                   zsgmt(jp) = psgmt(ji,jj,jp)
                   zsgmf(jp) = psgmf(ji,jj,jp)
                END DO
-               zSI1t = psgmt(ji,jj,1)  ;   zSI1f = psgmf(ji,jj,1)
+
+               ! Copy the 2nd invariants of the stress tensors at time `k` (T & F), needed for the `P~` term:
                zSI2t = pSI2t(ji,jj)    ;   zSI2f = pSI2f(ji,jj)
 
-               ! IMPLICIT RK3
-               CALL RHS_sigmah_impl( pdt, zSR, zxpCt, zxpCf, zScHt, zScHf, zPmax_t, zPmax_f, &
-                  &                  zht, zhf, zSI1t, zSI2t, zSI1f, zSI2f, z1mdt, z1mdf, &
+               ! Compute the RHS terms of the stress equation: `K` (elastic forcing by the strain rate,
+               ! 1 per stress component) and `G` (relaxation rate `(1+P~)/λ`, 1 per grid), for both grids:
+               !  => the 1st invariants `sigma_I` @T & @F are `zsgmt(1)` & `zsgmf(1)` (`sigma_1` component), no need for another copy:
+               CALL RHS_sigmah_impl( pdt, zSR, zxpCt, zxpCf, zEcct, zEccf, zPmax_t, zPmax_f, &
+                  &                  zht, zhf, zsgmt(1), zSI2t, zsgmf(1), zSI2f, z1mdt, z1mdf, &
                   &                  zmskt, zmskf,  zK, zG )
 
-               ! stresses @ T-points:
-               !zs11 = zsgmt(1) + zsgmt(2)
-               !zs22 = zsgmt(1) - zsgmt(2)
-               psgmt(ji,jj,1) = newS_rk3_imp( pdt, zsgmt(1), zK(1), zG(1) )
-               psgmt(ji,jj,2) = newS_rk3_imp( pdt, zsgmt(2), zK(2), zG(1) )
-               psgmf(ji,jj,3) = newS_rk3_imp( pdt, zsgmf(3), zK(6), zG(1) )
-               ! Convert the updated `s11` & `s22` back to the stored `sigma_1` & `sigma_2` and write them into the
-               ! output array `psgmt` (writing into the local copy `zsgmt` would lose the update):
-               !psgmt(ji,jj,1) = 0.5_wp * ( zs11 + zs22 )
-               !psgmt(ji,jj,2) = 0.5_wp * ( zs11 - zs22 )
+               ! The RK3 implicit factor only depends on `zG`, and there is one `zG` per grid (T & F), shared by
+               ! the 3 stress components of each grid. So we compute it only twice here, rather than at each of
+               ! the 6 `newS_rk3_imp` calls below => 2 divisions instead of 6 per grid point:
+               zfac_t = fac_rk3_imp( pdt, zG(1) )
+               zfac_f = fac_rk3_imp( pdt, zG(2) )
 
-               ! stresses @ F-points:
-               !zs11 = zsgmf(1) + zsgmf(2)
-               !zs22 = zsgmf(1) - zsgmf(2)
-               psgmf(ji,jj,1) = newS_rk3_imp( pdt, zsgmf(1), zK(4), zG(2) )
-               psgmf(ji,jj,2) = newS_rk3_imp( pdt, zsgmf(2), zK(5), zG(2) )
-               psgmt(ji,jj,3) = newS_rk3_imp( pdt, zsgmt(3), zK(3), zG(2) )
-               ! Same at F-points: write the updated `sigma_1` & `sigma_2` into the output array `psgmf`:
-               !psgmf(ji,jj,1) = 0.5_wp * ( zs11 + zs22 )
-               !psgmf(ji,jj,2) = 0.5_wp * ( zs11 - zs22 )
+               ! Update the stresses of the T-centric grid (`sigma_1`, `sigma_2` @T and `sigma_12` @T stored in `psgmf(:,:,3)`):
+               psgmt(ji,jj,1) = newS_rk3_imp( zsgmt(1), zK(1), zG(1), zfac_t )
+               psgmt(ji,jj,2) = newS_rk3_imp( zsgmt(2), zK(2), zG(1), zfac_t )
+               psgmf(ji,jj,3) = newS_rk3_imp( zsgmf(3), zK(6), zG(1), zfac_t )
+
+               ! Update the stresses of the F-centric grid (`sigma_1`, `sigma_2` @F and `sigma_12` @F stored in `psgmt(:,:,3)`):
+               psgmf(ji,jj,1) = newS_rk3_imp( zsgmf(1), zK(4), zG(2), zfac_f )
+               psgmf(ji,jj,2) = newS_rk3_imp( zsgmf(2), zK(5), zG(2), zfac_f )
+               psgmt(ji,jj,3) = newS_rk3_imp( zsgmt(3), zK(3), zG(2), zfac_f )
 
             END DO !ji=Nis0-1, Nie0+1
          END DO !jj=Njs0-1, Nje0+1
+         !$acc end parallel loop
 
          !$acc end data
          !**************************************
@@ -621,7 +665,7 @@ CONTAINS
          ! Update of stress tensors using implicit Euler 1st order
          ! =======================================================
 
-         !$acc data present( pV4,pxpCt,pxpCf,pScHt,pScHf,pPmax_t,pPmax_f,pht,phf,psgmt,psgmf,p1mdt,p1mdf )
+         !$acc data present( pV4,pxpCt,pxpCf,pEcct,pEccf,pPmax_t,pPmax_f,pht,phf,psgmt,psgmf,p1mdt,p1mdf )
 
          khep = MERGE( 1 , 0 , ln_MCx_test )
 
@@ -631,31 +675,30 @@ CONTAINS
          DO jj=Njs0-khep, Nje0+1
             DO ji=Nis0-khep, Nie0+1
 
+               ! Land-sea mask @T (needed by the strain-rate include below) and ice thickness @T:
                zmskt = xmskt(ji,jj)
                zh    =   pht(ji,jj)
 
-               ! --- Strain rate tensors ---
-               !     *******************
+               ! Strain-rate tensor components on the T-centric grid:
 #              include "icedyn_rhg_bri_strn_t.h90"
                !        => uses `ji-1` & `jj-1`
                ! ==> ze11t, ze22t, ze12t
 
-               ! --- E, Lambda & multiplicator (uses `sigmas`!!!) ---
-               !     ********************************************
+               ! `E`, `Lambda`, `P~` & multiplicator `λ/(λ+dt*(1+P~))` @T (BBM constitutive law,
+               ! uses the stresses at time `k` (`sigma_I`, `sigma_II`), as well as `Pmax*h` & the "Pmax" ellipse eccentricity, for `P~`!):
 #              include "icedyn_rhg_bbm_elm_t.h90"
-               ! ==> zEt, zLt, zmult
+               ! ==> zE, zL, zPtld, zmul
 
-               ! --- Predictor estimate of stress tensor at k+1 ---
-               !     ******************************************
-               !     => Eq.(20) of Olason et al. adapted for `sigma_1,sigma_2`, not `sigma_11,sigma_22`
+               ! Implicit Euler update of the stresses of the T-centric grid (`sigma_1`, `sigma_2` @T and `sigma_12` @T stored in `psgmf(:,:,3)`):
+               !  => Eq.(20) of Olason et al. adapted for `sigma_1,sigma_2`, not `sigma_11,sigma_22`
                zml = zmul * zmskt
                zfc = zh * zE * pdt
                psgmt(ji,jj,1) = zml * ( 0.5_wp * zfc * ( rk11p12*ze11t + rk12p22*ze22t ) + psgmt(ji,jj,1) )
                psgmt(ji,jj,2) = zml * ( 0.5_wp * zfc * ( rk11m12*ze11t + rk12m22*ze22t ) + psgmt(ji,jj,2) )
                psgmf(ji,jj,3) = zml * (          zfc *            rk33 * ze12t           + psgmf(ji,jj,3) )
 
-            END DO !DO ji=Nis0, Nie0
-         END DO !DO jj=Njs0, Nje0
+            END DO !ji=Nis0-khep, Nie0+1
+         END DO !jj=Njs0-khep, Nje0+1
          !$acc end parallel loop
 
          !! *** F-centric grid ***
@@ -664,31 +707,30 @@ CONTAINS
          DO jj=Njs0-1, Nje0+khep
             DO ji=Nis0-1, Nie0+khep
 
+               ! Land-sea mask @F (needed by the strain-rate include below) and ice thickness @F:
                zmskf = xmskf(ji,jj)
                zh    =   phf(ji,jj)
 
-               ! --- Strain rate tensors ---
-               !     *******************
+               ! Strain-rate tensor components on the F-centric grid:
 #              include "icedyn_rhg_bri_strn_f.h90"
                !        => uses `ji+1` & `jj+1`
                ! ==> ze11f, ze22f, ze12f
 
-               ! --- E, Lambda & multiplicator (uses `sigmas`!!!) ---
-               !     ********************************************
+               ! `E`, `Lambda`, `P~` & multiplicator `λ/(λ+dt*(1+P~))` @F (BBM constitutive law,
+               ! uses the stresses at time `k` (`sigma_I`, `sigma_II`), as well as `Pmax*h` & the "Pmax" ellipse eccentricity, for `P~`!):
 #              include "icedyn_rhg_bbm_elm_f.h90"
-               ! ==> zEf, zLf, zmulf
+               ! ==> zE, zL, zPtld, zmul
 
-               ! --- Predictor estimate of stress tensor at k+1 ---
-               !     ******************************************
-               !     => Eq.(20) of Olason et al. adapted for `sigma_1,sigma_2`, not `sigma_11,sigma_22`
+               ! Implicit Euler update of the stresses of the F-centric grid (`sigma_1`, `sigma_2` @F and `sigma_12` @F stored in `psgmt(:,:,3)`):
+               !  => Eq.(20) of Olason et al. adapted for `sigma_1,sigma_2`, not `sigma_11,sigma_22`
                zml = zmul * zmskf
                zfc = zh * zE * pdt
                psgmf(ji,jj,1) = zml * ( 0.5_wp * zfc * ( rk11p12*ze11f + rk12p22*ze22f ) + psgmf(ji,jj,1) )
                psgmf(ji,jj,2) = zml * ( 0.5_wp * zfc * ( rk11m12*ze11f + rk12m22*ze22f ) + psgmf(ji,jj,2) )
                psgmt(ji,jj,3) = zml * (          zfc *            rk33 * ze12f           + psgmt(ji,jj,3) )
 
-            END DO !DO ji=Nis0, Nie0
-         END DO !DO jj=Njs0, Nje0
+            END DO !ji=Nis0-1, Nie0+khep
+         END DO !jj=Njs0-1, Nje0+khep
          !$acc end parallel loop
 
          !$acc end data
@@ -716,15 +758,15 @@ CONTAINS
       DO jj=Njs0, Nje0+1
          DO ji=Nis0, Nie0+1
 # include      "icedyn_rhg_udsti_t.h90"
-         END DO !DO ji=Nis0, Nie0
-      END DO !DO jj=Njs0, Nje0
+         END DO !ji=Nis0, Nie0+1
+      END DO !jj=Njs0, Nje0+1
       !$acc end parallel loop
       !$acc parallel loop collapse(2)
       DO jj=Njs0-1, Nje0
          DO ji=Nis0-1, Nie0
 # include      "icedyn_rhg_udsti_f.h90"
-         END DO !DO ji=Nis0, Nie0
-      END DO !DO jj=Njs0, Nje0
+         END DO !ji=Nis0-1, Nie0
+      END DO !jj=Njs0-1, Nje0
       !$acc end parallel loop
       !$acc end data
 
@@ -735,9 +777,9 @@ CONTAINS
       ENDIF
       ! ***********************************************************************************
 
-      CALL clean_small_a_all( pAt, pAf,  p1mdt, p1mdf, psgmt, psgmf )
-
       !! --- lbc-linking of updated stress tensors and `1-damage` ---
+      !!     (the cleaning of the stresses and damage where the ice concentration is too small, formerly done
+      !!      here by `clean_small_a_all`, is now done right after, in the same loop as the update of the invariants)
 #if defined _OPENACC || defined _OPENMP
       CALL lbc_lnk_gpu( crtnm, psgmt, psgmf, p1mdt, p1mdf )
 #else
@@ -745,16 +787,35 @@ CONTAINS
          &                     psgmf(:,:,1),'F',1._wp, psgmf(:,:,2),'F',1._wp, psgmf(:,:,3),'T',1._wp, p1mdf,'F',1._wp  )
 #endif
 
-      !! Now that stress tensors are `lbc_lnk`ed, we can update invariants:
-      !$acc data present( pSI2t, pSI2f )
+      !! Now that stress tensors are `lbc_lnk`ed, we clean them and then update their invariants, in one single loop:
+      !!   1) cleaning: the stresses are forced to 0 and the damage to 0 (`1-d = 1`) where the ice concentration
+      !!      is below `rAmin_sgmh` and `rAmin_dmg` (same operations as in `clean_small_a_all@ice_util.F90`).
+      !!      We do it here, after `lbc_lnk`, rather than before, so that the 8 arrays are read and written once
+      !!      instead of twice. It is equivalent to cleaning before `lbc_lnk` because `pAt` & `pAf` are
+      !!      `lbc_lnk`ed (their halos are valid), and the operation is independent of the sign of the stresses.
+      !!      The loop covers the whole halo (`nn_hls`) so that the halo points are cleaned as they used to be.
+      !!   2) invariants: they are needed on `Nis0-1:Nie0+1,Njs0-1:Nje0+1` only, but computing them over the
+      !!      whole halo is harmless since they only use values at the same `[ji,jj]` point.
+      !$acc data present( pAt, pAf, p1mdt, p1mdf, psgmt, psgmf, pSI2t, pSI2f )
       !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            !
+            p1mdt(ji,jj)   = MERGE( p1mdt(ji,jj)   , 1._wp , pAt(ji,jj)>=rAmin_dmg )
+            psgmt(ji,jj,1) = MERGE( psgmt(ji,jj,1) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
+            psgmt(ji,jj,2) = MERGE( psgmt(ji,jj,2) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
+            psgmf(ji,jj,3) = MERGE( psgmf(ji,jj,3) , 0._wp , pAt(ji,jj)>=rAmin_sgmh )
+            !
+            p1mdf(ji,jj)   = MERGE( p1mdf(ji,jj)   , 1._wp , pAf(ji,jj)>=rAmin_dmg )
+            psgmf(ji,jj,1) = MERGE( psgmf(ji,jj,1) , 0._wp , pAf(ji,jj)>=rAmin_sgmh )
+            psgmf(ji,jj,2) = MERGE( psgmf(ji,jj,2) , 0._wp , pAf(ji,jj)>=rAmin_sgmh )
+            psgmt(ji,jj,3) = MERGE( psgmt(ji,jj,3) , 0._wp , pAf(ji,jj)>=rAmin_sgmh )
+            !
 # include   "icedyn_rhg_udsti_t.h90"
             !
 # include   "icedyn_rhg_udsti_f.h90"
-         END DO !DO ji=Nis0, Nie0
-      END DO !DO jj=Njs0, Nje0
+         END DO !ji=Nis0-nn_hls, Nie0+nn_hls
+      END DO !jj=Njs0-nn_hls, Nje0+nn_hls
       !$acc end parallel loop
       !$acc end data
 
@@ -763,56 +824,20 @@ CONTAINS
    END SUBROUTINE update_sigma_d
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-   !! RK3 implicit for Sigma update !!
-
-
-
-   FUNCTION newS_rk3_imp( pdt, pSh, pK, pG )
-      !!----------------------------------------------------------------------------------------------
-      !$acc routine seq
-      !!----------------------------------------------------------------------------------------------
-      !!   Implicit RK3 operator for internal stress tensor update
-      !!     => using the coefficients of "Lobatto IIIA"
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp)             :: newS_rk3_imp
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp), INTENT(in) :: pdt   ! small time-step [s]
-      REAL(wp), INTENT(in) :: pSh   ! a `σ*h` at time k
-      REAL(wp), INTENT(in) :: pK    ! `E*h*|K|:ε` i.e. all the content of the RHS exluding the `-σ*h/λ*(1+P~)` term
-      REAL(wp), INTENT(in) :: pG    ! `1/λ*(1+P~)` term
-      !!----------------------------------------------------------------------------------------------
-      REAL(wp) :: zdum
-      !!----------------------------------------------------------------------------------------------
-      zdum = pdt*pG
-      !
-      newS_rk3_imp =  pSh  +  pdt * ( 12._wp*(pK - pG*pSh) ) / ( 12._wp + 6._wp*zdum + zdum*zdum )
-      !
-   END FUNCTION newS_rk3_imp
-
-
-   SUBROUTINE RHS_sigmah_impl( pdt, pSR, pxpCt, pxpCf, pSclHt, pSclHf, pPmaxt, pPmaxf, pht, phf, &
+   SUBROUTINE RHS_sigmah_impl( pdt, pSR, pxpCt, pxpCf, pEcct, pEccf, pPmaxt, pPmaxf, pht, phf, &
       &                             psIt, psIIt, psIf, psIIf, p1mdt, p1mdf, pmskt, pmskf,  pK, pG )
       !!----------------------------------------------------------------------
-      !!                    ***  ROUTINE RHS_SIGMA  ***
+      !!                    ***  ROUTINE RHS_SIGMAH_IMPL  ***
       !!
-      !! ** Purpose :
+      !! ** Purpose : compute the terms of the RHS of the BBM equation for `σ*h`:
+      !!                 d[σ*h]/dt = K - G*σ*h
+      !!              with `K = E*h*|K|:ε` and `G = (1+P~)/λ`, on both the T- & F-centric grids
       !!
       !! ** Method  :
       !!               implicitness is in the `σ*h` of term `-σ*h/λ*(1+P~)`, eq.(33) of Olason et al.
+      !!               As opposed to MEB, `G` contains the `P~` term, which depends on the stress tensors
+      !!               at time `k` (`sigma_I`, `sigma_II`), as well as on `Pmax*h` and on the eccentricity
+      !!               of the "Pmax" ellipse => `G` is computed with the stresses at time `k` (explicit).
       !!
       !! ** Note    : Called at the sub-time-stepping level!
       !!
@@ -823,20 +848,20 @@ CONTAINS
       REAL(wp),               INTENT(in)  :: pdt              ! (small) time-step [s]
       REAL(wp), DIMENSION(6), INTENT(in)  :: pSR              ! T- & F- centric strain-rate tensor components at time `t=k` [s^-1]
       REAL(wp),               INTENT(in)  :: pxpCt, pxpCf     ! EXP( rn_C0*(1 - A) ) @T & @F
-      REAL(wp),               INTENT(in)  :: pSclHt, pSclHf ! `Scaling factor * h` (w.r.t. local `Δx`) for the cohesion and `Nlim` @T & @F
-      REAL(wp),               INTENT(in)  :: pPmaxt, pPmaxf ! `Pmax * h` @T & @F (<0)
+      REAL(wp),               INTENT(in)  :: pEcct, pEccf     ! Eccentricity of the "Pmax" ellipse `|Pmax*h|/(C*h)` @T & @F
+      REAL(wp),               INTENT(in)  :: pPmaxt, pPmaxf   ! `Pmax * h` @T & @F (<0)
       REAL(wp),               INTENT(in)  :: pht, phf         ! Ice thickness @T & @F
       REAL(wp),               INTENT(in)  :: psIt, psIIt, psIf, psIIf  ! 1st & 2nd invariant of vert.-int. stress tensor comp. [N/m^2*m]
       REAL(wp),               INTENT(in)  :: p1mdt, p1mdf     ! `1 - ice damage` @T & @F
       REAL(wp),               INTENT(in)  :: pmskt, pmskf     ! land sea mask @T & @F
       REAL(wp), DIMENSION(6), INTENT(out) :: pK               ! terms `E*h*|K|:ε`  => 1 for each stress tensor component
-      REAL(wp), DIMENSION(2), INTENT(out) :: pG               ! terms `1/λ*(1+P~)` => 1 for each grid  !#LOLOfixme: shoul be of size 2 !!!
+      REAL(wp), DIMENSION(2), INTENT(out) :: pG               ! terms `1/λ*(1+P~)` => 1 for each grid
       !!----------------------------------------------------------------------
       REAL(wp) :: zfc, zml, zmsk
-      REAL(wp) :: zE, zeta, zL, zc0
+      REAL(wp) :: zE, zL, zc0
       REAL(wp) :: ze11, ze22, ze12
-      REAL(wp) :: zxpC, z1md, zsigI, zsigII, zPmax, zSclH, zPtld
-      REAL(wp) :: z1_sigI, zecc, zCohe
+      REAL(wp) :: zxpC, z1md, zsigI, zsigII, zPmax, zPtld
+      REAL(wp) :: z1_sigI, zecc
       !!----------------------------------------------------------------------
       !! ~~~~~~~~~~~~~~~~~~~~~~
       !! *** T-centric grid ***
@@ -849,7 +874,7 @@ CONTAINS
       zxpC  = pxpCt
       z1md  = p1mdt
       zPmax = pPmaxt ! `P_max * h` (<0)
-      zSclH = pSclHt
+      zecc  = pEcct  ! eccentricity of the "Pmax" ellipse (precomputed once per big time step)
 #     include "icedyn_rhg_bbm_elmexpl.h90"
       ! --- Strain rate tensor components @T ---
       ze11 = pSR(1)
@@ -873,7 +898,7 @@ CONTAINS
       zxpC  = pxpCf
       z1md  = p1mdf
       zPmax = pPmaxf ! `P_max * h` (<0)
-      zSclH = pSclHf
+      zecc  = pEccf  ! eccentricity of the "Pmax" ellipse (precomputed once per big time step)
 #     include "icedyn_rhg_bbm_elmexpl.h90"
       ! --- Strain rate tensor components @F ---
       ze11 = pSR(4)
@@ -887,7 +912,6 @@ CONTAINS
       pG(2) = (1._wp + zPtld) / zL * zmsk
       !
    END SUBROUTINE RHS_sigmah_impl
-
 
    !!==============================================================================
 END MODULE icedyn_rhg_bbm

@@ -5,6 +5,13 @@ MODULE par_abl
    !!======================================================================
    !! History :  4.0  !  2019-03  (F. Lemarié & G. Samson)  Original code
    !!----------------------------------------------------------------------
+
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
+
    USE par_kind          ! kind parameters
    USE par_oce           ! to access horizontal domain size & mpp decomposition
 
@@ -103,9 +110,4 @@ MODULE par_abl
    REAL(wp), PUBLIC, PARAMETER ::   bmx4 =  196.71548261141191_wp
    REAL(wp), PUBLIC, PARAMETER ::   bmx5 =  -72.076052686380677_wp
 
-   !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! NEMO/ABL 5.0, NEMO Consortium (2024)
-   !! Software governed by the CeCILL license (see ./LICENSE)
-   !!======================================================================
 END MODULE par_abl

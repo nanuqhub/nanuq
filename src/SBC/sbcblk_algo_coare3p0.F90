@@ -54,6 +54,11 @@ MODULE sbcblk_algo_coare3p0
    REAL(wp), PARAMETER :: Beta0 =  1.25_wp    ! gustiness parameter
    REAL(wp), PARAMETER :: zeta_abs_max = 50._wp
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
 CONTAINS
 
    SUBROUTINE turb_coare3p0( kt, zt, zu, pSST, pT_s, pt_zt, pq_s, pq_zt, pU_zu, l_use_cs, l_use_wl, &

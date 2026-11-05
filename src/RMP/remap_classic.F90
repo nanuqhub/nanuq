@@ -60,7 +60,10 @@ MODULE remap_classic
    PUBLIC do_rmpVecT2UV
 
    !!----------------------------------------------------------------------
-
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
 CONTAINS
 
 

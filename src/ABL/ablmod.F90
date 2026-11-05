@@ -31,6 +31,11 @@ MODULE ablmod
    PUBLIC   abl_stp   ! called by sbcabl.F90
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:) ::   ustar2, zrough
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
 CONTAINS
 
 

@@ -39,10 +39,10 @@ MODULE icedyn_adv_pra_d
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:) :: sx1md_f, sy1md_f, sxx1md_f, syy1md_f, sxy1md_f ! moments for `1-damage` @F
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
-
 CONTAINS
 
    SUBROUTINE ice_dyn_adv_pra_d( kt, cgt, pe1e2, p1_e1e2, pmsk, pUx, pVx,  p1md )

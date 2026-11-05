@@ -42,7 +42,8 @@ MODULE icedyn_adv_wnx_adv
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)     ::   ztrk1, ztrk2, zoper
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

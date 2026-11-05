@@ -43,9 +43,9 @@ MODULE icedyn_rhg
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: icedyn_rhg.F90 14072 2020-12-04 07:48:38Z laurent $
-   !! Software governed by the CeCILL licence     (./LICENSE)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 

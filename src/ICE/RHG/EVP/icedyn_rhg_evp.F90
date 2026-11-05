@@ -67,8 +67,8 @@ MODULE icedyn_rhg_evp
    INTEGER(1), ALLOCATABLE, SAVE, DIMENSION(:,:)  :: kmsk00x, kmsk00y                ! mask for ice presence
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: icedyn_rhg_evp.F90 15550 2021-11-28 20:02:31Z clem $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
@@ -552,11 +552,19 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
+      ! Halos of the deformation outputs.
+      ! `zten_i`, `zshear` and `zdelta` are no longer `lbc_lnk`ed here: `zten_i` & `zshear` are only read in commented-out
+      ! code below, and `zdelta` is only written as a diagnostic (`icedlt`), which does not need its halo.
+      ! The stress tensor `SIGMAt` is no longer `lbc_lnk`ed here either: every halo value of `SIGMAt` that is read by the
+      ! scheme (`ji,jj = Nis0:Nie0+1` for `sigma_1` & `sigma_2`, `Nis0-1:Nie0` for `sigma_12`) is recomputed locally at each
+      ! iteration ("duplication to avoid communications", see the stress loops above), from inputs whose halos are valid
+      ! (`u_ice`, `v_ice`, `zp_delt` & `zdelta` exchanged at each iteration, `zmsk` & `zdt_m` computed on `Nis0-1:Nie0+1`,
+      ! `strength` exchanged in `icedyn_rdgrft`). Nothing outside this routine reads the halo of `SIGMAt` (restarts only
+      ! write the interior).
 #if defined _OPENACC || defined _OPENMP
-      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i, zten_i, zshear, zdelta, SIGMAt(:,:,1), SIGMAt(:,:,2), SIGMAt(:,:,3) )
+      CALL lbc_lnk_gpu( 'icedyn_rhg_evp', pshear_i, pdivu_i, pdelta_i )
 #else
-      CALL lbc_lnk(     'icedyn_rhg_evp', pshear_i,'T',1._wp, pdivu_i,'T',1._wp, pdelta_i,'T',1._wp, zten_i,'T',1._wp, &
-         &                                zshear  ,'T',1._wp, zdelta ,'T',1._wp, SIGMAt(:,:,1),'T',1._wp, SIGMAt(:,:,2),'T',1._wp, SIGMAt(:,:,3),'F',1._wp )
+      CALL lbc_lnk(     'icedyn_rhg_evp', pshear_i,'T',1._wp, pdivu_i,'T',1._wp, pdelta_i,'T',1._wp )
 #endif
 
       ! 5) diagnostics

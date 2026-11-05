@@ -26,8 +26,8 @@ MODULE prtctl
    PUBLIC prt_ctl_init    ! called by nanuqgcm.F90 and prt_ctl_trc_init
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: prtctl.F90 15148 2021-07-27 09:40:32Z gsamson $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

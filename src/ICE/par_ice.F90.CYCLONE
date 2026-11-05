@@ -89,12 +89,9 @@ MODULE par_ice
    LOGICAL, PUBLIC, SAVE :: ln_pureADV2D  !   `T` => only pure advection, do not apply any king of corrections on advected fields
    !
    LOGICAL, PUBLIC, SAVE :: ln_bri_rk3    ! Use a RK3 implementation for the time integration of the momentum equation
+   !                                      !       => SDIRK3 method of Alexander (1977) for the momentum equation
    !                                      !       => when `false`, use the traditional 1st-order Euler scheme
    !                                      !          (implicit in terms of ice velocity for the bottom ice-water drag though)
-   INTEGER, PUBLIC, SAVE :: nn_rk3_iter_v !  number of iterations for convergence of ice-oce stress term `rho_o*CD_o*||U_oce-U_ice||/mass`
-   !                                      !       => 1 itteration is okay for most applications        => faster
-   !                                      !       => 4 iterations and it is generally fully converged  => costly
-   !$acc declare create( nn_rk3_iter_v )
 
    !           !!** ice-ridging/rafting namelist (namdyn_rdgrft) **
    REAL(wp), PUBLIC ::   rn_delta_ecc     !: eccentricity of the elliptical yield curve to use when computing `delta`
@@ -127,7 +124,7 @@ MODULE par_ice
    !
    ! -- Brittle rheologies
    LOGICAL , PUBLIC ::   ln_rhg_brittle   ! BRITTLE rheology
-   REAL(wp), PUBLIC ::   rn_cfl_coeff     !  factor used for the CFL test (w.r.t. elastic shear wave propagation speed) to define the small rheology time-step
+   REAL(wp), PUBLIC ::   rn_cfl_coeff     !  factor used for the CFL test (w.r.t. elastic compressional wave propagation speed) to define the small rheology time-step
    !                                      !      => the smaller the smaller the small time step, i.e. the larger `nbrttl`
    LOGICAL , PUBLIC ::   ln_rhg_MEB       ! MEB brittle rheology
    LOGICAL , PUBLIC ::   ln_rhg_BBM       ! BBM brittle rheology

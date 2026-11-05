@@ -25,12 +25,20 @@ MODULE icedyn_rhg_bri
    PUBLIC cross_nudging_init
    PUBLIC apply_CN
 
+   PUBLIC fac_rk3_imp
+   PUBLIC newS_rk3_imp
+
    LOGICAL,  PUBLIC, SAVE :: l_CN        !: whether cross nudging is used ?
    REAL(wp), PUBLIC, SAVE :: rCNC_eff    !: effective cross-nudging coefficient [-]
    !$acc declare create( l_CN, rCNC_eff )
 
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:) :: udMCxt, udMCxf
 
+   !!----------------------------------------------------------------------
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
@@ -439,6 +447,56 @@ CONTAINS
       !IF( (zdcrit>0._wp).AND.(zdcrit<1._wp) ) MC_incrmt = (1._wp - zdcrit) / pTd
       !
    END FUNCTION MC_incrmt
+
+
+   !! RK3 implicit for Sigma update !!
+   !! *****************************
+   !!  => shared by BBM and MEB: the only difference between the two rheologies is the content of `G`
+   !!     (`(1+P~)/λ` in BBM, `1/λ` in MEB), which is computed by their own `RHS_sigmah_impl`
+
+   FUNCTION fac_rk3_imp( pdt, pG )
+      !!----------------------------------------------------------------------------------------------
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------------------
+      !!   Factor of the implicit RK3 operator ("Lobatto IIIA") for the internal stress tensor update:
+      !!         `12*dt / ( 12 + 6*dt*G + (dt*G)^2 )`
+      !!     => it only depends on `G`, so it is computed once per grid point and per grid (T or F)
+      !!        and then shared by the 3 stress tensor components of that grid (see `newS_rk3_imp`)
+      !!----------------------------------------------------------------------------------------------
+      REAL(wp)             :: fac_rk3_imp
+      !!----------------------------------------------------------------------------------------------
+      REAL(wp), INTENT(in) :: pdt   ! small time-step [s]
+      REAL(wp), INTENT(in) :: pG    ! `(1+P~)/λ` term in BBM, `1/λ` in MEB
+      !!----------------------------------------------------------------------------------------------
+      REAL(wp) :: zdum
+      !!----------------------------------------------------------------------------------------------
+      zdum = pdt*pG
+      !
+      fac_rk3_imp = 12._wp * pdt / ( 12._wp + 6._wp*zdum + zdum*zdum )
+      !
+   END FUNCTION fac_rk3_imp
+
+
+   FUNCTION newS_rk3_imp( pSh, pK, pG, pfac )
+      !!----------------------------------------------------------------------------------------------
+      !$acc routine seq
+      !!----------------------------------------------------------------------------------------------
+      !!   Implicit RK3 operator for internal stress tensor update
+      !!     => using the coefficients of "Lobatto IIIA"
+      !!     => `pfac` is the factor `12*dt/(12 + 6*dt*G + (dt*G)^2)` given by `fac_rk3_imp`, so
+      !!        that the division is not repeated for each of the 3 components of a stress tensor
+      !!----------------------------------------------------------------------------------------------
+      REAL(wp)             :: newS_rk3_imp
+      !!----------------------------------------------------------------------------------------------
+      REAL(wp), INTENT(in) :: pSh   ! a `σ*h` at time k
+      REAL(wp), INTENT(in) :: pK    ! `E*h*|K|:ε` i.e. all the content of the RHS exluding the `-σ*h*G` term
+      REAL(wp), INTENT(in) :: pG    ! `(1+P~)/λ` term in BBM, `1/λ` in MEB
+      REAL(wp), INTENT(in) :: pfac  ! `12*dt/(12 + 6*dt*G + (dt*G)^2)` [s]
+      !!----------------------------------------------------------------------------------------------
+      ! Same as former `pSh + pdt*( 12*(pK - pG*pSh) ) / ( 12 + 6*dt*G + (dt*G)^2 )`, without the division:
+      newS_rk3_imp =  pSh  +  pfac * ( pK - pG*pSh )
+      !
+   END FUNCTION newS_rk3_imp
 
    !!==============================================================================
 END MODULE icedyn_rhg_bri

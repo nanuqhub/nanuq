@@ -7,7 +7,10 @@
 
             zE = rn_E0 * z1md * zxpC                    ! elasticity [Pa]  `E = E0 * (1 - d) * exp[-C*(1-A)]`
 
-            zeta = rn_eta0 * z1md**5 * zxpC             ! viscosity [Pa.s]
-            zL = MAX( zeta / MAX( zE, epsi20 ) , pdt )  ! lambda [s]
+            ! Lambda [s] = viscosity/elasticity = `eta0*(1-d)^5*expC / (E0*(1-d)*expC)` = `(eta0/E0)*(1-d)^4`
+            !   => computed with the precomputed ratio `r_eta0_E0` to avoid a division at each grid point.
+            !   => former version: `zL = MAX( rn_eta0*(1-d)^5*expC / MAX(zE,epsi20) , pdt )`, gives the same `zL = pdt` when `zE` is tiny.
+            zc0 = z1md * z1md                           ! `(1-d)^2`
+            zL  = MAX( r_eta0_E0 * zc0 * zc0 , pdt )    ! lambda [s]
 
             zmul = MIN( zL/(zL + pdt) , 1._wp ) ! Multiplicator term [Eq.32]

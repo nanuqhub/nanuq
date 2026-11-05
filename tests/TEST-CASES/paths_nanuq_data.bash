@@ -29,6 +29,18 @@ case ${hostnm} in
 
         export FATM_ERA5_DIR="/SUMMER/SASIP/model-forcings/atmo_forcing/ERA5_Arctic"
         ;;
+    #   
+    "luitel")
+        export DIR_NC_IN="/data/gcm_setup/INPUT_NANUQ_DISTRIB"
+
+        export ERA5_HUDSON12_DIR="/data/gcm_setup/HUDSON12/FATM_1997_HUDSON12"
+
+        export XIOS_EXE="/opt/xios_trunk_2685_intel/bin/xios_server.exe"
+
+        export XIOS_OA3_EXE="xxx"  ; # same as above but compiled with OASIS support!
+
+        export FATM_ERA5_DIR="xxx"
+        ;;
     *)
         echo "ERROR: unknown host: ${hostnm} !"
         exit

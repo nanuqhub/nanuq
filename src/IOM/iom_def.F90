@@ -7,6 +7,13 @@ MODULE iom_def
    !!             -   ! 2007 07  (D. Storkey) Add uldname
    !!            4.0  ! 2017-11 (M. Andrejczuk) Extend IOM interface to write any 3D fields
    !!----------------------------------------------------------------------
+
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
+
    USE par_kind
    USE netcdf
 
@@ -60,9 +67,4 @@ MODULE iom_def
    END TYPE file_descriptor
    TYPE(file_descriptor), DIMENSION(jpmax_files), PUBLIC ::   iom_file !: array containing the info for all opened files
    !
-   !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! NEMO/OCE 5.0, NEMO Consortium (2024)
-   !! Software governed by the CeCILL license (see ./LICENSE)
-   !!======================================================================
 END MODULE iom_def

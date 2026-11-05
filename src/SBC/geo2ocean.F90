@@ -42,8 +42,8 @@ MODULE geo2ocean
    LOGICAL ::   lmust_init = .TRUE.        !: used to initialize the cos/sin variables (see above)
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: geo2ocean.F90 14433 2021-02-11 08:06:49Z smasson $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

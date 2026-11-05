@@ -25,10 +25,10 @@ MODULE icedyn_adv_wnx_d
    PUBLIC   ice_dyn_adv_wnx_d   ! called by icedyn_adv
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
-
 CONTAINS
 
    SUBROUTINE ice_dyn_adv_wnx_d( kt, cgt, pe1e2, p1_e1e2, pmsk, pUx, pVx, pmlbc,  p1md )

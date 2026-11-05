@@ -56,6 +56,11 @@ MODULE sbcblk_skin_ecmwf
    !                                            !: condition for the insolation peak of +1000W/m^2
    !!----------------------------------------------------------------------
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
 CONTAINS
 
    SUBROUTINE CS_ECMWF( pQsw, pQnsol, pustar, pSST,  pdT_cs )

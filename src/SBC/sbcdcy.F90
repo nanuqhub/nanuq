@@ -36,8 +36,8 @@ MODULE sbcdcy
    PUBLIC   sbc_dcy_param  ! routine used here and called by warm-layer parameterization (sbcblk_skin_coare*)
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: sbcdcy.F90 13483 2020-09-17 08:24:00Z smasson $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

@@ -200,8 +200,8 @@ MODULE sbc_phy
    PUBLIC delta_skin_layer_sclr
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: sbcblk.F90 10535 2019-01-16 17:36:47Z clem $
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS

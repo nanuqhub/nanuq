@@ -7,6 +7,13 @@ MODULE par_oce
    !!   NEMO     1.0  !  2004-01  (G. Madec, J.-M. Molines)  Free form and module
    !!            3.3  !  2010-09  (C. Ethe) TRA-TRC merge: add jpts, jp_tem & jp_sal
    !!----------------------------------------------------------------------
+
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
+
    USE par_kind          ! kind parameters
 
    IMPLICIT NONE
@@ -93,9 +100,4 @@ MODULE par_oce
    INTEGER, PUBLIC ::   Ni0glo, Nj0glo   !: global domain size without halo
    !$acc declare create( nn_hls, Nis0, Nie0, Njs0, Nje0 )
 
-   !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: par_oce.F90 15119 2021-07-13 14:43:22Z jchanut $
-   !! Software governed by the CeCILL license (see ./LICENSE)
-   !!======================================================================
 END MODULE par_oce

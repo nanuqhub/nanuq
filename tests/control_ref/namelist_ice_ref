@@ -74,11 +74,9 @@
       ln_pureADV2D  = .false.         !       `T` => only pure advection, do not apply any king of corrections on advected fields
    !
    ln_bri_rk3       = .false.         ! Use an implicit RK3 implementation for the time integration of internal stress tensor & the momentum equations
+   !                                  !       => SDIRK3 method of Alexander (1977) for the momentum equation
    !                                  !       => when `false`, use the traditional 1st-order implicit Euler scheme
    !                                  !          (implicit in terms of ice velocity for the bottom ice-water drag though)
-      nn_rk3_iter_v = 2               !    number of iterations for convergence of ice-oce stress term `rho_o*CD_o*||U_oce-U_ice||/mass`
-   !                                  !         => 1 itteration is okay for most applications        => faster
-   !                                  !         => 4 iterations and it is generally fully converged  => costly
    !
    rn_ishlat        =   2.            !  lbc : free slip (0) ; partial slip (0-2) ; no slip (2) ; strong slip (>2)
    ln_landfast_L16  = .false.         !  landfast: parameterization from Lemieux 2016

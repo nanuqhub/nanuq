@@ -41,9 +41,9 @@ MODULE icewri
    PUBLIC ice_wri_state  ! called by dia_wri_state
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: icewri.F90 15388 2021-10-17 11:33:47Z clem $
-   !! Software governed by the CeCILL licence     (./LICENSE)
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 

@@ -7,6 +7,12 @@ MODULE par_kind
    !!            3.3  ! 2010-12  (G. Madec)  add a standard length of character strings
    !!----------------------------------------------------------------------
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
+
    IMPLICIT NONE
    PRIVATE
 
@@ -34,9 +40,4 @@ MODULE par_kind
    INTEGER, PUBLIC, PARAMETER ::   lc  = 256                          !: Lenght of Character strings
    INTEGER, PUBLIC, PARAMETER ::   lca = 400                          !: Lenght of Character arrays
 
-   !!----------------------------------------------------------------------
-   !! NANUQ 1.0.0, Brodeau (2026)
-   !! $Id: par_kind.F90 14433 2021-02-11 08:06:49Z smasson $ 
-   !! Software governed by the CeCILL license (see ./LICENSE)
-   !!----------------------------------------------------------------------
 END MODULE par_kind

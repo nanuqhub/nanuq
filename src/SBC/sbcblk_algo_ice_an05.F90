@@ -31,6 +31,10 @@ MODULE sbcblk_algo_ice_an05
    INTEGER , PARAMETER ::   nbit = 8        ! number of itterations
 
    !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
 CONTAINS
 
    SUBROUTINE turb_ice_an05( zt, zu, Ts_i, t_zt, qs_i, q_zt, U_zu,        &

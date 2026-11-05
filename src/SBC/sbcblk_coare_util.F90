@@ -27,6 +27,11 @@ MODULE sbcblk_coare_util
       MODULE PROCEDURE psi_h_coare_vctr, psi_h_coare_sclr
    END INTERFACE psi_h_coare
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
 CONTAINS
 
 

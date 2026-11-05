@@ -8,7 +8,8 @@ MODULE sbcblk_algo_ice_stab
    !!       it will commpute the C_D, C_E and C_H consistent with the near-surface atmospheric stability
    !!    ==> which is already a better approach than using a constant value for C_D, C_E and C_H as in
    !!        the default (and simplest) option in NEMO for instance.
-   !!    ==> the only room for improvement is the pick of the stability functions: we use those of Andreas 2005 for now...
+   !!    ==> the only room for improvement is the pick of the stability functions: we use
+   !!        Paulson 1970 (as in Jordan et al. 1999) for unstable conditions and Grachev et al. 2007 for stable conditions
    !!
    !! What it computes:
    !!   * bulk transfer coefficients C_D, C_E and C_H over sea-ice
@@ -38,24 +39,30 @@ MODULE sbcblk_algo_ice_stab
 
    INTEGER , PARAMETER ::   nb_iter = 8   ! number of itterations, pretty big because usually stable over sea-ice
    !                                      !   => and "stable" means that more itterations may be required
+   !!----------------------------------------------------------------------
 
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
 
    SUBROUTINE turb_ice_stab( zt, zu, pts_i, pt_zt, pqs_i, pq_zt, pU_zu, &
       &                      pCdN, pChN, pCeN,                          &
       &                      pCd_i, pCh_i, pCe_i, pt_zu_i, pq_zu_i )
-      !&                      xz0, xu_star, xL, xUN10 )
       !!----------------------------------------------------------------------
       !!                      ***  ROUTINE  turb_ice_stab  ***
       !!
-      !! ** Purpose :   Computes turbulent transfert coefficients of surface
-      !!                fluxes according to:
-      !!   Andreas, E.L., Jordan, R.E. & Makshtas, A.P. Parameterizing turbulent exchange over sea ice: the ice station weddell results.
-      !!   Boundary-Layer Meteorology 114, 439–460 (2005). https://doi.org/10.1007/s10546-004-1414-7
+      !! ** Purpose :   Computes the turbulent transfer coefficients over sea-ice C_D, C_H and C_E
+      !!                from given constant NEUTRAL coefficients (pCdN, pChN, pCeN), corrected for the
+      !!                stability of the surface atmospheric layer (Monin-Obukhov theory, following the
+      !!                method of Large & Yeager 2004, Eq.(9) and (10)), with the stability functions:
+      !!                  * unstable: Paulson 1970, as in Eq.(30) & (31) of Jordan et al. 1999
+      !!                  * stable:   Grachev et al. 2007, Eq.(12) & (13)
       !!
       !!           If relevant (zt /= zu), adjust temperature and humidity from height zt to zu
-      !!           Returns the effective bulk wind speed at zu to be used in the bulk formulas
+      !!           (the bulk wind speed used is the wind speed at zu, not below `wspd_thrshld_ice`)
       !!
       !! INPUT :
       !! -------
@@ -77,13 +84,6 @@ CONTAINS
       !!    *  pCe_i   : sublimation coefficient over sea-ice
       !!    *  pt_zu_i : pot. air temp. adjusted at zu over sea-ice             [K]
       !!    *  pq_zu_i : spec. hum. of air adjusted at zu over sea-ice          [kg/kg]
-      !!
-      !! OPTIONAL OUTPUT:
-      !! ----------------
-      !!    * xz0     : return the aerodynamic roughness length (integration constant for wind stress) [m]
-      !!    * xu_star : return u* the friction velocity                    [m/s]
-      !!    * xL      : return the Obukhov length                          [m]
-      !!    * xUN10   : neutral wind speed at 10m                          [m/s]
       !!
       !! ** Author: L. Brodeau, July 2023 / AeroBulk (https://github.com/brodeau/aerobulk/)
       !!----------------------------------------------------------------------------------
@@ -243,18 +243,13 @@ CONTAINS
    END SUBROUTINE turb_ice_stab
 
 
-
-
    FUNCTION psi_m_ice( pzeta )
       !!----------------------------------------------------------------------------------
       !! ** Purpose: compute the universal profile stability function for momentum
       !!
-      !!
-      !!     Andreas et al 2005 == Jordan et al. 1999
-      !!
       !!     Psi:
-      !!     Unstable => Paulson 1970
-      !!     Stable   => Holtslag & De Bruin 1988
+      !!     Unstable => Paulson 1970, as in Eq.(30) of Jordan et al. 1999
+      !!     Stable   => Grachev et al. 2007, Eq.(12) (integrated form of their phi_m of Eq.(9a))
       !!
       !!             pzeta : stability paramenter, z/L where z is altitude
       !!                     measurement and L is M-O length
@@ -266,7 +261,11 @@ CONTAINS
       REAL(wp)             :: psi_m_ice
       REAL(wp), INTENT(in) :: pzeta
       !!----------------------------------------------------------------------------------
-      REAL(wp) :: zta, zx, zpsi_u, zpsi_s
+      REAL(wp), PARAMETER :: zam  = 5._wp                               ! a_m (just below Eq.(9b), Grachev et al. 2007)
+      REAL(wp), PARAMETER :: zbm  = zam/6.5_wp                          ! b_m (just below Eq.(9b))
+      REAL(wp), PARAMETER :: zbbm = ((1._wp - zbm)/zbm)**(1._wp/3._wp)  ! B_m (just below Eq.(12))
+      REAL(wp), PARAMETER :: zsr3 = SQRT(3._wp)
+      REAL(wp) :: zta, zts, zx, zpsi_u, zpsi_s
       !!----------------------------------------------------------------------------------
       zta = pzeta
       !
@@ -275,12 +274,23 @@ CONTAINS
 
       zpsi_u = LOG( 0.5_wp*(1._wp + zx*zx) ) + 2._wp*LOG( 0.5_wp*(1._wp + zx) ) - 2._wp*ATAN( zx ) + 0.5_wp*rpi  ! Eq.(30) Jordan et al. 1999:
 
-      ! Stable stratification:
+      ! Stable stratification, Eq.(12) Grachev et al. 2007 (integrated form of phi_m of their Eq.(9a);
+      ! the former code used phi_m itself, i.e. 1 + 6.5*zta*(1+zta)**(1/3)/(1.3+zta), which is wrong for psi).
+      ! `zts` is forced to be >= 0 so that this branch never gives NaN when zeta < -1
+      ! (MERGE below evaluates both branches, even if only one is used).
+      !
+      ! Alternative stable formula (not used): Holtslag & De Bruin 1988 as given in Jordan et al. 1999
+      ! (this formula gives -psi, so it would need a minus sign in the MERGE below):
       !zpsi_s = 0.7_wp*zta + 0.75_wp*(zta - 14.3_wp)*EXP( -0.35_wp*zta) + 10.7_wp  ! Eq.(33) Jordan et al. 1999
-      zpsi_s = 1._wp + 6.5_wp*zta * ABS(1._wp + zta)**0.3333333_wp / ( 1.3_wp + zta )     ! Eq.(9.a) Grachev et al. 2007
+      zts = MAX( zta , 0._wp )
+      zx  = (1._wp + zts)**(1._wp/3._wp)
+      zpsi_s = -3._wp*zam/zbm*(zx - 1._wp) + zam*zbbm/(2._wp*zbm) * (                                     &
+         &        2._wp*LOG( (zx + zbbm)/(1._wp + zbbm) )                                              &
+         &      -       LOG( (zx*zx - zx*zbbm + zbbm*zbbm)/(1._wp - zbbm + zbbm*zbbm) )                 &
+         &      + 2._wp*zsr3*( ATAN( (2._wp*zx - zbbm)/(zsr3*zbbm) ) - ATAN( (2._wp - zbbm)/(zsr3*zbbm) ) ) )
 
-      !! Combine:
-      psi_m_ice = MERGE( zpsi_u  ,  -1._wp*zpsi_s  ,  zta < 0._wp )   ! Unstable <= zta < 0)  |  Stable <= zta > 0)
+      !! Combine: unstable when zeta < 0, stable when zeta >= 0 (zpsi_s is already psi, no minus sign needed)
+      psi_m_ice = MERGE( zpsi_u , zpsi_s , zta < 0._wp )
       !
    END FUNCTION psi_m_ice
 
@@ -290,12 +300,9 @@ CONTAINS
       !! ** Purpose: compute the universal profile stability function for
       !!             temperature and humidity
       !!
-      !!
-      !!     Andreas et al 2005 == Jordan et al. 1999
-      !!
       !!     Psi:
-      !!     Unstable => Paulson 1970
-      !!     Stable   => Holtslag & De Bruin 1988
+      !!     Unstable => Paulson 1970, as in Eq.(31) of Jordan et al. 1999
+      !!     Stable   => Grachev et al. 2007, Eq.(13) (integrated form of their phi_h of Eq.(9b))
       !!
       !!             pzeta : stability paramenter, z/L where z is altitude
       !!                     measurement and L is M-O length
@@ -307,7 +314,11 @@ CONTAINS
       REAL(wp)             :: psi_h_ice
       REAL(wp), INTENT(in) :: pzeta
       !!----------------------------------------------------------------------------------
-      REAL(wp) :: zta, zx, zpsi_u, zpsi_s
+      REAL(wp), PARAMETER :: zah  = 5._wp        ! a_h (just below Eq.(9b), Grachev et al. 2007)
+      REAL(wp), PARAMETER :: zbh  = 5._wp        ! b_h (just below Eq.(9b))
+      REAL(wp), PARAMETER :: zch  = 3._wp        ! c_h (just below Eq.(9b))
+      REAL(wp), PARAMETER :: zbbh = SQRT(5._wp)  ! B_h = sqrt(c_h^2 - 4) (just below Eq.(13))
+      REAL(wp) :: zta, zts, zx, zz, zpsi_u, zpsi_s
       !!----------------------------------------------------------------------------------
       zta = pzeta
 
@@ -316,12 +327,22 @@ CONTAINS
 
       zpsi_u =   2._wp*LOG( 0.5_wp * (1._wp + zx*zx) )  ! Eq.(31) Jordan et al. 1999
 
-      ! Stable stratification (identical to Psi_m!):
+      ! Stable stratification, Eq.(13) Grachev et al. 2007 (integrated form of phi_h of their Eq.(9b);
+      ! the former code used phi_h itself, i.e. 1 + 5*zta*(1+zta)/(1+3*zta+zta**2), which is wrong for psi).
+      ! `zts` is forced to be >= 0 so that this branch stays finite when zeta < 0
+      ! (MERGE below evaluates both branches, even if only one is used).
+      !
+      ! Alternative stable formula (not used): Holtslag & De Bruin 1988 as given in Jordan et al. 1999
+      ! (identical to Psi_m; this formula gives -psi, so it would need a minus sign in the MERGE below):
       !zpsi_s = 0.7_wp*zta + 0.75_wp*(zta - 14.3_wp)*EXP( -0.35_wp*zta) + 10.7_wp       ! Eq.(33) Jordan et al. 1999
-      zpsi_s = 1._wp + 5._wp*zta*( 1._wp + zta ) / ( 1._wp + 3._wp*zta + zta*zta )       ! Eq.(9.b) Grachev et al. 2007
+      zts = MAX( zta , 0._wp )
+      zz  = 2._wp*zts + zch
+      zpsi_s = - 0.5_wp*zbh*LOG( 1._wp + zch*zts + zts*zts )                   &
+         &     + ( -zah/zbbh + 0.5_wp*zbh*zch/zbbh )                           &
+         &       * ( LOG( (zz  - zbbh)/(zz  + zbbh) ) - LOG( (zch - zbbh)/(zch + zbbh) ) )
 
-      !! Combine:
-      psi_h_ice = MERGE( zpsi_u  ,  -1._wp*zpsi_s  ,  zta < 0._wp )   ! Unstable <= zta < 0)  |  Stable <= zta > 0)
+      !! Combine: unstable when zeta < 0, stable when zeta >= 0 (zpsi_s is already psi, no minus sign needed)
+      psi_h_ice = MERGE( zpsi_u , zpsi_s , zta < 0._wp )
 
    END FUNCTION psi_h_ice
 
