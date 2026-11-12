@@ -86,21 +86,26 @@ CONTAINS
          !
       CASE( jp_blk )
          !
-         CALL blk_ice_1( sf(jp_wndi)%fnow(:,:,1), sf(jp_wndj)%fnow(:,:,1), sf(jp_tair)%fnow(:,:,1), sf(jp_humi)%fnow(:,:,1), &  ! #LB: `sf(jp_tair)` & `sf(jp_humi)`
-            &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su    ,                              &   ! inputs            !     have been updated at 10m in blk_oce_1
+         ! `sf(jp_tair)` & `sf(jp_humi)`: air pot. temperature & spec. humidity at `rn_zqt` (NOT adjusted to `rn_zu`:
+         ! `blk_oce_1` puts its zu values in the separate arrays `t_air_zu` & `q_air_zu`; over ice, the adjustment from
+         ! `rn_zqt` to `rn_zu` is done inside `blk_ice_1`, by the ice bulk algorithm, e.g. `turb_ice_stab`)
+         CALL blk_ice_1( sf(jp_wndi)%fnow(:,:,1), sf(jp_wndj)%fnow(:,:,1), sf(jp_tair)%fnow(:,:,1), sf(jp_humi)%fnow(:,:,1), &
+            &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su    ,                              &   ! inputs
             &            pCHi=pCHi, pCEi=pCEi, putaui=ptaux_ai, pvtaui=ptauy_ai            )                ! outputs
          !
          !
          !
       CASE( jp_abl ) !
-         !! This call of `blk_ice_1` is solely done to obtain `CHi` & `CEi` (even if right now they are constant and that's therefore useless)!
-         !!  => `blk_ice_1` is also called into `sbc_abl()@sbcabl.F90` to obtaine Qsens, Evap & CDi*U !!
+         !! NO call to `blk_ice_1` here in ABL mode (there used to be one, to obtain `pCHi` & `pCEi`):
+         !!  * `blk_ice_1` has already been called in `sbc_abl()@sbcabl.F90`, with the ABL state at time n, to get the air-ice
+         !!    exchange terms used by the ABL in `abl_stp()`. That call also filled the module arrays `CH_ice`, `CE_ice` & `wndm_ice`.
+         !!  * A second call here would use the ABL state at time n+1 (`nt_n` has been swapped at the end of `abl_stp()`) and
+         !!    overwrite `CH_ice`, `CE_ice` & `wndm_ice`. Then `blk_ice_2()` would compute the heat and water fluxes received
+         !!    by the ice with a different wind (and different coefficients) than the ones the ABL used => no conservation.
+         !!  * `pCHi` & `pCEi` are the module arrays `CH_ice` & `CE_ice` themselves (see the call in `icestp.F90`), so they
+         !!    already hold the right values; nothing to copy.
          !!  `ptaux_ai` & `ptauy_ai` are computed in ablmod (`abl_stp()`, via `sbc_abl()`) BEFORE this routine is called:
-         !!  they must NOT be overwritten here (no `putaui`/`pvtaui` arguments below), only their halos are updated at the end.
-         CALL blk_ice_1(  u_abl(:,:,2,nt_n)      ,  v_abl(:,:,2,nt_n) ,      &  !   <<= in
-            &            tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa), &  !   <<= in
-            &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su    ,   &  !   <<= in
-            &            pCHi=pCHi, pCEi=pCEi )                                 !   <<= out
+         !!  they must NOT be overwritten here, only their halos are updated at the end.
 
 #if defined key_verbose
          IF(lwp) PRINT *, '* LOLO: `t_air_zu, q_air_zu` overwriten with `tq_abl` @ level=2!'

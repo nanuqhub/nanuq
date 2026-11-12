@@ -18,7 +18,7 @@ MODULE ablmod
    USE dom_oce, ONLY  : tmask
    USE sbc_oce, ONLY  : ght_abl, ghw_abl, e3t_abl, e3w_abl, jpka, jpkam1, rhoa
    !
-   USE sbc_phy, ONLY  : theta_exner, pres_temp, z0_from_Cd, rho_air, cp_air, L_vap, rctv0
+   USE sbc_phy, ONLY  : pot_from_abs, pres_temp, z0_from_Cd, rho_air, cp_air, L_vap, rctv0
    !
    USE prtctl         ! Print control                    (prt_ctl routine)
    USE iom            ! IOM library
@@ -109,6 +109,7 @@ CONTAINS
       INTEGER  ::   ji, jj, jk, jtra, jbak               ! dummy loop indices
       REAL(wp) ::   zztmp, zcff, ztemp, zhumi, zcff1, zztmp1, zztmp2
       REAL(wp) ::   zcff2, zfcor, zmsk, zsig, zcffu, zcffv, zzice,zzoce
+      REAL(wp) ::   zcd_oce, zcd_ice, zcd_eff   ! drag coefficients above open water, above ice, and their weighted mean (for `zrough`)
       LOGICAL  ::   SemiImp_Cor = .TRUE.
       !
       !!---------------------------------------------------------------------
@@ -123,15 +124,38 @@ CONTAINS
       IF( kt == nit000 ) ALLOCATE ( zrough(jpi,jpj) )
       !! Compute ustar squared as Cd * |U_atm|^2 (absolute atmospheric wind, NOT corrected for the ocean current),
       !! needed for surface boundary condition of TKE. Same choice as the bulk formulation (see below).
-      !! pwndm contains U_zu_oce: the absolute wind at zu, adjusted for stability/gustiness by the bulk algorithm (see blk_oce_1 in sbcblk)
+      !! * above open water: pwndm contains U_zu_oce, the absolute wind at zu computed by the OPEN-WATER bulk algorithm
+      !!   (with its gustiness correction, see blk_oce_1 in sbcblk), consistent with `pCd_du` = Cd_oce * U_zu_oce
+      !! * above ice: the absolute ABL wind speed at its first level |U_abl| (now, `nt_n`), consistent with
+      !!   `pCd_du_ice` = Cd_ice * |U_abl| (see `blk_ice_1()`); `pwndm` must NOT be used here, it has no meaning above ice
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             zzoce         = pCd_du    (ji,jj) * pwndm(ji,jj)
-            zzice         = pCd_du_ice(ji,jj) * pwndm(ji,jj)
+            zwabs         = SQRT(  u_abl(ji,jj,2,nt_n) * u_abl(ji,jj,2,nt_n)   &
+               &                 + v_abl(ji,jj,2,nt_n) * v_abl(ji,jj,2,nt_n) )   ! |U_abl| at the first level, above ice
+            zzice         = pCd_du_ice(ji,jj) * zwabs
             ustar2(ji,jj) = zzoce * pfrac_oce(ji,jj) + (1._wp - pfrac_oce(ji,jj)) * zzice
-            zsspt(ji,jj) = theta_exner( psst(ji,jj)+rt0, pslp_dta(ji,jj) )   ! potential SST [K]
+            ! Potential SST [K]: with the NANUQ convention (Exner function with reference pressure = surface pressure `slp`,
+            ! see `rlapse_dry` in `sbc_phy.F90`), theta = T at the surface (z=0, p=slp), so it is simply the SST in Kelvin
+            ! (`theta_exner(SST, slp, slp)` would give exactly the same value).
+            ! This is also what is used over ice below (`ptm_su`, absolute = potential at the surface), so both surfaces are consistent.
+            zsspt(ji,jj) = psst(ji,jj) + rt0
             !
-            zrough(ji,jj) = z0_from_Cd( ght_abl(2), pCd_du(ji,jj) / MAX( pwndm(ji,jj), 0.5_wp ) ) ! #LB: z0_from_Cd is define in sbc_phy.F90...
+            ! Surface roughness length for the TKE closure (surface mixing length = `zrough * rn_Lsfc`), ice-aware:
+            ! * zcd_oce: drag coefficient above open water, recovered from `pCd_du` = Cd_oce * U_zu_oce
+            ! * zcd_ice: drag coefficient above ice, recovered from `pCd_du_ice` = Cd_ice * |U_abl|
+            !   (same lower bound of 0.5 m/s on the wind speed in both cases, to avoid a division by ~0)
+            ! * zcd_eff: "effective" drag coefficient of the cell, mean of the two weighted by the open water fraction
+            !   (same weighting as `ustar2` above), then converted into a roughness length at the first ABL level.
+            ! Before, only `zcd_oce` was used, so the roughness of the ice was ignored in ice-covered cells.
+            zcd_oce       = pCd_du    (ji,jj) / MAX( pwndm(ji,jj), 0.5_wp )
+            zcd_ice       = pCd_du_ice(ji,jj) / MAX( zwabs       , 0.5_wp )
+            zcd_eff       = zcd_oce * pfrac_oce(ji,jj) + (1._wp - pfrac_oce(ji,jj)) * zcd_ice
+            ! Lower bound of 1.e-4 on the drag coefficient: `z0_from_Cd()` computes `vkarmn/SQRT(Cd)`, and Cd = 0 on land
+            ! (`pCd_du` & `pCd_du_ice` are 0 there) => division by zero, which crashes a run with floating-point traps.
+            ! Above sea and ice, Cd is always well above 1.e-4 (about 1.e-3 to 2.e-3), so the bound only acts on land,
+            ! where `zrough` has no physical meaning (same bound as the old commented-out formula of NEMO).
+            zrough(ji,jj) = z0_from_Cd( ght_abl(2), MAX( zcd_eff, 1.e-4_wp ) ) ! #LB: z0_from_Cd is define in sbc_phy.F90...
          END DO
       END DO
 
@@ -647,9 +671,16 @@ CONTAINS
             zpre( ji, jj ) = pres_temp( zhumi, pslp_dta(ji,jj), ght_abl(2), ptpot=ztemp, pta=ztabs( ji, jj ) )
             zcff           = rho_air( ztabs( ji, jj ), zhumi, zpre( ji, jj ) )
             psen( ji, jj ) =    - cp_air(zhumi) * zcff * psen(ji,jj) * ( zsspt(ji,jj) - ztemp )         !GS: negative sign to respect aerobulk convention
-            ! Evaporation computed as a positive upward mass flux (`zztmp >= 0` when the ocean loses water, condensation is ignored):
-            zztmp          = MAX( 0._wp,  zcff * pevp(ji,jj) * ( pssq(ji,jj)  - zhumi ) )
-            ! Latent heat flux, downward-positive convention => negative when the ocean evaporates:
+            ! Evaporation computed as an upward mass flux: `zztmp > 0` when the ocean loses water (evaporation),
+            ! `zztmp < 0` when the ocean gains water (condensation, air more humid than the surface).
+            ! Condensation is NOT removed (no MAX(0,...) cap anymore), for two reasons:
+            ! * the ABL humidity equation above (tracer `jp_qa`, surface term `Ce*U*(q_s - q)`) has no cap, so the
+            !   water that the ABL loses to the surface during condensation must be received by the ocean (`emp`),
+            !   with its latent heat (`qns`); otherwise water and energy are not conserved between ABL and ocean;
+            ! * same choice as in `bulk_formula_sclr()@sbc_phy.F90` (decision of Nov 2026), so bulk and ABL modes agree.
+            zztmp          = zcff * pevp(ji,jj) * ( pssq(ji,jj)  - zhumi )
+            ! Latent heat flux, downward-positive convention => negative when the ocean evaporates,
+            ! positive when water condenses at the ocean surface:
             plat( ji, jj ) = - L_vap( psst(ji,jj) ) * zztmp
             ! Returned evaporation follows the same convention as `bulk_formula_sclr()@sbc_phy.F90` and what `blk_oce_2()@sbcblk.F90`
             ! expects (`pevap < 0` when the ocean loses water), so that `emp = -pevap - pprec` is positive for E > P
@@ -670,7 +701,8 @@ CONTAINS
       !     zcff  = | U_abl - U_oce |  : ocean-relative, used for the ocean stress (`ptaum`, `ptaui`, `ptauj`)
       !     zwabs = | U_abl |          : absolute wind at z=zu, returned in `pwndm` (= `wndm`), the same definition as in bulk mode
       ! `pwndm` is returned as the ABSOLUTE wind so that the ice fluxes (`blk_ice_2`) and all outputs use the same wind
-      ! in bulk and ABL modes. `ustar2` and `zrough` were computed above from the absolute wind (`U_zu_oce`), not from `zcff`.
+      ! in bulk and ABL modes. `ustar2` and `zrough` were computed above from absolute winds, not from `zcff`
+      ! (`U_zu_oce` above open water, |U_abl| above ice).
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             zcff          = SQRT(  zwnd_i(ji,jj) * zwnd_i(ji,jj)   &

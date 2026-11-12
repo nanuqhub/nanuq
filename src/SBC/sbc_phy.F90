@@ -47,7 +47,15 @@ MODULE sbc_phy
    ! while in NANUQ `rgamma_dry` (above) is the Poisson constant (~0.286). So, when copying code from AeroBulk,
    ! `rgamma_dry` used as a lapse rate (e.g. `pThta - rgamma_dry*pz`) must become `rlapse_dry` here!
    REAL(wp), PARAMETER, PUBLIC :: rlapse_dry = grav / rCp_dry     !: dry adiabatic lapse rate                       [K/m]
-   REAL(wp), PARAMETER, PUBLIC :: rpref      = 1.e5_wp            !: reference air pressure for exner function       [Pa]
+   ! Convention for the potential temperature in all of NANUQ (decision of Nov 2026), near the surface AND in the ABL column:
+   !   theta(z) = T(z) * ( p_ref / p(z) )**rgamma_dry   (Exner function),  with  p_ref = slp  (surface pressure read in the forcing)
+   ! * p(z) is the actual pressure at height z, obtained with the barometric equation from `slp` (see `pres_temp`)
+   ! * p_ref = slp means: theta is the temperature the air at z would have if brought adiabatically down to the surface.
+   !   So theta = T exactly at the surface: SST and ice surface temperature are compared directly with theta_air.
+   ! * Functions: `pot_from_abs()` (T -> theta) and `abs_from_pot()` (theta -> T, also used inside `pres_temp`).
+   ! The OLD code used a FIXED reference pressure `rpref` = 1000 hPa: with `slp` /= 1000 hPa it shifted theta by ~1-2 K with
+   ! respect to the surface temperatures (that were used as absolute temperatures), which biased the fluxes. `rpref` was removed.
+   ! (Near the surface, theta ~= T + rlapse_dry*z, but `rlapse_dry` must NOT be used for the conversion, use the 2 functions above.)
    !
    REAL(wp), PARAMETER, PUBLIC :: rho0_a  = 1.2_wp      !: Approx. of density of air                       [kg/m^3]
    REAL(wp), PARAMETER, PUBLIC :: rho0_w  = 1025._wp    !: Density of sea-water  (ECMWF->1025)             [kg/m^3]
@@ -61,7 +69,12 @@ MODULE sbc_phy
    !
    REAL(wp), PARAMETER, PUBLIC :: emiss_i = 0.996_wp    !:  "   for ice and snow => but Rees 1993 suggests can be lower in winter on fresh snow... 0.72 ...
 
-   REAL(wp), PARAMETER, PUBLIC :: wspd_thrshld_ice = 0.2_wp !: minimum scalar wind speed accepted over sea-ice... [m/s]
+   ! Minimum scalar wind speed used to compute the bulk transfer coefficients over sea-ice (all ice algorithms: STAB, AN05, LU12, LG15).
+   ! It was 0.2 m/s: at such low wind the stability parameter zeta = z/L becomes extreme (|zeta| up to the cap of 50),
+   ! which gives extreme C_D, C_H and C_E (well above 2E-3 in unstable cases, well below 0.5E-3 in stable cases).
+   ! 1 m/s limits this. There is no gustiness / free-convection term over sea-ice, so this threshold is the only protection.
+   ! It is used for the coefficients only: the fluxes themselves use the real wind speed (`wndm_ice` in `blk_ice_2`).
+   REAL(wp), PARAMETER, PUBLIC :: wspd_thrshld_ice = 1._wp !: minimum scalar wind speed accepted over sea-ice... [m/s]
 
    !
    REAL(wp), PARAMETER, PUBLIC :: rdct_qsat_salt = 0.98_wp !: reduction factor on specific humidity at saturation (q_sat(T_s)) due to salt
@@ -95,10 +108,6 @@ MODULE sbc_phy
    INTERFACE pres_temp
       MODULE PROCEDURE pres_temp_vctr, pres_temp_sclr
    END INTERFACE pres_temp
-
-   INTERFACE theta_exner
-      MODULE PROCEDURE theta_exner_vctr, theta_exner_sclr
-   END INTERFACE theta_exner
 
    INTERFACE visc_air
       MODULE PROCEDURE visc_air_vctr, visc_air_sclr
@@ -179,7 +188,8 @@ MODULE sbc_phy
 
    PUBLIC virt_temp
    PUBLIC pres_temp
-   PUBLIC theta_exner
+   PUBLIC pot_from_abs ! absolute -> potential temperature (Exner, reference pressure = slp)
+   PUBLIC abs_from_pot ! potential -> absolute temperature (Exner, reference pressure = slp)
    PUBLIC rho_air
    PUBLIC visc_air
    PUBLIC L_vap
@@ -274,20 +284,23 @@ CONTAINS
       REAL(wp), INTENT(inout), OPTIONAL :: pta               ! air absolute temperature  [K]
       LOGICAL , INTENT(in)   , OPTIONAL :: l_ice             ! sea-ice presence (not used anymore, see note above)
       !!
-      REAL(wp)                          :: ztpot, zta, zpa, zxv, zxm, zmask
-      INTEGER                           :: it                ! iteration indice and number
-      INTEGER, PARAMETER                :: niter = 3         ! iteration indice and number
+      REAL(wp)                          :: zta, zpa, zxv, zxm
       !!-------------------------------------------------------------------------------
-      IF( PRESENT(ptpot) ) THEN
-         zmask = 1._wp
-         ztpot = ptpot
-         zta   = 0._wp
-      ELSE
-         zmask = 0._wp
-         ztpot = 0._wp
-         zta   = pta
-      ENDIF
+      ! Absolute air temperature at height pz:
+      ! * if the potential temperature is given, inverse of the Exner function with reference pressure = surface pressure
+      !   (NANUQ convention, see the declaration of `rlapse_dry`), done by `abs_from_pot()`
+      !   (the old code used the Exner function with a FIXED 1000 hPa reference `rpref`, which has been removed)
+      ! * otherwise the absolute temperature `pta` is given directly
 
+      ! An IF block, and NOT `MERGE()`: Fortran evaluates BOTH arguments of `MERGE()`, whatever the mask,
+      ! so `MERGE( abs_from_pot(ptpot,...), pta, PRESENT(ptpot) )` read the absent optional argument
+      ! (`ptpot` when only `pta` is given, as in `sbc_blk()`; `pta` when only `ptpot` is given, as in `abl_stp()`)
+      ! => SIGSEGV. With the IF block, only the argument that is present is read.
+      IF( PRESENT(ptpot) ) THEN
+         zta = abs_from_pot( ptpot, pqspe, pz )
+      ELSE
+         zta = pta
+      ENDIF
 
       ! Mole fraction of water vapour in the air, computed from the specific humidity q (a mass ratio):
       !    x_v = q / ( eps + (1 - eps)*q ),  with eps = M_water / M_dry  (= `rmm_ratio`)
@@ -295,23 +308,14 @@ CONTAINS
       !  this gave a molar mass of moist air ~30% too low at RH=80%)
       zxv = pqspe / ( rmm_ratio + (1._wp - rmm_ratio)*pqspe )
 
-      ! Molar mass of moist air [kg/mol]. It does not depend on pressure nor temperature,
-      ! so it is computed once here, before the iteration loop:
+      ! Molar mass of moist air [kg/mol] (it does not depend on pressure nor temperature):
       zxm = (1._wp - zxv) * rmm_dryair + zxv * rmm_water
 
-      zpa = pslp              ! air pressure first guess [Pa]
-
-      ! Barometric equation for an isothermal layer at temperature zta.
-      ! The iterations are still needed when the potential temperature `ptpot` is given:
-      ! the absolute temperature zta then depends on the pressure zpa, which depends on zta
-      ! (unlike in AeroBulk, where only the absolute temperature is given and no iteration is needed).
-      ! When only the absolute temperature `pta` is given, zta is fixed and the loop gives the
-      ! final value at the first iteration already.
-      !$acc loop seq
-      DO it = 1, niter
-         zta   = ztpot * ( zpa / rpref )**rgamma_dry * zmask + (1._wp - zmask) * zta
-         zpa   = pslp * EXP( -grav * zxm * pz / ( R_gas * MAX(zta,1._wp ) ) )
-      END DO
+      ! Barometric equation for an isothermal layer at temperature zta, from the surface pressure `pslp`
+      ! (zta is known at this point in both cases, so a single evaluation is enough; when `ptpot` is given,
+      !  `abs_from_pot()` already used this same barometric equation, so zta and zpa are consistent:
+      !  zta = ptpot * (zpa/pslp)**rgamma_dry )
+      zpa = pslp * EXP( -grav * zxm * pz / ( R_gas * MAX(zta,1._wp ) ) )
 
       pres_temp_sclr = zpa
       IF(( PRESENT(pta) ).AND.( PRESENT(ptpot) )) pta = zta
@@ -359,52 +363,81 @@ CONTAINS
    END FUNCTION pres_temp_vctr
 
 
-   FUNCTION theta_exner_sclr( pta, ppa )
+   FUNCTION pot_from_abs( pta, ppa, pslp )
       !!-------------------------------------------------------------------------------
-      !!                           ***  FUNCTION theta_exner  ***
+      !!                           ***  FUNCTION pot_from_abs  ***
       !!
-      !! ** Purpose : compute air/surface potential temperature from absolute temperature
-      !!              and pressure using Exner function
+      !! ** Purpose : compute the air potential temperature from the absolute temperature,
+      !!              with the Exner function and the SURFACE pressure as reference pressure:
+      !!                 theta = T * ( pslp / p )**rgamma_dry
+      !!              (NANUQ convention, see the declaration of `rlapse_dry`: theta = T at the surface)
+      !!
       !! ** Author: G. Samson, Feb 2021
+      !!            L. Brodeau, Nov 2026 (reference pressure = surface pressure `pslp` instead of 1000 hPa)
       !!-------------------------------------------------------------------------------
       !$acc routine seq
       !!-------------------------------------------------------------------------------
-      REAL(wp)             :: theta_exner_sclr   ! air/surface potential temperature [K]
-      REAL(wp), INTENT(in) :: pta                ! air/surface absolute temperature  [K]
-      REAL(wp), INTENT(in) :: ppa                ! air/surface pressure              [Pa]
+      REAL(wp)             :: pot_from_abs   ! air potential temperature              [K]
+      REAL(wp), INTENT(in) :: pta           ! air absolute temperature               [K]
+      REAL(wp), INTENT(in) :: ppa           ! air pressure at the height of `pta`    [Pa]
+      REAL(wp), INTENT(in) :: pslp          ! surface (sea-level) pressure, read in the forcing [Pa]
       !!-------------------------------------------------------------------------------
       REAL(wp)             :: ztp
+      !!-------------------------------------------------------------------------------
+      ! Exner function with reference pressure = surface pressure (MAX() => protection against masked/garbage values):
+      ztp = MAX(pta, 100._wp) * ( MAX(pslp, 1.E4_wp) / MAX(ppa, 1.E4_wp) ) ** rgamma_dry
       !
-      ztp = MAX(pta, 100._wp) * ( rpref / MAX(ppa, 1.E4_wp) ) ** rgamma_dry
+      ! Safety net: keep theta within physical bounds
+      pot_from_abs = MIN( MAX( ztp, 100._wp ) , 350._wp )
       !
-      theta_exner_sclr = MIN( MAX( ztp, 100._wp ) , 350._wp )
-      !
-   END FUNCTION theta_exner_sclr
+   END FUNCTION pot_from_abs
 
-   FUNCTION theta_exner_vctr( pta, ppa )
+
+   FUNCTION abs_from_pot( ptheta, pqspe, pz )
       !!-------------------------------------------------------------------------------
-      !!                           ***  FUNCTION theta_exner  ***
+      !!                           ***  FUNCTION abs_from_pot  ***
       !!
-      !! ** Purpose : compute air/surface potential temperature from absolute temperature
-      !!              and pressure using Exner function
-      !! ** Author: G. Samson, Feb 2021
+      !! ** Purpose : compute the air absolute temperature at height pz from the potential temperature,
+      !!              inverse of the Exner function with the SURFACE pressure as reference pressure
+      !!              (NANUQ convention, see the declaration of `rlapse_dry`, and `pot_from_abs()`):
+      !!                 T = theta * ( p(z) / p_s )**rgamma_dry
+      !!
+      !! ** Method  : with the barometric equation (isothermal layer at temperature T, same as in `pres_temp`),
+      !!                 p(z) / p_s = EXP( -g * M * z / ( R * T ) )      (M: molar mass of moist air)
+      !!              so the ratio p(z)/p_s does not depend on the VALUE of the surface pressure p_s:
+      !!                 T = theta * EXP( -rgamma_dry * g * M * z / ( R * T ) )
+      !!              This is solved for T with a few fixed-point iterations, starting from the first guess
+      !!              T = theta - rlapse_dry*z (convergence is very fast: the correction is ~Gamma*z/T, < 1e-1 at 2 km).
+      !!
+      !! ** Author: L. Brodeau, Nov 2026
       !!-------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)             :: theta_exner_vctr   ! air/surface potential temperature [K]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: pta                ! air/surface absolute temperature  [K]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in) :: ppa                ! air/surface pressure              [Pa]
+      !$acc routine seq
       !!-------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj) :: z2d
-      INTEGER :: ji, jj
+      REAL(wp)             :: abs_from_pot   ! air absolute temperature at height pz [K]
+      REAL(wp), INTENT(in) :: ptheta            ! air potential temperature at height pz [K]
+      REAL(wp), INTENT(in) :: pqspe             ! air specific humidity at height pz     [kg/kg]
+      REAL(wp), INTENT(in) :: pz                ! height above the surface               [m]
+      !!-------------------------------------------------------------------------------
+      REAL(wp)           :: zxv, zxm, zta
+      INTEGER            :: it
+      INTEGER, PARAMETER :: niter = 3   ! number of fixed-point iterations
+      !!-------------------------------------------------------------------------------
+      ! Molar mass of moist air [kg/mol], from the mole fraction of water vapour (same as in `pres_temp`):
+      zxv = pqspe / ( rmm_ratio + (1._wp - rmm_ratio)*pqspe )
+      zxm = (1._wp - zxv) * rmm_dryair + zxv * rmm_water
       !
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            z2d(ji,jj) = theta_exner_sclr( pta(ji,jj), ppa(ji,jj) )
-         END DO
+      ! First guess: dry adiabatic lapse rate (already very close to the solution near the surface)
+      zta = ptheta - rlapse_dry*pz
+      !
+      ! Fixed-point iterations on T = theta * ( p(z)/p_s )**rgamma_dry, with p(z)/p_s from the barometric equation:
+      !$acc loop seq
+      DO it = 1, niter
+         zta = ptheta * EXP( -rgamma_dry * grav * zxm * pz / ( R_gas * MAX(zta,1._wp) ) )
       END DO
       !
-      theta_exner_vctr(:,:) = MIN( MAX( z2d(:,:), 100._wp ) , 350._wp )
+      abs_from_pot = zta
       !
-   END FUNCTION theta_exner_vctr
+   END FUNCTION abs_from_pot
 
 
    FUNCTION rho_air_vctr( ptak, pqa, ppa )
@@ -659,12 +692,13 @@ CONTAINS
       ! Denominator: mean virtual ABSOLUTE temperature within the layer [0:pz] (same as AeroBulk):
       ! * if provided, from the layer temperature and humidity `pta_layer` & `pqa_layer`
       ! * otherwise, mean of the virtual surface temperature and the virtual absolute air temperature at pz,
-      !   the absolute air temperature being obtained from the potential one with the dry adiabatic lapse rate
-      !   (`rlapse_dry`, which is `rgamma_dry` in AeroBulk, see the declaration of `rlapse_dry`)
+      !   the absolute air temperature being obtained from the potential one with the inverse of the Exner function
+      !   (reference pressure = surface pressure, NANUQ convention, see `abs_from_pot()`; the value of the
+      !    surface pressure is not needed for this, which is why `Ri_bulk` has no `slp` argument)
       IF( l_ptqa_l_prvd ) THEN
          ztv = virt_temp_sclr( pta_layer, pqa_layer )
       ELSE
-         ztv = 0.5_wp*( zsstv + virt_temp_sclr( ptha - rlapse_dry*pz, pqa ) )
+         ztv = 0.5_wp*( zsstv + virt_temp_sclr( abs_from_pot( ptha, pqa, pz ), pqa ) )
       END IF
       !
       Ri_bulk_sclr = grav * zdthv * pz / ( ztv * pub * pub )      ! the usual definition of Ri_bulk_sclr
@@ -1072,7 +1106,7 @@ CONTAINS
       REAL(wp), INTENT(out), OPTIONAL :: prhoa ! Air density at z=pzu [kg/m^3]
       LOGICAL,  INTENT(in),  OPTIONAL :: l_ice  !: we are above ice
       !!
-      REAL(wp) :: zts, zta, zrho, zUrho, zevap
+      REAL(wp) :: zts, zta, zpa, zrho, zUrho, zevap
       LOGICAL  :: lice
       !!----------------------------------------------------------------------------------
       lice = .FALSE.
@@ -1081,11 +1115,13 @@ CONTAINS
       zts = pts + rt0   ! to Kelvin !
 
       !! Need zta, absolute temperature at pzu (formula to estimate rho_air needs absolute temperature, not the potential temperature "pThta")
-      ! Absolute temp. is slightly colder than the potential one, by the dry adiabatic lapse rate times the height
-      ! (`rlapse_dry` and not `rgamma_dry`, which is the Poisson constant in NANUQ, see its declaration)
-      zta  = pThta - rlapse_dry*pzu
-      zrho = rho_air(zta, pqa, pslp)
-      zrho = rho_air(zta, pqa, pslp-zrho*grav*pzu) ! taking into account that we are pzu m above the sea level where SLP is given!
+      ! `pres_temp()` gives both, at height pzu:
+      ! * the absolute temperature zta, from pThta with the inverse of the Exner function (reference pressure = slp, NANUQ convention)
+      ! * the air pressure zpa, from the barometric equation starting at the surface pressure `pslp`
+      ! so the air density is computed directly with the pressure at pzu (instead of the old 2-step estimate
+      ! `pslp - rho*grav*pzu`, and instead of the lapse-rate approximation for zta)
+      zpa  = pres_temp( pqa, pslp, pzu, ptpot=pThta, pta=zta )
+      zrho = rho_air( zta, pqa, zpa )
 
       zUrho = pUb*MAX(zrho, 1._wp)     ! rho*U10
 

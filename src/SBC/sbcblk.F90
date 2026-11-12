@@ -570,11 +570,16 @@ CONTAINS
       IF( .NOT. ln_tair_pot ) THEN
          ! temperature read into file is ABSOLUTE temperature (that's the case for ECMWF products for example...)
          IF((kt==nit000).AND.lwp) WRITE(numout,*) ' *** sbc_blk() => air temperature converted from ABSOLUTE to POTENTIAL!'
+         ! Conversion with the Exner function, reference pressure = surface pressure `slp` read in the forcing
+         ! (NANUQ convention, so that theta = T at the surface, see the declaration of `rlapse_dry` in `sbc_phy.F90`):
+         ! * zpa: actual air pressure at z = rn_zqt, from the barometric equation starting at `slp`
+         ! * theta = T * ( slp / zpa )**rgamma_dry
+         ! (this is the exact inverse of `temp_from_theta()`, used by `bulk_formula_sclr()` and `pres_temp()`)
          !$acc parallel loop collapse(2)
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
                zpa = pres_temp( sf(jp_humi)%fnow(ji,jj,1), sf(jp_mslp)%fnow(ji,jj,1), rn_zqt, pta=sf(jp_tair)%fnow(ji,jj,1) )
-               sf(jp_tair)%fnow(ji,jj,1) = theta_exner( sf(jp_tair)%fnow(ji,jj,1), zpa )
+               sf(jp_tair)%fnow(ji,jj,1) = pot_from_abs( sf(jp_tair)%fnow(ji,jj,1), zpa, sf(jp_mslp)%fnow(ji,jj,1) )
             ENDDO
          ENDDO
          !$acc end parallel loop
@@ -741,8 +746,7 @@ CONTAINS
             !                           ! Temporary conversion from Celcius to Kelvin (and set minimum value far above 0 K)
             !pssst(ji,jj) = psst(ji,jj) + rt0  ! by default: skin temperature = "bulk SST" (will remain this way if NCAR algorithm used!)
 
-            ! sea surface potential temperature [K]
-            !zsspt(ji,jj) = theta_exner( pssst(ji,jj), pslp(ji,jj) )
+            ! (no sea surface potential temperature needed: with the NANUQ convention, theta = T at the surface)
 
             ! ----------------------------------------------------------------------------- !
             !      0   Absolute wind module at T-point (NOT relative to the ocean current or ice drift)   !
@@ -1092,8 +1096,15 @@ CONTAINS
       REAL(wp) ::   zA, zztmp1, zztmp2            ! temporary scalars
       LOGICAL  ::   l_call_1_abl
       !!---------------------------------------------------------------------
+      !! About the use of `wndm_ice` in place of old `wndm`
+      ! Absolute near-surface wind speed at height zu [m/s], computed HERE from the wind given in input (`pwndi`, `pwndj`).
+      ! The module array `wndm` must NOT be used in this routine: in ABL mode, when `blk_ice_1` is called from `sbc_abl()`,
+      ! `wndm` has just been overwritten by `blk_oce_1()` with `U_zu_oce`, the wind at zu computed by the OPEN-WATER bulk
+      ! algorithm (with its gustiness correction, that depends on the stability above open water), which has no meaning above ice.
+      ! In bulk mode, `wndm_ice` is identical to `wndm` (same formula from the same input wind, same zero halo).
+      !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_ice_1')
-      !$acc data present(CD_ice,CE_ice,CH_ice,xtmp4,pwndi,pwndj,ptair,pqair,pslp,puice,pvice,ptsui,pCHi,pCEi,putaui,pvtaui,wndm,rhoa,t_air_zu_i,q_air_zu_i)
+      !$acc data present(CD_ice,CE_ice,CH_ice,xtmp4,pwndi,pwndj,ptair,pqair,pslp,puice,pvice,ptsui,pCHi,pCEi,putaui,pvtaui,wndm_ice,rhoa,t_air_zu_i,q_air_zu_i)
 
       IF( ln_abl )  l_call_1_abl = PRESENT(pseni).AND.PRESENT(pevapi).AND.PRESENT(pssqi).AND.PRESENT(pcd_dui)
 
@@ -1105,9 +1116,21 @@ CONTAINS
             CE_ice(ji,jj) = 0._wp
             xtmp4(ji,jj)  = 0._wp ! temporary array for SSQ over ice
             CH_ice(ji,jj) = 0._wp
+            wndm_ice(ji,jj)  = 0._wp ! zero on the halo, as `wndm` in `blk_oce_1()`
             !! Safety:
             t_air_zu_i(ji,jj) = ptair(ji,jj)
             q_air_zu_i(ji,jj) = pqair(ji,jj)
+         END DO
+      END DO
+      !$acc end parallel loop
+
+      ! Absolute near-surface wind speed at height zu above the ice, from the input wind components
+      ! (bulk mode: prescribed wind; ABL mode: ABL wind at its first level). NOT relative to the ice drift
+      ! (only the stress uses the wind relative to the ice drift, see the wind conventions in `abl_stp()`).
+      !$acc parallel loop collapse(2)
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+            wndm_ice(ji,jj) = SQRT( pwndi(ji,jj)*pwndi(ji,jj) + pwndj(ji,jj)*pwndj(ji,jj) )
          END DO
       END DO
       !$acc end parallel loop
@@ -1149,7 +1172,8 @@ CONTAINS
 
       CASE( np_ice_stab )  ! Take into account stability via Monin-Obukhov stuff...
          !
-         CALL turb_ice_stab( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm,    &
+         ! (`wndm_ice`: absolute wind speed at zu computed from the input wind, not the module array `wndm`)
+         CALL turb_ice_stab( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm_ice,   &
             &                      rn_Cd_i, rn_Ch_i, rn_Ce_i,                    &
             &                      CD_ice, CH_ice, CE_ice, t_air_zu_i, q_air_zu_i )
 
@@ -1159,7 +1183,7 @@ CONTAINS
 #if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'blk_ice_1: ADAPT `turb_ice_an05` for GPU before using it!')
 #endif
-         CALL turb_ice_an05( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm,       &
+         CALL turb_ice_an05( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm_ice,      &
             &                      CD_ice, CH_ice, CE_ice, t_air_zu_i, q_air_zu_i )
 
 
@@ -1168,7 +1192,7 @@ CONTAINS
 #if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'blk_ice_1: ADAPT `turb_ice_lu12` for GPU before using it!')
 #endif
-         CALL turb_ice_lu12( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm, at_i, &
+         CALL turb_ice_lu12( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm_ice, at_i, &
             &                      CD_ice, CH_ice, CE_ice, t_air_zu_i, q_air_zu_i )
 
 
@@ -1177,7 +1201,7 @@ CONTAINS
 #if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'blk_ice_1: ADAPT `turb_ice_lg15` for GPU before using it!')
 #endif
-         CALL turb_ice_lg15( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm, at_i, &
+         CALL turb_ice_lg15( rn_zqt, rn_zu, ptsui, ptair, xtmp4, pqair, wndm_ice, at_i, &
             &                      CD_ice, CH_ice, CE_ice, t_air_zu_i, q_air_zu_i )
 
 
@@ -1195,7 +1219,7 @@ CONTAINS
          !$acc parallel loop collapse(2)
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
-               zztmp1        = rhoa(ji,jj) * CD_ice(ji,jj) * wndm(ji,jj)
+               zztmp1        = rhoa(ji,jj) * CD_ice(ji,jj) * wndm_ice(ji,jj)
                putaui(ji,jj) = zztmp1 * pwndi(ji,jj)
                pvtaui(ji,jj) = zztmp1 * pwndj(ji,jj)
             END DO
@@ -1208,13 +1232,16 @@ CONTAINS
 
       ELSEIF( ln_abl .AND. l_call_1_abl ) THEN
          !
+         ! Transfer coefficients times the absolute wind speed at zu above the ice (`wndm_ice`, from the ABL wind given in input),
+         ! for the air-ice exchanges in the ABL (`abl_stp()`). Using `wndm_ice` here (and not `wndm` = `U_zu_oce` from the open-water
+         ! bulk algorithm) makes the ABL side use the same wind as the ice side (`blk_ice_2()`, where `wndm` = |U_abl|).
          !$acc parallel loop collapse(2) present( pcd_dui, pseni, pevapi, pssqi )
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
-               pseni  (ji,jj) = wndm(ji,jj) * CH_ice(ji,jj)
-               pevapi (ji,jj) = wndm(ji,jj) * CE_ice(ji,jj)
+               pseni  (ji,jj) = wndm_ice(ji,jj) * CH_ice(ji,jj)
+               pevapi (ji,jj) = wndm_ice(ji,jj) * CE_ice(ji,jj)
                pssqi(ji,jj)   = xtmp4(ji,jj)
-               pcd_dui(ji,jj) = wndm(ji,jj) * CD_ice(ji,jj)
+               pcd_dui(ji,jj) = wndm_ice(ji,jj) * CD_ice(ji,jj)
             END DO
          END DO
          !$acc end parallel loop
@@ -1261,12 +1288,15 @@ CONTAINS
          !$acc end parallel loop
       ENDIF
 
-      IF(sn_cfctl%l_prtctl)  CALL prt_ctl(tab2d_1=wndm, clinfo1=' blk_ice: wndm : ', mask1=tmask )
+      IF(sn_cfctl%l_prtctl) THEN
+         ! print the wind speed actually used in this routine (`wndm_ice`), it must be on the host for `prt_ctl`
+         !$acc update self( wndm_ice )
+         CALL prt_ctl(tab2d_1=wndm_ice, clinfo1=' blk_ice: wndm_ice : ', mask1=tmask )
+      ENDIF
 
       !$acc end data
       IF( ln_timing )   CALL timing_stop('blk_ice_1')
    END SUBROUTINE blk_ice_1
-   ! xtmp4
 
 
    SUBROUTINE blk_ice_2( ptsu, phs, phi, palb, ptair, pqair, pslp, pdqlw, pprec, psnow, pCHi, pCEi )
@@ -1317,7 +1347,7 @@ CONTAINS
       REAL(wp)  ::   zcptrain, zcptsnw, zcptn ! Heat content per unit mass (J/kg)
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('blk_ice_2')
-      !$acc data present( ptsu,phs,phi,palb,ptair,pqair,pslp,pdqlw,pprec,psnow,pCHi,pCEi,sst_s,qsr_ice,qlw_ice,qsr,rhoa,wndm,qla_ice,qsb_ice,qns_ice,dqns_ice,qsr_oce )
+      !$acc data present( ptsu,phs,phi,palb,ptair,pqair,pslp,pdqlw,pprec,psnow,pCHi,pCEi,sst_s,qsr_ice,qlw_ice,qsr,rhoa,wndm_ice,qla_ice,qsb_ice,qns_ice,dqns_ice,qsr_oce )
 
       zcoef_dqlw = 4._wp * emiss_i * stefan             ! local scalars
       z1_1malbo      = 1._wp / r1malbo
@@ -1352,7 +1382,13 @@ CONTAINS
                !     II    Turbulent FLUXES  !
                ! ----------------------------!
                ! Turbulent heat fluxes with transfer coefficients calculated in blk_ice_1()
-               zblk = rhoa(ji,jj) * wndm(ji,jj) ! common part in bulk formula equations...
+               ! Common part in bulk formula equations. We use `wndm_ice`, the wind speed above the ice computed in `blk_ice_1()`,
+               ! and NOT the module array `wndm`:
+               !  * ABL mode: `wndm_ice` is |U_abl| at time n, the wind used by the ABL for its air-ice exchanges in `abl_stp()`
+               !    (together with `CH_ice` & `CE_ice` from the same call), while `wndm` is |U_abl| at time n+1.
+               !    Using `wndm_ice` makes the ice receive exactly the heat and water that the ABL loses (conservation).
+               !  * bulk mode: `wndm_ice` is identical to `wndm` (same formula from the same input wind), so no change.
+               zblk = rhoa(ji,jj) * wndm_ice(ji,jj)
 
                ! * Sensible Heat
                zdum              = zblk * rCp_air * pCHi(ji,jj)

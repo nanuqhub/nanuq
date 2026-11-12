@@ -6,6 +6,13 @@ MODULE par_ice
    !! History :  4.x  !  2023     (Rousset)  Original code
    !!----------------------------------------------------------------------
    !!----------------------------------------------------------------------
+
+   !!----------------------------------------------------------------------
+   !! NANUQ 1.0.1, Brodeau (2026)
+   !! -- a standalone fork of NEMO/SI3 version 5 ---
+   !! Software governed by the CeCILL license (see ./LICENSE)
+   !!----------------------------------------------------------------------
+
    USE par_kind          ! kind parameters
 
    IMPLICIT NONE

@@ -14,7 +14,7 @@ MODULE sbcblk_algo_ice_stab
    !! What it computes:
    !!   * bulk transfer coefficients C_D, C_E and C_H over sea-ice
    !!   * air temp. and spec. hum. adjusted from zt (usually 2m) to zu (usually 10m) if needed
-   !!   * the "effective" bulk wind speed at zu: Ub (including gustiness contribution in unstable conditions)
+   !!   * the "effective" bulk wind speed at zu: Ub = MAX(U_zu, wspd_thrshld_ice) (no gustiness contribution, even in unstable conditions)
    !!   => all these are used in bulk formulas in sbcblk.F90
    !!
    !!       Routine turb_ice_stab maintained and developed in AeroBulk
@@ -138,7 +138,9 @@ CONTAINS
             zt_0 = pts_i(ji,jj)
             zq_0 = pqs_i(ji,jj)
 
-            !! Scalar wind speed cannot be below 0.2 m/s
+            !! Scalar wind speed cannot be below `wspd_thrshld_ice` (1 m/s, see `sbc_phy.F90`):
+            !! this prevents extreme values of zeta, and so of C_D, C_H and C_E, at very low wind
+            !! (there is no gustiness term here to do this job)
             zUbzu = MAX( pU_zu(ji,jj), wspd_thrshld_ice )
 
             zt_zt = pt_zt(ji,jj)
@@ -195,7 +197,11 @@ CONTAINS
 
                !! Update C_D:
                zdum = 1._wp + zsqrtCDN*z1_vkarmn*(zlog2 - psi_m_ice(zzeta_u))
-               zCD  = MAX( pCdN / ( zdum*zdum ) , Cx_min )
+               ! C_D is capped to [rCx_min, rCx_max] HERE, inside the loop (not only after it), so that
+               ! u*, theta*, q*, 1/L and the profile used to adjust t and q from zt to zu are all computed
+               ! with the same C_D as the one given in output (before, the loop used a floor of `Cx_min`
+               ! only, and the cap was applied after the loop, so `pt_zu_i` & `pq_zu_i` did not match the output coefficients)
+               zCD  = MIN( MAX( pCdN / ( zdum*zdum ) , rCx_min ) , rCx_max )
                !zCD  = MIN( MAX( pCdN / ( zdum*zdum ), Cx_min ) , 1.9E-3_wp ) ! capped version
 
                zsqrtCD  = SQRT(zCD)             ! == u*/zUbzu
@@ -203,8 +209,10 @@ CONTAINS
                !! Update C_H and C_E
                zdum = ( zlog2 - psi_h_ice(zzeta_u) ) * z1_vkarmn * z1_sqrtCDN
                zdvm = zsqrtCD * z1_sqrtCDN
-               zCH  = MAX( pChN*zdvm / ( 1._wp + pChN*zdum ) , Cx_min )
-               zCE  = MAX( pCeN*zdvm / ( 1._wp + pCeN*zdum ) , Cx_min )
+               ! C_H and C_E are capped to [rCx_min, rCx_max] inside the loop too, for the same reason as C_D:
+               ! theta* and q* (and so 1/L and the adjusted t and q at zu) must use the same C_H and C_E as the output
+               zCH  = MIN( MAX( pChN*zdvm / ( 1._wp + pChN*zdum ) , rCx_min ) , rCx_max )
+               zCE  = MIN( MAX( pCeN*zdvm / ( 1._wp + pCeN*zdum ) , rCx_min ) , rCx_max )
                !zCH  = MIN( MAX( pChN*zdvm / ( 1._wp + pChN*zdum ) , Cx_min ) , 1.999E-3_wp ) ! capped version
                !zCE  = MIN( MAX( pCeN*zdvm / ( 1._wp + pCeN*zdum ) , Cx_min ) , 1.999E-3_wp ) ! capped version
 

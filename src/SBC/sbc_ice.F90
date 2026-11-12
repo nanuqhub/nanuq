@@ -31,6 +31,8 @@ MODULE sbc_ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qcn_ice        !: heat conduction flux in the layer below surface   [W/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qtr_ice_top    !: solar flux transmitted below the ice surface      [W/m2]
 
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wndm_ice       !: near-surface absolute wind speed module over sea-ice [m/s] (only exists because of ABL)
+   !
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   taux_ai_t       !: atmos-ice u-stress. T-pts                  [N/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   tauy_ai_t       !: atmos-ice v-stress. T-pts                  [N/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   emp_ice        !: sublimation - precip over sea ice          [kg/m2/s]
@@ -75,12 +77,12 @@ CONTAINS
 
       ii = ii + 1
       ALLOCATE( t_air_zu_i(jpi,jpj)    ,  q_air_zu_i(jpi,jpj),        &
-         &      CD_ice(jpi,jpj) , CE_ice(jpi,jpj) , CH_ice(jpi,jpj) ,                         &
+         &      wndm_ice(jpi,jpj)   , CD_ice(jpi,jpj) , CE_ice(jpi,jpj) , CH_ice(jpi,jpj) ,   &
          &      qns_ice (jpi,jpj,jpl) , qsr_ice  (jpi,jpj,jpl) ,     qlw_ice(jpi,jpj,jpl) ,   &
          &      qla_ice (jpi,jpj,jpl) , qsb_ice  (jpi,jpj,jpl) ,      &
          &      dqns_ice(jpi,jpj,jpl) , alb_ice  (jpi,jpj,jpl) ,   &
          &      qml_ice (jpi,jpj,jpl) , qcn_ice  (jpi,jpj,jpl) , qtr_ice_top(jpi,jpj,jpl) ,   &
-         &      evap_ice(jpi,jpj,jpl) , qprec_ice(jpi,jpj)     ,   &
+         &      evap_ice(jpi,jpj,jpl) , qprec_ice(jpi,jpj)      ,          &
          &      qemp_ice(jpi,jpj)     , emp_ice (jpi,jpj) , STAT= ierr(ii) )
       !
       sbc_ice_alloc = MAXVAL( ierr )
@@ -88,7 +90,7 @@ CONTAINS
       IF( sbc_ice_alloc > 0 )   CALL ctl_warn('sbc_ice_alloc: allocation of arrays failed')
       !
       t_air_zu_i(:,:)=0._wp    ; q_air_zu_i(:,:)=0._wp
-      CD_ice(:,:)=1._wp   ;  CE_ice(:,:)=1._wp   ;  CH_ice(:,:)=1._wp   ;
+      wndm_ice(:,:)=0._wp ; CD_ice(:,:)=1._wp   ;  CE_ice(:,:)=1._wp   ;  CH_ice(:,:)=1._wp   ;
       qns_ice (:,:,:)=0._wp ; qsr_ice  (:,:,:)=0._wp ;     qlw_ice(:,:,:)=0._wp
       qla_ice (:,:,:)=0._wp ; qsb_ice  (:,:,:)=0._wp
       dqns_ice(:,:,:)=0._wp ; alb_ice  (:,:,:)=0._wp
@@ -98,8 +100,8 @@ CONTAINS
       !
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: sbc_ice_alloc() => adding SBC-related arrays to memory!'
-      PRINT *, '            => taux_ai_t, tauy_ai_t, t_air_zu_i, q_air_zu_i, CD_ice, CE_ice, CH_ice'
-      !$acc enter data copyin( taux_ai_t, tauy_ai_t, t_air_zu_i, q_air_zu_i, CD_ice, CE_ice, CH_ice )
+      PRINT *, '            => taux_ai_t, tauy_ai_t, t_air_zu_i, q_air_zu_i, wndm_ice, CD_ice, CE_ice, CH_ice'
+      !$acc enter data copyin( taux_ai_t, tauy_ai_t, t_air_zu_i, q_air_zu_i, wndm_ice, CD_ice, CE_ice, CH_ice )
       PRINT *, '            => qns_ice, qsr_ice, qlw_ice, qla_ice, qsb_ice, qsb_ice, dqns_ice, alb_ice'
       !$acc enter data copyin( qns_ice, qsr_ice, qlw_ice, qla_ice, qsb_ice, qsb_ice, dqns_ice, alb_ice )
       PRINT *, '            => qml_ice, qcn_ice, qtr_ice_top, evap_ice, qprec_ice'

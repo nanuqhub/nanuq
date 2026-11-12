@@ -36,6 +36,8 @@ MODULE sbcabl
    USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
    USE prtctl         ! Print control
    USE ice    , ONLY : u_ice, v_ice, tm_su, ato_i      ! ato_i = total open water fractional area
+   USE ice    , ONLY : a_i, at_i, t_su                 ! needed for the category-mean saturation humidity above ice (`zssqi`)
+   USE par_ice, ONLY : jpl                             ! number of ice categories
    USE sbc_ice, ONLY : taux_ai_t, tauy_ai_t
 
    IMPLICIT NONE
@@ -352,6 +354,8 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj) ::   zssqi, zcd_dui, zseni, zevapi
       INTEGER                      ::   jbak, jbak_dta, ji, jj
       INTEGER                      ::   jfpr
+      INTEGER                      ::   jl              ! ice category index
+      REAL(wp)                     ::   zsum            ! sum over categories of a_i * q_sat(t_su)
       !!---------------------------------------------------------------------
       !
       !!-------------------------------------------------------------------------------------------
@@ -403,6 +407,28 @@ CONTAINS
          &            tq_abl(:,:,2,nt_n,jp_ta), tq_abl(:,:,2,nt_n,jp_qa),    &   !   <<= in
          &            sf(jp_mslp)%fnow(:,:,1), u_ice, v_ice, tm_su, &            !   <<= in  !#LOLOfixme:SURE?
          &            pseni=zseni, pevapi=zevapi, pssqi=zssqi, pcd_dui=zcd_dui ) !   <<= out
+
+      ! Saturation specific humidity at the ice surface seen by the ABL: replace `q_sat(tm_su)` (given by `blk_ice_1()`)
+      ! with the mean over the ice categories of `q_sat(t_su(jl))`, weighted by the category concentrations `a_i`.
+      ! Why: `blk_ice_2()` computes the sublimation (`evap_ice`) and its latent heat (`qla_ice`) for each category with
+      ! `q_sat(t_su(jl))`, and `q_sat` is not linear in temperature. With `q_sat(tm_su)` the ABL would not receive the
+      ! same amount of water vapor as the ice loses (no conservation when several categories have different temperatures).
+      ! Where there is no ice (`at_i = 0`), we keep the value from `blk_ice_1()`: it is multiplied by `1 - ato_i = 0` in `abl_stp()`.
+      ! (`a_i` and `t_su` have not been changed yet in this time step, so they are the same state as `a_i_b` used in `blk_ice_2()`.)
+      !$acc parallel loop collapse(2) present( a_i, at_i, t_su, zssqi )
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
+            IF( at_i(ji,jj) > 0._wp ) THEN
+               zsum = 0._wp
+               !$acc loop seq
+               DO jl = 1, jpl
+                  zsum = zsum + a_i(ji,jj,jl) * q_sat( t_su(ji,jj,jl), sf(jp_mslp)%fnow(ji,jj,1), l_ice=.TRUE. )
+               END DO
+               zssqi(ji,jj) = zsum / at_i(ji,jj)
+            ENDIF
+         END DO
+      END DO
+      !$acc end parallel loop
 
 #if defined _ABLDBG
       CALL TRDBG( 'sbc_abl: `blk_ice_1:out`',  'wndm*CHi, wndm*CEi', zseni, zevapi )
