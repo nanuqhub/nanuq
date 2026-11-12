@@ -1,8 +1,0 @@
-#if defined key_single
-#   define CASTSP(x) REAL(x,sp)
-#   define CASTDP(x) REAL(x,dp)
-#else
-#   define CASTSP(x) x
-#   define CASTDP(x) x
-#endif
-

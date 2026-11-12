@@ -53,7 +53,6 @@ MODULE ossmod
    INTEGER ::   noss   ! type of surface boundary condition (deduced from namsbc informations)
 
    !! * Substitutions
-#  include "single_precision_substitute.h90"
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
@@ -673,11 +672,11 @@ CONTAINS
          ENDIF
 
          IF(sn_cfctl%l_prtctl) THEN     ! print mean trends (used for debugging)
-            CALL prt_ctl(tab2d_1=CASTDP(qns)    , clinfo1=' qns      - : ', mask1=tmask )
-            CALL prt_ctl(tab2d_1=CASTDP(qsr)    , clinfo1=' qsr      - : ', mask1=tmask )
-            CALL prt_ctl(tab3d_1=CASTDP(tmask)  , clinfo1=' tmask    - : ', mask1=tmask, kdim=1 )
-            CALL prt_ctl(tab2d_1=CASTDP(utau)   , clinfo1=' utau     - : ', mask1=umask,        &
-               &         tab2d_2=CASTDP(vtau)   , clinfo2=' vtau     - : ', mask2=vmask )
+            CALL prt_ctl(tab2d_1=qns  , clinfo1=' qns      - : ', mask1=tmask )
+            CALL prt_ctl(tab2d_1=qsr  , clinfo1=' qsr      - : ', mask1=tmask )
+            CALL prt_ctl(tab3d_1=tmask, clinfo1=' tmask    - : ', mask1=tmask, kdim=1 )
+            CALL prt_ctl(tab2d_1=utau , clinfo1=' utau     - : ', mask1=umask,        &
+               &         tab2d_2=vtau , clinfo2=' vtau     - : ', mask2=vmask )
          ENDIF
 
 #if defined _OPENACC || defined _OPENMP

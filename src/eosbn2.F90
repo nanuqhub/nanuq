@@ -75,7 +75,7 @@ MODULE eosbn2
    PUBLIC   eos_fzp_0d
 
    PUBLIC   t_eos10_fzp_scl
-   PUBLIC   eos10_fzp_2d   
+   PUBLIC   eos10_fzp_2d
    PUBLIC   eos10_fzp_2d_gpu
 
    !                               !!** Namelist nameos **
@@ -184,7 +184,6 @@ MODULE eosbn2
    REAL(wp) ::   BPE002
 
    !! * Substitutions
-#  include "single_precision_substitute.h90"
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
@@ -289,7 +288,7 @@ CONTAINS
          !
       END SELECT
       !
-      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=CASTDP(prd), clinfo1=' eos2d: ' )
+      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=prd, clinfo1=' eos2d: ' )
       !
       IF( ln_timing )   CALL timing_stop('eos2d')
       !
@@ -374,9 +373,9 @@ CONTAINS
          ENDDO
          !
       END SELECT
-      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=CASTDP(prhop), clinfo1=' pot: ', kdim=1 )
+      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=prhop, clinfo1=' pot: ', kdim=1 )
       !
-      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=CASTDP(prhop), clinfo1=' eos-pot: ' )
+      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=prhop, clinfo1=' eos-pot: ' )
       !
       IF( ln_timing )   CALL timing_stop('eos-pot')
       !
@@ -498,8 +497,8 @@ CONTAINS
          !
       END SELECT
       !
-      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=CASTDP(pab(:,:,jp_tem)), clinfo1=' rab_2d_t: ', &
-         &                                  tab2d_2=CASTDP(pab(:,:,jp_sal)), clinfo2=' rab_2d_s : ' )
+      IF(sn_cfctl%l_prtctl)   CALL prt_ctl( tab2d_1=pab(:,:,jp_tem), clinfo1=' rab_2d_t: ', &
+         &                                  tab2d_2=pab(:,:,jp_sal), clinfo2=' rab_2d_s : ' )
       !
       IF( ln_timing )   CALL timing_stop('rab_2d')
       !
@@ -825,7 +824,7 @@ CONTAINS
 
       !$acc end data
    END SUBROUTINE eos10_fzp_2d_gpu
-   
+
    !! NON-GPU version:
    SUBROUTINE  eos10_fzp_2d( psal, ptf )
       REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity   [psu]
@@ -848,7 +847,7 @@ CONTAINS
    END SUBROUTINE eos10_fzp_2d
 
 
-   
+
 
 
 

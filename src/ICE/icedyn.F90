@@ -190,7 +190,9 @@ CONTAINS
          CALL ice_var_hpiling()                                     ! -- simple pile-up (replaces ridging/rafting)
 
          IF( ln_icethd ) THEN
-            CALL ice_var_zapsmall()                                 ! -- zap small areas
+            ! h_i must be recomputed from v_i/a_i inside zapsmall: advection and pile-up have changed a_i and v_i
+            ! since the last h_i update, and zapsmall tests h_i to decide which ice to remove
+            CALL ice_var_zapsmall( l_do_h=.TRUE. )                  ! -- zap small areas
          ELSE
             CALL ice_var_zapsmall_dyn()
          ENDIF

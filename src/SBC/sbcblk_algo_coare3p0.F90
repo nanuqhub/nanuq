@@ -232,12 +232,12 @@ CONTAINS
                !! Roughness lengthes z0, z0t (z0q = z0t):
                zUn10 = zus/vkarmn*(zlog_10 - zlog_z0)         ! Neutral wind speed at 10m
                zz0    = charn_coare3p0(zUn10)*zus2/grav + 0.11_wp*znu_a/zus ! Roughness length (eq.6)
-               zz0     = MIN( MAX(ABS(zz0), 1.E-9) , 1._wp )  ! (prevents FPE from stupid values from masked region later on)
+               zz0     = MIN( MAX(ABS(zz0), 1.E-9_wp) , 1._wp )  ! (prevents FPE from stupid values from masked region later on)
                zlog_z0 = LOG(zz0)
 
                ztmp1 = ( znu_a / (zz0*zus) )**0.6_wp         ! (1./Re_r)^0.6 (Re_r: roughness Reynolds number) COARE 3.0 - specific!
                zz0t   = MIN( 1.1E-4_wp , 5.5E-5_wp*ztmp1 )   ! Scalar roughness for temp. and q (eq.28) #LB: some use 1.15 not 1.1 !!!
-               zz0t   = MIN( MAX(ABS(zz0t), 1.E-9) , 1._wp ) ! (prevents FPE from stupid values from masked region later on)
+               zz0t   = MIN( MAX(ABS(zz0t), 1.E-9_wp) , 1._wp ) ! (prevents FPE from stupid values from masked region later on)
                zlog_z0t = LOG(zz0t)
 
                !! Turbulent scales at zu:
@@ -246,7 +246,7 @@ CONTAINS
 
                zts = zdt*ztmp1
                zqs = zdq*ztmp1
-               zus = MAX( zUbzu*vkarmn/(zlog_zu - zlog_z0 - psi_m_coare(zzta_u)) , 1.E-9 )
+               zus = MAX( zUbzu*vkarmn/(zlog_zu - zlog_z0 - psi_m_coare(zzta_u)) , 1.E-9_wp )
 
                !! Adjusting temperature and humidity at zu if required by `zm_ztzu`:
                ztmp1 = zlog_zt - zlog_zu + ztmp0 - psi_h_coare(zzta_t)

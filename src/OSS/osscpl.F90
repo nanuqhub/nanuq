@@ -127,7 +127,6 @@ MODULE osscpl
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) :: xcplmask
 
    !! Substitution
-#  include "single_precision_substitute.h90"
    !!----------------------------------------------------------------------
    !! NANUQ 1.0.1, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---

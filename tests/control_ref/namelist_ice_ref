@@ -263,10 +263,6 @@
    rn_simin         =   0.1           !  minimum tolerated ice salinity (g/kg)
    rn_sinew         =   0.75          !  fraction of sss that is entrapped in new ice
    rn_sal_himin     =   0.1           !   min ice thickness for gravity drainage and flushing calculation
-   nn_liquidus      =   2             !   formulation of liquidus (also used for outputs)
-                                      !     1 = linear liquidus
-                                      !     2 = Vancopenolle et al (2019) formulation
-                                      !     3 = Weast 71 (used in RJW2014)
    nn_drainage      =   50            !  maximum number of subcycles for gravity drainage (10 is usually enough)
    nn_flushing      =   5             !  maximum number of subcycles for flushing         ( 1 is usually enough)
    rn_flushrate     =   0.3           !  rate of flushing (fraction of melt water used for flushing)

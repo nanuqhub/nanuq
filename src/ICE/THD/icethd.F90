@@ -137,7 +137,6 @@ CONTAINS
             DO jj=Njs0-nn_hls, Nje0+nn_hls
                DO ji=Nis0-nn_hls, Nie0+nn_hls
                   ! --- some init --- !  (important to have them here)
-                  dh_s_tot(ji,jj) = 0._wp
                   dh_i_bom(ji,jj) = 0._wp ; dh_i_itm(ji,jj) = 0._wp
                   dh_i_sub(ji,jj) = 0._wp ; dh_i_bog(ji,jj) = 0._wp
                   dh_snowice(ji,jj) = 0._wp ; dh_s_itm(ji,jj) = 0._wp
@@ -196,17 +195,20 @@ CONTAINS
 
       CALL ice_cor( kt , 2 )                ! --- Corrections --- !
 
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            ! --- Ice natural aging incrementation
-            !$acc loop seq
-            DO jl=1, jpl
-               oa_i(ji,jj,jl) = oa_i(ji,jj,jl) + a_i(ji,jj,jl) * rDt_ice
+      ! --- Ice natural aging incrementation: only if the "age of the ice" tracer is used (`ln_age=T`), since `oa_i` is
+      !     otherwise neither advected, nor written in outputs or restarts (it then stays 0, its initial value)
+      IF( ln_age ) THEN
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               !$acc loop seq
+               DO jl=1, jpl
+                  oa_i(ji,jj,jl) = oa_i(ji,jj,jl) + a_i(ji,jj,jl) * rDt_ice
+               END DO
             END DO
          END DO
-      END DO
-      !$acc end parallel loop
+         !$acc end parallel loop
+      ENDIF
 
 #if ! defined _OPENACC || defined _OPENMP
       !                                                             ! --- LBC for the halos --- !
@@ -426,7 +428,7 @@ CONTAINS
       !!-----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk   ! dummy loop indices
       !!-----------------------------------------------------------------------
-      !$acc data present( e_i, e_s, szv_i, oa_i )
+      !$acc data present( e_i, e_s, szv_i, oa_i, o_i )
 
       SELECT CASE( kn )
          !                 !-------------------------!
@@ -437,9 +439,20 @@ CONTAINS
          ! meaningless, products of sea ice thicknesses/snow depths and sea ice
          ! concentration
          !
-         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s )
+         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, oa_i, o_i )
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
+               ! Save the ice age (o_i = oa_i/a_i) before thermo changes a_i (melt, lateral melt),
+               ! so that oa_i can be rebuilt with the new a_i at the end (case 2), as in SI3.
+               ! Without this, the age (oa_i/a_i) would grow artificially when a_i decreases.
+               ! (only if the "age of the ice" tracer is used, `ln_age=T`)
+               IF( ln_age ) THEN
+                  IF( a_i(ji,jj,kl) > epsi20 ) THEN
+                     o_i(ji,jj,kl) = oa_i(ji,jj,kl) / a_i(ji,jj,kl)
+                  ELSE
+                     o_i(ji,jj,kl) = 0._wp
+                  ENDIF
+               ENDIF
                !$acc loop seq
                DO jk = 1, nlay_i
                   IF( (h_i(ji,jj,kl) * a_i(ji,jj,kl)) > epsi20 ) THEN
@@ -463,12 +476,16 @@ CONTAINS
          !                 !-------------------------!
       CASE( 2 )            !==  from J/m3 to J/m2  ==!
          !                 !-------------------------!
-         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, v_i, v_s, oa_i, s_i, szv_i, sz_i )
+         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, v_i, v_s, oa_i, o_i, s_i, szv_i, sz_i )
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
                ! Change thickness to volume (replaces routine ice_var_eqv2glo)
                v_i(ji,jj,kl)   = h_i(ji,jj,kl)   * a_i(ji,jj,kl)
                v_s(ji,jj,kl)   = h_s(ji,jj,kl)   * a_i(ji,jj,kl)
+               ! Rebuild the areal age content with the new ice area: the age (o_i, saved in case 1) is kept,
+               ! only the area has changed during thermo (as in SI3). Gives oa_i=0 where the category has melted.
+               ! (only if the "age of the ice" tracer is used, `ln_age=T`)
+               IF( ln_age )  oa_i(ji,jj,kl)  = o_i(ji,jj,kl)   * a_i(ji,jj,kl)
 
                ! --- Change units of e_i, e_s from J/m3 to J/m2 --- !
                !$acc loop seq

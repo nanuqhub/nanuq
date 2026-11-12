@@ -592,29 +592,40 @@ CONTAINS
                CALL ctl_stop( 'bdy_ice_dmg : unrecognised `'//TRIM(cn_dmg(jbdy))//'` option for open boundaries for damage field' )
             END SELECT
             !
-         END DO
-         !
-         ! Update bdy points
-         IF( nn_hls > 1 .AND. ir == 1 ) CYCLE   ! at least 2 halos will be corrected -> no need to correct rim 1 before rim 0
-         IF( nn_hls == 1 ) THEN
-            llsend1(:) = .FALSE.   ;   llrecv1(:) = .FALSE.
-         ENDIF
-         DO jbdy = 1, nb_bdy
-            IF( cn_dmg(jbdy) == 'frs' ) THEN
+            ! Collect the directions in which communications are needed, for this rim `ir`:
+            !  => Both 'frs' and 'neumann' copy, at a BDY point, the damage of a neighbour located towards the interior of
+            !     the computational domain. When a BDY point lies in the halo and this neighbour is outside of the local
+            !     MPI domain, the point cannot be computed locally: it must be received from the MPI neighbour that owns it.
+            !     This is what the `lsend_bdyint` / `lrecv_bdyint` flags are for (same approach as in `bdy_ice()` above).
+            !  => The flags of BOTH rims (1 and 0) are collected (no `CYCLE` on rim 1 any more): otherwise the rim-1 points
+            !     that cannot be computed locally would never be received, and the rim-0 points that copy them would be
+            !     wrong in the halo, making the results depend on the MPI domain decomposition.
+            IF( cn_dmg(jbdy) == 'frs' .OR. cn_dmg(jbdy) == 'neumann' ) THEN
                llsend1(:) = llsend1(:) .OR. lsend_bdyint(jbdy,1,:,ir)   ! possibly every direction, T points
                llrecv1(:) = llrecv1(:) .OR. lrecv_bdyint(jbdy,1,:,ir)   ! possibly every direction, T points
             ENDIF
-            !LOLOfixme: what to do for Neumann !?
+            !
          END DO   ! jbdy
-#if ! defined _OPENACC || defined _OPENMP
-         IF( ANY(llsend1) .OR. ANY(llrecv1) ) THEN   ! if need to send/recv in at least one direction
-            ! exchange 3d arrays
-            CALL lbc_lnk('bdy_ice_dmg', dmdt,'T',1._wp, kfillmode=jpfillnothing ,lsend=llsend1, lrecv=llrecv1 )
-            !LOLO: add dmg @ F !!!
-         ENDIF
-#endif
-
+         !
       END DO   ! ir
+
+      ! Add the communications needed for the periodicity of the BDY points (same as in `bdy_ice()` above):
+      DO jbdy = 1, nb_bdy
+         IF( cn_dmg(jbdy) == 'frs' .OR. cn_dmg(jbdy) == 'neumann' ) THEN
+            llsend1(:) = llsend1(:) .OR. lsend_bdyper(jbdy,1,:)
+            llrecv1(:) = llrecv1(:) .OR. lrecv_bdyper(jbdy,1,:)
+         ENDIF
+      END DO
+
+#if ! defined _OPENACC || defined _OPENMP
+      ! One single partial exchange after both rims have been treated (at least 2 halos => no need to exchange rim 1
+      ! before treating rim 0), for both `dmdt` AND `dmdf`:
+      !  => `dmdf` must be exchanged too, since 'neumann' modifies it at the BDY points. Both are updated at the same
+      !     (T-point) BDY indices (`jgrd=1`), so the T-point communication flags are used for both of them.
+      IF( ANY(llsend1) .OR. ANY(llrecv1) ) THEN   ! if need to send/recv in at least one direction
+         CALL lbc_lnk('bdy_ice_dmg', dmdt,'T',1._wp, dmdf,'F',1._wp, kfillmode=jpfillnothing ,lsend=llsend1, lrecv=llrecv1 )
+      ENDIF
+#endif
 
       IF( ln_timing )   CALL timing_stop ('bdy_ice_dmg')                                       ! timing
 
@@ -646,7 +657,7 @@ CONTAINS
       REAL(wp) ::   zwgt, zwgt1, zflgu, zflgv
       !!------------------------------------------------------------------------------
       IF(lwp .AND. (kts==10)) WRITE(numout,*) ' * doing `bdy_ice_dmg_frs` for kt, kts',kt,kts
-      !$acc data present( dmdt, pV, idx, dta, idx%nbi, idx%nbj, idx%nbw, dta%dmg )
+      !$acc data present( dmdt, dmdf, af_i, pV, idx, dta, idx%nbi, idx%nbj, idx%nbw, dta%dmg )
 
       jgrd = 1      ! Everything is at T-points here
       IF( llrim0 ) THEN
@@ -666,6 +677,11 @@ CONTAINS
          !
          !h_s(ji,jj,  jl) = ( h_s(ji,jj,  jl) * zwgt1 + dta%h_s(i_bdy,jl) * zwgt ) * xmskt(ji,jj)  ! Snow depth
          dmdt(ji,jj) = MIN( MAX( dmdt(ji,jj) * zwgt1 + (1._wp - dta%dmg(i_bdy)) * zwgt , r_dmd_min ), 1._wp ) * xmskt(ji,jj)  ! damage, lolo !
+         !
+         ! Same relaxation for the F-point damage `dmdf`, so that the 2 damage fields (T- & F-centric) stay consistent at the BDY.
+         ! APPROXIMATION: BDY has no list of F-point indices (only T, U, V), so we use the T-point BDY indices `(ji,jj)`
+         ! (i.e. the F point at the north-east corner of the T cell), the T-point boundary data `dta%dmg`, and the F-point mask:
+         dmdf(ji,jj) = MIN( MAX( dmdf(ji,jj) * zwgt1 + (1._wp - dta%dmg(i_bdy)) * zwgt , r_dmd_min ), 1._wp ) * xmskf(ji,jj)
          !
       ENDDO
       !$acc end parallel loop
@@ -697,18 +713,31 @@ CONTAINS
             IF( pV(ji  ,jj-1,2) < 0. )   jpbound = 1 ; jbt = jj-1
          ENDIF
          !
-         IF( nn_dmg_dta(jbdy) == 0 )   jpbound = 0 ; ibt = ji ; jbt = jj   ! case ice boundaries = initial conditions
-         !                                                               !      do not make state variables dependent on velocity
-         !lolo
+         ! Case damage boundaries = initial conditions: do not make the damage dependent on velocity.
+         ! MIND: this must be an `IF ... THEN ... ENDIF` block! With the former one-liner `IF( ... ) jpbound = 0 ; ibt = ji ; jbt = jj`,
+         ! only `jpbound = 0` was conditional (the `;` ends the `IF`), so `ibt = ji` and `jbt = jj` were ALWAYS executed:
+         ! the neighbour chosen above from the velocity direction was always discarded, and the copy below was a no-op.
+         ! (same bug as the one already fixed in `bdy_ice_frs()`, see `#LOLObug` there)
+         IF( nn_dmg_dta(jbdy) == 0 ) THEN
+            jpbound = 0 ; ibt = ji ; jbt = jj
+         ENDIF
+         !
+         ! T-point damage: copy the damage of the selected neighbour if there is ice there, else set to undamaged:
+         !  => `dmdt` holds `1 - d`, so "undamaged" is `1` (it used to be set to `0`, i.e. fully damaged, which was
+         !     not consistent with `bdy_dmg_neumann()` that uses `1` when there is no ice upstream).
          IF( at_i(ibt,jbt) > 0._wp ) THEN   ! there is ice at the boundary
-            !
             dmdt(ji,jj) = dmdt(ibt,jbt)
-            !
-         ELSE   ! no ice at the boundary
-            !
-            dmdt(ji,jj) = 0._wp
-            !lolo add dmdf !!!
-            !
+         ELSE                               ! no ice at the boundary => undamaged
+            dmdt(ji,jj) = 1._wp
+         ENDIF
+         !
+         ! F-point damage: same treatment, but copying from the neighbouring F-point damage `dmdf` (not from `dmdt`, which
+         ! lives on the other grid), and testing the presence of ice with the F-point concentration `af_i`.
+         ! APPROXIMATION: same neighbour `(ibt,jbt)` as for the T point, since BDY has no list of F-point indices.
+         IF( af_i(ibt,jbt) > 0._wp ) THEN   ! there is ice at the boundary
+            dmdf(ji,jj) = dmdf(ibt,jbt)
+         ELSE                               ! no ice at the boundary => undamaged (`1 - d = 1`), same as for `dmdt`
+            dmdf(ji,jj) = 1._wp
          ENDIF
 
       END DO
@@ -746,8 +775,13 @@ CONTAINS
       LOGICAL  :: ldebug=.TRUE.
 #endif
       !!------------------------------------------------------------------------------
-      !$acc data present( dmdt, idx, dta, idx%nbi, idx%nbj, idx%nbw, dta%dmg )
+      !$acc data present( dmdt, dmdf, idx, dta, idx%nbi, idx%nbj, idx%nbw, dta%dmg )
 
+      ! Neumann condition for both damage fields: the T-point damage `dmdt` is copied from the neighbouring T point,
+      ! and the F-point damage `dmdf` from the neighbouring F point (same direction), so that each field keeps its own grid.
+      ! APPROXIMATION for `dmdf`: BDY has no list of F-point indices (only T, U, V), so the T-point BDY indices `(ji,jj)`
+      ! are used (i.e. the F point at the north-east corner of the T cell), with the same neighbour and the same
+      ! ice-presence test (`vt_i`) as for the T point.
       jgrd  = 1      ! Everything is at T-points here
       jgrd = 1
       jgrdV = 1
@@ -780,13 +814,13 @@ CONTAINS
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at ji=',INT(ji-nn_hls,2),' takes value from ji=',INT(ji-nn_hls-1,2)
 #endif
                dmdt(ji,jj) = dmdt(ji-1,jj)
-               dmdf(ji,jj) = dmdt(ji-1,jj) !lolo?
+               dmdf(ji,jj) = dmdf(ji-1,jj)   ! F-point damage copied from the neighbouring F point (not from `dmdt`, other grid)
             ELSEIF( vt_i(ji+1,jj) > 0. )   THEN
 #if defined key_verbose
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at jj=',INT(jj-nn_hls,2),' takes `1.` value'
 #endif
-               dmdt(ji,jj) = 1._wp !lolo?
-               dmdf(ji,jj) = 1._wp !lolo?
+               dmdt(ji,jj) = 1._wp
+               dmdf(ji,jj) = 1._wp
             ENDIF
          ENDIF
          ! |    i  i+1 i+1        !  |  i   i i+1        !  | i  i i+1
@@ -799,13 +833,13 @@ CONTAINS
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at ji=',INT(ji-nn_hls,2),' takes value from ji=',INT(ji-nn_hls+1,2)
 #endif
                dmdt(ji,jj) = dmdt(ji+1,jj)
-               dmdf(ji,jj) = dmdt(ji+1,jj)  !lolo?
+               dmdf(ji,jj) = dmdf(ji+1,jj)   ! F-point damage copied from the neighbouring F point (not from `dmdt`, other grid)
             ELSEIF( vt_i(ji  ,jj) > 0. )   THEN
 #if defined key_verbose
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at jj=',INT(jj-nn_hls,2),' takes `1.` value'
 #endif
-               dmdt(ji,jj) = 1._wp !lolo?
-               dmdf(ji,jj) = 1._wp !lolo?
+               dmdt(ji,jj) = 1._wp
+               dmdf(ji,jj) = 1._wp
             ENDIF
          ENDIF
          !
@@ -828,7 +862,7 @@ CONTAINS
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at jj=',INT(jj-nn_hls,2),' takes value from jj=',INT(jj-nn_hls-1,2)
 #endif
                dmdt(ji,jj) = dmdt(ji,jj-1)
-               dmdf(ji,jj) = dmdt(ji,jj-1)
+               dmdf(ji,jj) = dmdf(ji,jj-1)   ! F-point damage copied from the neighbouring F point (not from `dmdt`, other grid)
             ELSEIF( vt_i(ji,jj+1) > 0. )   THEN
 #if defined key_verbose
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at jj=',INT(jj-nn_hls,2),' takes `1.` value'
@@ -848,7 +882,7 @@ CONTAINS
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at jj=',INT(jj-nn_hls,2),' takes value from jj=',INT(jj-nn_hls+1,2)
 #endif
                dmdt(ji,jj) = dmdt(ji,jj+1)
-               dmdf(ji,jj) = dmdt(ji,jj+1)
+               dmdf(ji,jj) = dmdf(ji,jj+1)   ! F-point damage copied from the neighbouring F point (not from `dmdt`, other grid)
             ELSEIF( vt_i(ji,jj  ) > 0. )   THEN
 #if defined key_verbose
                IF(ldebug) PRINT *, '* DEBUG_BDY: dmdt at jj=',INT(jj-nn_hls,2),' takes `1.` value'

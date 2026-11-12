@@ -31,7 +31,7 @@ MODULE icewri
    USE remap_classic, ONLY : rmpT2F, rmpF2T, rmpT2U, rmpT2V, do_rmpF2T
    !USE remap_weno,    ONLY : rmpT2F_wn5s !rmpT2U_wn5s, rmpT2V_wn5s
 
-   USE icedyn_rhg_tools, ONLY : strain_rate_all, vel_div_t, vel_shear_f, vel_maxshr_t
+   USE icedyn_rhg_tools, ONLY : strain_rate_all, vel_div_t, vel_shear_f
 
    IMPLICIT NONE
    PRIVATE

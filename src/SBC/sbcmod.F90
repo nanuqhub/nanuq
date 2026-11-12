@@ -50,7 +50,6 @@ MODULE sbcmod
    INTEGER, PUBLIC ::   nsbc  ! type of surface boundary condition (deduced from namsbc informations)
 
    !! * Substitutions
-#  include "single_precision_substitute.h90"
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
@@ -221,8 +220,8 @@ CONTAINS
       !!
       !! ** Action  : - set the ocean surface boundary condition at before and now
       !!                time step, i.e.
-      !!                utau_b, vtau_b, qns_b, qsr_b, emp_n, sfx_b
-      !!                utau  , vtau  , qns  , qsr  , emp  , sfx
+      !!                qns_b, qsr_b, emp_b               (before, used by the slab ocean)
+      !!                utau , vtau , qns , qsr , emp , sfx (now)
       !!----------------------------------------------------------------------
       INTEGER, INTENT(in) ::   kt   ! ocean time step
       !!----------------------------------------------------------------------
@@ -231,19 +230,16 @@ CONTAINS
       REAL(wp), DIMENSION(jpi,jpj) ::  zwdht, zwght  ! wd dep over wd limit, wgt
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('sbc')
-      !$acc data present( utau, vtau, qns, emp, sfx, utau_b, vtau_b, qns_b, qsr_b, emp_b, sfx_b )
+      !$acc data present( utau, vtau, qns, emp, sfx, qns_b, qsr_b, emp_b )
 
       !                                            ! ---------------------------------------- !
       IF( kt > nit000 ) THEN                       !          Swap of forcing fields          !
          !$acc parallel loop collapse(2)           ! ---------------------------------------- !
          DO jj=Njs0-nn_hls, Nje0+nn_hls
             DO ji=Nis0-nn_hls, Nie0+nn_hls
-               utau_b(ji,jj) = utau(ji,jj)                       ! Swap the ocean forcing fields
-               vtau_b(ji,jj) = vtau(ji,jj)                       ! (except at nit000 where before fields
-               qns_b (ji,jj) = qns (ji,jj)                       !  are set at the end of the routine)
-               qsr_b (ji,jj) = qsr (ji,jj)                       !  are set at the end of the routine)
-               emp_b (ji,jj) = emp (ji,jj)
-               sfx_b (ji,jj) = sfx (ji,jj)
+               qns_b (ji,jj) = qns (ji,jj)                       ! Swap the ocean forcing fields
+               qsr_b (ji,jj) = qsr (ji,jj)                       ! (except at nit000 where before fields
+               emp_b (ji,jj) = emp (ji,jj)                       !  are set at the end of the routine)
             END DO
          END DO
          !$acc end parallel loop
@@ -309,12 +305,9 @@ CONTAINS
          !$acc parallel loop collapse(2)
          DO jj=Njs0-nn_hls, Nje0+nn_hls
             DO ji=Nis0-nn_hls, Nie0+nn_hls
-               utau_b(ji,jj) = utau(ji,jj)
-               vtau_b(ji,jj) = vtau(ji,jj)
                qns_b (ji,jj) = qns (ji,jj)
                qsr_b (ji,jj) = qsr (ji,jj)
                emp_b (ji,jj) = emp (ji,jj)
-               sfx_b (ji,jj) = sfx (ji,jj)  !#LOLOfixme: it should be provided by ICE model, it is not updated by the 3 `sbc_*` routines above!!!
             END DO
          END DO
          !$acc end parallel loop

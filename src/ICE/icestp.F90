@@ -145,20 +145,9 @@ CONTAINS
       ! It provides the following fields used in sea ice model:
       !    taux_ai_t, tauy_ai_t   = surface ice stress at T-points [N/m2]
       !------------------------------------------------!
-      !------------------------------------------------------!
-      ! --- Thermodynamical coupling with the atmosphere --- !
-      !------------------------------------------------------!
-      ! It provides the following fields used in sea ice model:
-      !    emp_oce , emp_ice    = E-P over ocean and sea ice                    [Kg/m2/s]
-      !    evap_ice             = sublimation (<0 when ice losing FW to atmo!)  [Kg/m2/s]
-      !    qsr_ice , qns_ice    = solar & non solar heat flux over ice          [W/m2]
-      !    dqns_ice             = non solar  heat sensistivity                  [W/m2]
-      !    qemp_oce, qemp_ice,  = sensible heat (associated with evap & precip) [W/m2]
-      !    qprec_ice, qevap_ice
-      !------------------------------------------------------!
-      IF( l_NotAdvOnly ) THEN
-         CALL ice_sbc( kt, ksbc, taux_ai_t, tauy_ai_t )
-      ENDIF
+      ! Momentum coupling with the atmosphere (needed by the rheology), and bulk transfer coefficients CH_ice, CE_ice
+      ! (kept in sbc_ice for ice_sbc_flx below). Heat/mass fluxes are computed later, after dynamics (as in SI3).
+      IF( l_NotAdvOnly )   CALL ice_sbc_tau( kt, ksbc, taux_ai_t, tauy_ai_t, CH_ice, CE_ice )
 
       !-------------------------------------!
       ! --- ice dynamics and advection  --- !
@@ -190,6 +179,23 @@ CONTAINS
       ENDIF !IF( l_NotAdvOnly )
 
       CALL store_fields()             ! Store now ice values
+
+      !------------------------------------------------------!
+      ! --- Thermodynamical coupling with the atmosphere --- !
+      !------------------------------------------------------!
+      ! It provides the following fields used in sea ice model:
+      !    emp_oce , emp_ice    = E-P over ocean and sea ice                    [Kg/m2/s]
+      !    evap_ice             = sublimation (<0 when ice losing FW to atmo!)  [Kg/m2/s]
+      !    qsr_ice , qns_ice    = solar & non solar heat flux over ice          [W/m2]
+      !    dqns_ice             = non solar  heat sensistivity                  [W/m2]
+      !    qemp_oce, qemp_ice,  = sensible heat (associated with evap & precip) [W/m2]
+      !    qprec_ice, qevap_ice
+      !    qsb_ice_bot, fhld, qlead = ocean-to-ice and lead heat budgets       [W/m2], [J/m2]
+      ! Heat and mass fluxes at the ice surface + ocean-to-ice and lead heat budgets (qsb_ice_bot, fhld, qlead).
+      ! Must be called AFTER dynamics and diag_set0_gpu (which zeroes fhld, qsb_ice_bot, qcn_ice, qml_ice...),
+      ! so that fluxes use the same ice state (a_i_b, at_i_b, h_i, t_su, u_ice) as the thermodynamics (as in SI3).
+      !------------------------------------------------------!
+      IF( l_NotAdvOnly )   CALL ice_sbc_flx( kt, ksbc, CH_ice, CE_ice )
 
 
       !----------------------------!
@@ -453,12 +459,12 @@ CONTAINS
       !!
       !! ** purpose :  store ice variables at "before" time step
       !!----------------------------------------------------------------------
-      INTEGER  ::   ji, jj, jk, jl      ! dummy loop index
+      INTEGER  ::   ji, jj, jl          ! dummy loop index
       REAL(wp) ::   zA, zdum
       LOGICAL  ::   lDo
       !!----------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('store_fields')
-      !$acc data present(a_i_b, v_i_b, v_s_b, h_i_b, h_s_b, szv_i_b, at_i_b, u_ice, v_ice, u_ice_b, v_ice_b )
+      !$acc data present(a_i_b, v_i_b, h_i_b, at_i_b, u_ice, v_ice, u_ice_b, v_ice_b )
       !
       !$acc parallel loop collapse(2)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
@@ -469,38 +475,15 @@ CONTAINS
                zA = a_i(ji,jj,jl)
                a_i_b(ji,jj,jl)  =  zA                ! ice area
                v_i_b(ji,jj,jl)  =  v_i(ji,jj,jl)     ! ice volume
-               v_s_b(ji,jj,jl)  =  v_s(ji,jj,jl)     ! snow volume
                !
                lDo = zA >= epsi20
                zdum = 1._wp / MAX( zA , epsi20 )
                h_i_b(ji,jj,jl) = MERGE( v_i_b(ji,jj,jl) * zdum  ,  0._wp  ,  lDo ) ! ice thickness
-               h_s_b(ji,jj,jl) = MERGE( v_s_b(ji,jj,jl) * zdum  ,  0._wp  ,  lDo ) ! snw thickness
                !
             END DO
          END DO
       END DO
       !$acc end parallel loop
-
-      IF( ln_icethd ) THEN
-         !$acc parallel loop collapse(2) present(szv_i_b, e_s_b, e_i_b)
-         DO jj=Njs0-nn_hls, Nje0+nn_hls
-            DO ji=Nis0-nn_hls, Nie0+nn_hls
-               !$acc loop seq
-               DO jl=1, jpl
-                  !$acc loop seq
-                  DO jk=1, nlay_s
-                     e_s_b(ji,jj,jk,jl) = e_s(ji,jj,jk,jl)   ! snow thermal energy
-                  END DO
-                  !$acc loop seq
-                  DO jk=1, nlay_i
-                     e_i_b(ji,jj,jk,jl)   =   e_i(ji,jj,jk,jl)   ! ice thermal energy
-                     szv_i_b(ji,jj,jk,jl) = szv_i(ji,jj,jk,jl)   ! ice salt content
-                  END DO
-               END DO
-            END DO
-         END DO
-         !$acc end parallel loop
-      ENDIF
 
       !IF ( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
       !   !%acc update device( v_ip, v_il )

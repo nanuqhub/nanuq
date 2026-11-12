@@ -14,7 +14,13 @@ MODULE ossprs
    USE oss_nnq        ! surface module: variables
    USE phycst         ! physical constants
    USE eosbn2 , ONLY : t_eos10_fzp_scl, eos10_fzp_2d
+   ! Lateral boundary conditions: `lbc_lnk_gpu` (periodicity only, 1 GPU) in the GPU build, `lbc_lnk` (MPI + periodicity)
+   ! in the CPU build, as in the other modules (needed by `oss_prs_slab()`):
+#if defined _OPENACC || defined _OPENMP
+   USE lbclnk_gpu
+#else
    USE lbclnk         ! ocean lateral boundary conditions (or mpp link)
+#endif
    !
    USE in_out_manager ! I/O manager
    USE iom            ! I/O library
@@ -223,9 +229,15 @@ CONTAINS
          PRINT *, 'FIX `sst_s` & `sss_s` for restarts!!!'; STOP
       ENDIF
 
+      ! The slab is updated on the interior points ONLY, and its 3 outputs are `lbc_lnk`ed right after the loop:
+      !  => it used to be computed one point into the halo (`Nis0-1:Nie0+1`), but the halos of the fluxes it uses are not
+      !     valid there (`qsr` is never exchanged, and the interior of `qns` is modified in `ice_update_flx` after its
+      !     exchange). As `sst_s` & `sss_s` are integrated in time, their halo values then drifted away from the values
+      !     computed by the MPI neighbour, and `t_bo` (read in the halo by the BBM healing, then remapped to F-points)
+      !     made the results depend on the MPI domain decomposition.
       !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
+      DO jj=Njs0, Nje0
+         DO ji=Nis0, Nie0
 
             !ldebg = (narea==3).AND.(ji==17).AND.(jj==44)
             !ldebg = .true.
@@ -317,6 +329,14 @@ CONTAINS
          END DO
       END DO
       !$acc end parallel loop
+
+      ! Fill the halos of the 3 slab outputs with the values of the MPI neighbours (CPU) or with the periodicity (GPU),
+      ! so that they are valid (and identical to the neighbours' interior values) wherever they are read in the halo:
+#if defined _OPENACC || defined _OPENMP
+      CALL lbc_lnk_gpu( 'oss_prs_slab', psst_s, psss_s, pt_bo )
+#else
+      CALL lbc_lnk(     'oss_prs_slab', psst_s,'T',1._wp, psss_s,'T',1._wp, pt_bo,'T',1._wp )
+#endif
 
 
 #if defined _TRDBG

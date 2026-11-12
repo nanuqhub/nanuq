@@ -54,7 +54,7 @@ MODULE icedyn_rhg_evp
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zmU_dt, zmV_dt                  ! (ice-snow_mass / dt) on U/V points
    !
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zds                             ! shear
-   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zten_i, zshear                  ! tension, shear
+   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zshear                          ! shear
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zsshdyn                         ! array used for the calculation of ice surface slope:
    !                                                                           !    ocean surface (ssh_m) if ice is not embedded
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)  ::   zfU  , zfV                      ! internal stresses
@@ -521,8 +521,6 @@ CONTAINS
                &   ) * r1_e1e2t(ji,jj)
             zdt2 = zdt * zdt
 
-            zten_i(ji,jj) = zdt
-
             ! shear**2 at T points (doc eq. A16)
             zds2 = ( zds(ji,jj  ) * zds(ji,jj  ) * e1e2f(ji,jj  ) + zds(ji-1,jj  ) * zds(ji-1,jj  ) * e1e2f(ji-1,jj  )  &
                &   + zds(ji,jj-1) * zds(ji,jj-1) * e1e2f(ji,jj-1) + zds(ji-1,jj-1) * zds(ji-1,jj-1) * e1e2f(ji-1,jj-1)  &
@@ -553,7 +551,7 @@ CONTAINS
       !$acc end parallel loop
 
       ! Halos of the deformation outputs.
-      ! `zten_i`, `zshear` and `zdelta` are no longer `lbc_lnk`ed here: `zten_i` & `zshear` are only read in commented-out
+      ! `zshear` and `zdelta` are no longer `lbc_lnk`ed here: `zshear` is only read in commented-out
       ! code below, and `zdelta` is only written as a diagnostic (`icedlt`), which does not need its halo.
       ! The stress tensor `SIGMAt` is no longer `lbc_lnk`ed here either: every halo value of `SIGMAt` that is read by the
       ! scheme (`ji,jj = Nis0:Nie0+1` for `sigma_1` & `sigma_2`, `Nis0-1:Nie0` for `sigma_12`) is recomputed locally at each
@@ -674,14 +672,14 @@ CONTAINS
       ENDIF
 
       ALLOCATE( zdelta(jpi,jpj), zp_delt(jpi,jpj), zbeta(jpi,jpj), zdt_m(jpi,jpj), zmU_dt(jpi,jpj), zmV_dt(jpi,jpj), &
-         &      zds(jpi,jpj), zten_i(jpi,jpj), zshear(jpi,jpj), &
+         &      zds(jpi,jpj), zshear(jpi,jpj), &
          &      zsshdyn(jpi,jpj), zfU(jpi,jpj), zfV(jpi,jpj), zspgU(jpi,jpj), zspgV(jpi,jpj),   &
          &      zmsk(jpi,jpj), kmsk01x(jpi,jpj), kmsk01y(jpi,jpj), kmsk00x(jpi,jpj), kmsk00y(jpi,jpj), &
          &      ztaux_base(jpi,jpj), ztauy_base(jpi,jpj), ztaux_bi(jpi,jpj), ztauy_bi(jpi,jpj), &
          &      STAT = ierr(1) )
       !
       zdelta(:,:) = 0._wp ;  zp_delt(:,:) = 0._wp ;  zbeta(:,:) = 0._wp ;  zdt_m(:,:) = 0._wp ;  zmU_dt(:,:) = 0._wp ;  zmV_dt(:,:) = 0._wp
-      zds(:,:) = 0._wp ;  zten_i(:,:) = 0._wp ;  zshear(:,:) = 0._wp
+      zds(:,:) = 0._wp ;  zshear(:,:) = 0._wp
       zsshdyn(:,:) = 0._wp ;  zfU(:,:) = 0._wp ;  zfV(:,:) = 0._wp ;  zspgU(:,:) = 0._wp ;  zspgV(:,:) = 0._wp
       zmsk(:,:) = 0._wp
       ztaux_base(:,:) = 0._wp ;  ztauy_base(:,:) = 0._wp ;  ztaux_bi(:,:) = 0._wp ;  ztauy_bi(:,:) = 0._wp
@@ -690,8 +688,8 @@ CONTAINS
       PRINT *, ' * info GPU: ice_dyn_rhg_evp_init() => adding aEVP work arrays to memory!'
       !$acc enter data copyin( zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zds )
       PRINT *, '    ==> zdelta, zp_delt, zbeta, zdt_m, zmU_dt, zmV_dt, zds'
-      !$acc enter data copyin( zten_i, zshear, zsshdyn, zfU, zfV, zspgU, zspgV )
-      PRINT *, '    ==> zten_i, zshear, zsshdyn, zfU, zfV, zspgU, zspgV'
+      !$acc enter data copyin( zshear, zsshdyn, zfU, zfV, zspgU, zspgV )
+      PRINT *, '    ==> zshear, zsshdyn, zfU, zfV, zspgU, zspgV'
       !$acc enter data copyin( zmsk, kmsk01x, kmsk01y, kmsk00x, kmsk00y, ztaux_base, ztauy_base, ztaux_bi, ztauy_bi )
       PRINT *, '    ==> zmsk, kmsk01x, kmsk01y, kmsk00x, kmsk00y, ztaux_base, ztauy_base, ztaux_bi, ztauy_bi'
 #endif

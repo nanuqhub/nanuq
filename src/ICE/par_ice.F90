@@ -226,10 +226,6 @@ MODULE par_ice
    REAL(wp), PUBLIC ::   rn_sinew         !: fraction of sss that is kept in new ice
    REAL(wp), PUBLIC ::   rn_simin         !: minimum ice salinity [PSU]
    LOGICAL , PUBLIC ::   ln_sal_chk       !: sanity checks for salt drainage and flushing
-   INTEGER , PUBLIC ::   nn_liquidus      !: formulation of liquidus
-   !                                        1 = linear liquidus
-   !                                        2 = Vancopenolle et al (2019) formulation
-   !                                        3 = Weast formulation (used in RJW2014)
    INTEGER , PUBLIC ::   nn_sal_scheme    !: convection scheme
    LOGICAL , PUBLIC ::   ln_flushing      !: activate flushing
    LOGICAL , PUBLIC ::   ln_drainage      !: activate gravity drainage
@@ -243,7 +239,7 @@ MODULE par_ice
    REAL(wp), PUBLIC ::   rn_Rc_GN         !:                          for GN
    REAL(wp), PUBLIC ::   rn_sal_himin     !: min ice thickness for gravity drainage and flushing calculation
    REAL(wp), PUBLIC ::   rn_vbrc          !: critical brines volume above which flushing can occur
-   !$acc declare create( rn_sinew,rn_simin,ln_sal_chk,nn_liquidus,nn_sal_scheme,ln_flushing )
+   !$acc declare create( rn_sinew,rn_simin,ln_sal_chk,nn_sal_scheme,ln_flushing )
    !$acc declare create( ln_drainage,nn_drainage,nn_flushing,rn_flushrate,rn_alpha_CW,rn_alpha_RJW,rn_alpha_GN,rn_Rc_RJW,rn_Rc_GN,rn_sal_himin,rn_vbrc )
 
    !                                     !!** ice-ponds namelist (namthd_pnd)

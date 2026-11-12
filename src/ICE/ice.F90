@@ -61,6 +61,7 @@ MODULE ice
    !! v_s         |      -      |    Snow volume per unit area    | m     |
    !! szv_i       |      -      |    Sea ice salt content (4D)    | g/kg.m|
    !! oa_i        |      -      |    Sea ice areal age content    | s     |
+   !! o_i         |      -      |    Sea ice age (=oa_i/a_i)      | s     |
    !! e_i         |             |    Ice enthalpy                 | J/m2  |
    !!             |    e_i_1d   |    Ice enthalpy per unit vol.   | J/m3  |
    !! e_s         |             |    Snow enthalpy                | J/m2  |
@@ -215,6 +216,7 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   t_su          !: Sea-Ice Surface Temperature             (K)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   s_i           !: Sea-Ice Bulk salinity                   (g/kg)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   oa_i          !: Sea-Ice Age * ice area                  (s)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   o_i           !: Sea-Ice Age (=oa_i/a_i), used in thermo to keep the age when a_i changes (s)
    !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ibr         !: brine volume
 
    !! Variables summed over all categories, or associated to all the ice in a single grid cell
@@ -272,11 +274,9 @@ MODULE ice
    !!----------------------------------------------------------------------
    !! * Global variables at before time step
    !!----------------------------------------------------------------------
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_s_b, v_i_b, h_s_b, h_i_b !: snow and ice volumes/thickness
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_i_b, h_i_b               !: ice volume/thickness
    !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ip_b, v_il_b             !: ponds and lids volumes
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   a_i_b                      !:
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   e_s_b                      !: snow heat content
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   e_i_b, szv_i_b             !: ice temperatures and salt
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   u_ice_b, v_ice_b           !: ice velocity
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   at_i_b                     !: ice concentration (total)
 
@@ -337,13 +337,10 @@ MODULE ice
    !! * 2D version of a few arrays thar are (used to be) declared and
    !!   allocated in `ice1d.F90` for 1d thermo...
    !!----------------------------------------------------------------------
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: s_i_new, dh_i_itm, dh_s_itm, dh_s_tot, dh_i_bom, &
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: dh_i_itm, dh_s_itm, dh_i_bom, &
       &                                                   dh_i_sub, dh_i_bog, dh_snowice
    ! meltwater arrays to save for melt ponds (mv - could be grouped in a single meltwater volume array)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: dh_i_sum_2d, dh_s_sum_2d
-
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: eh_i_old    !: ice heat content (q*h, J.m-2)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: h_i_old     !: ice thickness layer (m)
 
    !! Transports for advection:
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   ::   sudy_u, svdx_v  ! transports (u*dy, v*dx) for T-centric mesh (m^2/s)
@@ -440,17 +437,17 @@ CONTAINS
       ALLOCATE( qtr_ice_bot(jpi,jpj,jpl) , cnd_ice(jpi,jpj,jpl) , t1_ice(jpi,jpj,jpl) ,  &
          &      h_i        (jpi,jpj,jpl) , a_i    (jpi,jpj,jpl) , v_i   (jpi,jpj,jpl) ,  &
          &      v_s        (jpi,jpj,jpl) , h_s    (jpi,jpj,jpl) , t_su  (jpi,jpj,jpl) ,  &
-         &      s_i        (jpi,jpj,jpl) , oa_i   (jpi,jpj,jpl) ,   STAT=ierr(ii) )
+         &      s_i        (jpi,jpj,jpl) , oa_i   (jpi,jpj,jpl) , o_i   (jpi,jpj,jpl) ,   STAT=ierr(ii) )
       ! v_ibr(jpi,jpj,jpl)
       qtr_ice_bot(:,:,:)=0._wp ; cnd_ice(:,:,:)=0._wp ; t1_ice(:,:,:)=0._wp
       h_i        (:,:,:)=0._wp ; a_i    (:,:,:)=0._wp ; v_i   (:,:,:)=0._wp
       v_s        (:,:,:)=0._wp ; h_s    (:,:,:)=0._wp ; t_su  (:,:,:)=0._wp
-      s_i        (:,:,:)=0._wp ; oa_i   (:,:,:)=0._wp ; !v_ibr   (:,:,:)=0._wp
+      s_i        (:,:,:)=0._wp ; oa_i   (:,:,:)=0._wp ; o_i   (:,:,:)=0._wp ; !v_ibr   (:,:,:)=0._wp
       !
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 3D arrays to memory'
-      PRINT *, '            => qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i'
-      !$acc enter data copyin( qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i )
+      PRINT *, '            => qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i, o_i'
+      !$acc enter data copyin( qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i, o_i )
       !!   --> ignored for now: v_ibr
 #endif
 
@@ -507,14 +504,11 @@ CONTAINS
 
       ! * Old values of global variables
       ii = ii + 1
-      ALLOCATE( v_s_b (jpi,jpj,jpl) , v_i_b (jpi,jpj,jpl) , h_s_b(jpi,jpj,jpl)        , h_i_b(jpi,jpj,jpl),         &
-         &      szv_i_b (jpi,jpj,nlay_i,jpl),                           &
-         &      a_i_b (jpi,jpj,jpl) , e_i_b(jpi,jpj,nlay_i,jpl) , e_s_b(jpi,jpj,nlay_s,jpl) , &
-         &      STAT=ierr(ii) )
+      ALLOCATE( v_i_b (jpi,jpj,jpl) , h_i_b(jpi,jpj,jpl) , a_i_b (jpi,jpj,jpl) , STAT=ierr(ii) )
 #if defined _OPENACC || defined _OPENMP
-      PRINT *, ' * info GPU: ice_alloc() => adding 3D/4D arrays to memory'
-      PRINT *, '            => v_s_b, v_i_b, h_s_b, h_i_b, szv_i_b, a_i_b, e_i_b, e_s_b'
-      !$acc enter data copyin( v_s_b, v_i_b, h_s_b, h_i_b, szv_i_b, a_i_b, e_i_b, e_s_b )
+      PRINT *, ' * info GPU: ice_alloc() => adding 3D arrays to memory'
+      PRINT *, '            => v_i_b, h_i_b, a_i_b'
+      !$acc enter data copyin( v_i_b, h_i_b, a_i_b )
 #endif
 
       ii = ii + 1
@@ -587,15 +581,14 @@ CONTAINS
 
       !LOLOfixme: make it inside a `ln_icethd` flag here?
       ii = ii + 1
-      ALLOCATE( s_i_new(jpi,jpj),  dh_i_itm(jpi,jpj), dh_s_tot(jpi,jpj),    &
+      ALLOCATE( dh_i_itm(jpi,jpj),    &
          &      dh_i_bom(jpi,jpj), dh_s_itm(jpi,jpj), &
          &      dh_i_sub(jpi,jpj), dh_i_bog(jpi,jpj), dh_snowice(jpi,jpj), &
-         &      eh_i_old(jpi,jpj,0:nlay_i+1), h_i_old(jpi,jpj,0:nlay_i+1), &
          &      dh_i_sum_2d(jpi,jpj,jpl), dh_s_sum_2d(jpi,jpj,jpl),  STAT = ierr(ii) )
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding thermo-only arrays to memory'
-      PRINT *, '            => s_i_new, dh_i_itm, dh_s_tot, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, eh_i_old, h_i_old, dh_i_sum_2d, dh_s_sum_2d'
-      !$acc enter data copyin( s_i_new, dh_i_itm, dh_s_tot, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, eh_i_old, h_i_old, dh_i_sum_2d, dh_s_sum_2d )
+      PRINT *, '            => dh_i_itm, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, dh_i_sum_2d, dh_s_sum_2d'
+      !$acc enter data copyin( dh_i_itm, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, dh_i_sum_2d, dh_s_sum_2d )
 #endif
       !LOLO.
 

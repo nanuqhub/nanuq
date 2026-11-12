@@ -630,11 +630,13 @@ CONTAINS
                         WRITE(numout,*) ' s_i        : ', s_i(ji,jj,jl)              , ' oa_i       : ', oa_i(ji,jj,jl)
                         WRITE(numout,*) ' a_i        : ', a_i(ji,jj,jl)              , ' a_i_b      : ', a_i_b(ji,jj,jl)
                         WRITE(numout,*) ' v_i        : ', v_i(ji,jj,jl)              , ' v_i_b      : ', v_i_b(ji,jj,jl)
-                        WRITE(numout,*) ' v_s        : ', v_s(ji,jj,jl)              , ' v_s_b      : ', v_s_b(ji,jj,jl)
-                        WRITE(numout,*) ' e_i1       : ', e_i(ji,jj,1,jl)            , ' ei1        : ', e_i_b(ji,jj,1,jl)
-                        WRITE(numout,*) ' e_i2       : ', e_i(ji,jj,2,jl)            , ' ei2_b      : ', e_i_b(ji,jj,2,jl)
-                        WRITE(numout,*) ' e_snow     : ', e_s(ji,jj,1,jl)            , ' e_snow_b   : ', e_s_b(ji,jj,1,jl)
-                        WRITE(numout,*) ' szv_i1     : ', szv_i(ji,jj,1,jl)          , ' szv_i1_b   : ', szv_i_b(ji,jj,1,jl)
+                        ! Print current values only: the "before" copies of these fields (v_s_b, e_i_b, e_s_b, szv_i_b)
+                        ! were only used here, so they have been removed to save memory and one GPU kernel per time step.
+                        WRITE(numout,*) ' v_s        : ', v_s(ji,jj,jl)
+                        WRITE(numout,*) ' e_i1       : ', e_i(ji,jj,1,jl)
+                        WRITE(numout,*) ' e_i2       : ', e_i(ji,jj,2,jl)
+                        WRITE(numout,*) ' e_snow     : ', e_s(ji,jj,1,jl)
+                        WRITE(numout,*) ' szv_i1     : ', szv_i(ji,jj,1,jl)
                      END DO !jl
 
                      WRITE(numout,*)

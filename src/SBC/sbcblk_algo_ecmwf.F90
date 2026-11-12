@@ -239,7 +239,7 @@ CONTAINS
             zzeta_u = zu*z1oL
             zzeta_t = zt*z1oL
 
-            zz0t    = MIN( MAX(ABS(  1._wp / ( 0.1_wp*EXP(vkarmn/(0.00115/( vkarmn/(zlog_10-zlog_z0) ))) )   ), 1.E-9) , 1._wp )
+            zz0t    = MIN( MAX(ABS(  1._wp / ( 0.1_wp*EXP(vkarmn/(0.00115_wp/( vkarmn/(zlog_10-zlog_z0) ))) )   ), 1.E-9_wp) , 1._wp )
             zlog_z0t = LOG(zz0t)
 
             !! Functions such as  u* = pUbzu*vkarmn/zFm

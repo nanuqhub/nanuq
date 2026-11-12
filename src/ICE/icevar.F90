@@ -236,6 +236,9 @@ CONTAINS
       LOGICAL  :: ldo_h
       !!-------------------------------------------------------------------
       !$acc data present(a_i,at_i,e_i,e_s,hfx_res,h_i,h_s,oa_i,sfx_res,t_i,t_s,t_su,v_i,v_s,vt_i,wfx_pnd,wfx_res,sz_i,szv_i)
+      ! Default: do not recompute h_i,h_s from volumes (e.g. call from ice_cor); only if l_do_h=.true. is passed
+      ! (bugfix: `ldo_h` was left undefined when `l_do_h` is absent)
+      ldo_h = .FALSE.
       IF( PRESENT(l_do_h) )  ldo_h = l_do_h
 
       IF( ldo_h ) THEN
@@ -827,13 +830,7 @@ CONTAINS
    !               zt1 = t_i(ji,jj,jk,jl) - rt0
    !               zt2 = zt1 * zt1
    !               zt3 = zt2 * zt1
-   !               IF    ( nn_liquidus == 1 ) THEN
-   !                  zs_br = - zt1 / rTmlt                                      ! --- Linear liquidus
-   !               ELSEIF( nn_liquidus == 2 ) THEN
-   !                  zs_br = -18.7_wp * zt1 - 0.519_wp * zt2 - 0.00535_wp * zt3 ! --- 3rd order liquidus, VC19
-   !               ELSEIF( nn_liquidus == 3 ) THEN
-   !                  zs_br = -17.6_wp * zt1 - 0.389_wp * zt2 - 0.00362_wp * zt3 ! --- Weast 71 liquidus in RJW14
-   !               ENDIF
+   !               zs_br = -18.7_wp * zt1 - 0.519_wp * zt2 - 0.00535_wp * zt3 ! --- 3rd order liquidus, VC19
    !               ! brine volume fraction
    !               IF( zt1 < - epsi10 )   v_ibr(ji,jj,jl) = v_ibr(ji,jj,jl) + r1_nlay_i * sz_i(ji,jj,jk,jl) / zs_br
    !            END DO

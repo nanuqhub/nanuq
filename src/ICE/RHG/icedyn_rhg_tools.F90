@@ -33,7 +33,6 @@ MODULE icedyn_rhg_tools
    PUBLIC vel_div_t
    PUBLIC vel_ten_t
    PUBLIC vel_shear_f
-   PUBLIC vel_maxshr_t
    !PUBLIC vel_delta_t
 
    !!----------------------------------------------------------------------
@@ -518,59 +517,6 @@ CONTAINS
 
    END SUBROUTINE vel_shear_f
 
-
-   SUBROUTINE vel_maxshr_t( pU, pV, p1_e1e2t, p1_e1e2f, p1_e1u, p1_e2v, p1_e2u, p1_e1v, pe1e1t, pe2e2t, pe1e1f, pe2e2f, &
-      &                     pe1e2f, pmskt, pmskf, pms )
-      !!----------------------------------------------------------------------------------------------------------
-      !! Computes the (strain-rate) tension of sea-ice velocity vector => T-point
-      !!
-      !! Note: the mask@F must be the actual `fmask` that takes into account the slip/no-slip conditions
-      !!----------------------------------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pU, pV           ! u@U & v@V                                    [m/s]
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: p1_e1e2t, p1_e1e2f       ! 1/(e1t*e2t)              [1/m^2]
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: p1_e1u, p1_e2v
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: p1_e2u, p1_e1v   ! T-grid: 1/e2u,1/e1v | F-grid: 1/e2v,1/e1u         [1/m]
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pe1e1t, pe2e2t
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pe1e1f, pe2e2f
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pe1e2f
-      REAL(wp), DIMENSION(:,:), INTENT(in)  :: pmskt, pmskf         ! 2D land-sea mask for given points...
-      REAL(wp), DIMENSION(:,:), INTENT(out) :: pms   ! maximum shear @ T points               [1/s]
-      !!----------------------------------------------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj) :: zSHR
-      REAL(wp) :: zzf, zten, zs2
-      INTEGER  :: ji, jj
-      !!----------------------------------------------------------------------------------------------------------
-
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            ! 2*Shear at F points:
-            zzf = p1_e1e2f(ji,jj) * pmskf(ji,jj)
-            zSHR(ji,jj) = ( ( pU(ji,jj+1) * p1_e1u(ji,jj+1) - pU(ji,jj) * p1_e1u(ji,jj) ) * pe1e1f(ji,jj) * zzf  &
-               &         + ( pV(ji+1,jj) * p1_e2v(ji+1,jj) - pV(ji,jj) * p1_e2v(ji,jj) ) * pe2e2f(ji,jj) * zzf  &
-               &         ) * p1_e1e2f(ji,jj) * pmskf(ji,jj)
-
-         END DO
-      END DO
-
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-
-            !! Tension at T-points, `dU/dx - dV/dy` :
-            zten = (   ( pU(ji,jj)*p1_e2u(ji,jj) - pU(ji-1,jj)*p1_e2u(ji-1,jj) ) * pe2e2t(ji,jj) &
-               &     - ( pV(ji,jj)*p1_e1v(ji,jj) - pV(ji,jj-1)*p1_e1v(ji,jj-1) ) * pe1e1t(ji,jj) &
-               &    )           * p1_e1e2t(ji,jj)
-
-            !! Shear**2 at T points (doc eq. A16)
-            zs2 =  ( zSHR(ji,jj  ) * zSHR(ji,jj  ) * pe1e2f(ji,jj  ) + zSHR(ji-1,jj  ) * zSHR(ji-1,jj  ) * pe1e2f(ji-1,jj  )  &
-               &   + zSHR(ji,jj-1) * zSHR(ji,jj-1) * pe1e2f(ji,jj-1) + zSHR(ji-1,jj-1) * zSHR(ji-1,jj-1) * pe1e2f(ji-1,jj-1)  &
-               &   ) * 0.25_wp * p1_e1e2t(ji,jj)
-
-            !! Maximum shear rate at T points
-            pms(ji,jj) = SQRT( zten*zten + zs2 ) * pmskt(ji,jj)
-
-         END DO
-      END DO
-   END SUBROUTINE vel_maxshr_t
 
    !!==============================================================================
 END MODULE icedyn_rhg_tools

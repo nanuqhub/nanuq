@@ -380,8 +380,10 @@ CONTAINS
 
                   zt_i_new       = zswitch_sal * t_bo(ji,jj) + ( 1. - zswitch_sal) * t_i(ji,jj, nlay_i,jl_cat)
 
+                  ! Specific enthalpy of the new ice. The latent part uses the solid fraction (1 - Tmelt/T), bounded at 0
+                  ! (as in SI3) to stay physical if the ice melting point were ever colder than the ocean freezing point
                   zEi            = rcpi * ( zt_i_new - (ztmelts+rt0) ) &                                         ! Specific enthalpy of forming ice (J/kg, <0)
-                     &             - rLfus * ( 1.0 - ztmelts / ( MIN( zt_i_new - rt0, -epsi10 ) ) ) + rcp * ztmelts
+                     &             - rLfus * MAX( 0._wp, 1.0 - ztmelts / ( MIN( zt_i_new - rt0, -epsi10 ) ) ) + rcp * ztmelts
 
                   zEw            = rcp  * ( t_bo(ji,jj) - rt0 )                                                  ! Specific enthalpy of seawater (J/kg, < 0)
 
@@ -583,7 +585,9 @@ CONTAINS
                a_i(ji,jj,jl_cat)  = 0._wp
                h_i(ji,jj,jl_cat)  = 0._wp
                h_s(ji,jj,jl_cat)  = 0._wp
-               t_su(ji,jj,jl_cat) = 0._wp
+               ! Category fully melted: set a physical surface temperature (melting point, in Kelvin) instead of 0 K,
+               ! because new ice from the leads (ice_thd_do) may land in this category before ice_cor/zapsmall resets t_su
+               t_su(ji,jj,jl_cat) = rt0
                lk_ice_present(ji,jj) = .FALSE.
             ENDIF
          END DO

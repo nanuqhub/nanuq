@@ -221,10 +221,18 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
+      ! Update the halo of `emp`, and also of `snwice_mass` & `snwice_mass_b`:
+      !  => the loop above only sets `snwice_mass` & `snwice_mass_b` on the interior points `Nis0:Nie0,Njs0:Nje0`,
+      !     but `snwice_mass_b` is read over the whole halo by `ice_var_sshdyn()` (when `ln_ice_embd=T`), and the
+      !     rheology then uses `ji+1` / `jj+1` neighbours to compute the surface pressure gradient. Without this
+      !     exchange, the halo would keep the values of the initial state (or restart) for the whole run, so the
+      !     ice velocities at the edges of each MPI subdomain would depend on the domain decomposition
+      !     (loss of bitwise MPI reproducibility), and the periodicity would be wrong in the GPU build.
+      !  => `snwice_mass` must be exchanged as well, because it is copied into `snwice_mass_b` at the next time step.
 #if defined _OPENACC || defined _OPENMP
-      CALL lbc_lnk_gpu( 'ice_update_flx', emp )             ! IMPORTANT
+      CALL lbc_lnk_gpu( 'ice_update_flx', emp, snwice_mass, snwice_mass_b )             ! IMPORTANT
 #else
-      CALL lbc_lnk(     'ice_update_flx', emp,'T',1._wp )   ! IMPORTANT
+      CALL lbc_lnk(     'ice_update_flx', emp,'T',1._wp, snwice_mass,'T',1._wp, snwice_mass_b,'T',1._wp )   ! IMPORTANT
 #endif
 
       ! Snow/ice albedo (only if sent to coupler, useless in forced mode)
@@ -288,7 +296,7 @@ CONTAINS
       REAL(wp) ::   za_tot_t, zA, zB, ztaux, ztauy
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('ice_update_tau')
-      !$acc data present( utau, vtau, u_ice, v_ice, uVice, vUice, V_oce, taum, taux_oi_u, tauy_oi_v, at_i, au_i, av_i )
+      !$acc data present( utau, vtau, u_ice, v_ice, uVice, vUice, V_oce, taum, taux_oi_u, tauy_oi_v, at_i, au_i, av_i, xtmp1, xtmp2 )
 
       IF( kt == nit000 .AND. lwp ) THEN
          WRITE(numout,*)
@@ -300,18 +308,36 @@ CONTAINS
 
       !nb = MAX( nn_hls-1, 0 )
 
+      ! 0/ C-grid case: copy of the air-sea stress @T (`utau`, `vtau` as they enter this routine).
+      !    The main loop below overwrites `utau` & `vtau` with their values @U,V, while each point also needs
+      !    the T-point value of its neighbor (`ji+1`, `jj+1`). Reading `utau` & `vtau` there would be a race
+      !    condition on the GPU (another thread may already have overwritten the neighbor value).
+      !    `xtmp1` & `xtmp2` are free work arrays at this stage (end of the ice time step; their next use is
+      !    as outputs of `blk_oce_1` at the next time step).
+      IF( k_tau_air_at_T == 0 ) THEN
+         !$acc parallel loop collapse(2)
+         DO jj=1, jpj
+            DO ji=1, jpi
+               xtmp1(ji,jj) = utau(ji,jj)
+               xtmp2(ji,jj) = vtau(ji,jj)
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
+
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
 
             ! 1/ Update modulus of stress received by the liquid ocean @T (weight contributions of air-sea & ice-sea stresses / A )
-            zA = at_i(ji,jj)
+            !    (the ice concentration is kept in `za_tot_t`, so that it is not overwritten by the velocity differences below)
+            za_tot_t = at_i(ji,jj)
             !
             zu_t = u_ice(ji,jj) + u_ice(ji-1,jj) - V_oce(ji,jj,1) - V_oce(ji-1,jj,1)  ! 2*(U_ice-U_oce) at T-point
             zv_t = v_ice(ji,jj) + v_ice(ji,jj-1) - V_oce(ji,jj,2) - V_oce(ji,jj-1,2)  ! 2*(V_ice-V_oce) at T-point
             zmodt =  0.25_wp * ( zu_t*zu_t + zv_t*zv_t  )   ! |U_ice-U_oce|^2
             ! Making stress modulus received by the liquid ocean @T ice-aware:
-            taum(ji,jj) = (1._wp - zA) * taum(ji,jj) + zA * zrhoco * zmodt
+            taum(ji,jj) = (1._wp - za_tot_t) * taum(ji,jj) + za_tot_t * zrhoco * zmodt
 
             ! 2/ Update stress vector components received by the liquid ocean @U,V (weight contributions of air-sea & ice-sea stresses / Au,Av )
             zA = u_ice(ji,jj) - V_oce(ji,jj,1)  ! U_ice - U_oce @ U
@@ -326,22 +352,17 @@ CONTAINS
             ztauy_oi_v = zrhoco * ztmod_io * zB
             tauy_oi_v(ji,jj) = -1._wp * ztauy_oi_v ! reverse sign because `taux_oi_u` is what is felt by the ice, not the ocean !
             !
-            ! Making stresses received by the liquid ocean @U,V ice-aware:
-            IF( k_tau_air_at_T == 1 ) THEN
-               ! => both `utau` & `vtau` have to be located at T-point
-               !    ==> ice-sea stress needs to be interpolated at T-points (`utau` & `vtau` already @T)
-               ztaux = 0.5_wp * ( taux_oi_u(ji,jj) + taux_oi_u(ji-1,jj) ) ! => ztaux is `taux_oi_u` interp @T
-               ztauy = 0.5_wp * ( tauy_oi_v(ji,jj) + tauy_oi_v(ji,jj-1) ) ! => ztauy is `tauy_oi_v` interp @T
-               utau(ji,jj) = (1._wp - zA) * utau(ji,jj)  +  zA * ztaux ! @T
-               vtau(ji,jj) = (1._wp - zA) * vtau(ji,jj)  +  zA * ztauy ! @T
-               !
-            ELSE
+            ! 3/ C-grid case: making stresses received by the liquid ocean @U,V ice-aware.
+            !    (the T-point case is done in a separate loop below, because it needs the neighbor values of
+            !     `taux_oi_u` & `tauy_oi_v`, which are computed in this loop)
+            IF( k_tau_air_at_T == 0 ) THEN
                ! => follow 'C-grid' convention => `utau` @ U-point & `vtau` @ V-point
                za_tot_u = au_i(ji,jj)
                za_tot_v = av_i(ji,jj)
                !    ==> air-sea stress needs to be interpolated at U,V-points
-               ztaux = 0.5_wp*(utau(ji,jj) + utau(ji+1,jj)) * (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj)) ! => ztaux is utau interp @U
-               ztauy = 0.5_wp*(vtau(ji,jj) + vtau(ji,jj+1)) * (2._wp-vmask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji,jj+1)) ! => ztauy is vtau interp @V
+               !        (read from the copies `xtmp1` & `xtmp2` made in step 0/, not from `utau` & `vtau` that this loop overwrites)
+               ztaux = 0.5_wp*(xtmp1(ji,jj) + xtmp1(ji+1,jj)) * (2._wp-umask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji+1,jj)) ! => ztaux is utau interp @U
+               ztauy = 0.5_wp*(xtmp2(ji,jj) + xtmp2(ji,jj+1)) * (2._wp-vmask(ji,jj,1))*MAX(xmskt(ji,jj),xmskt(ji,jj+1)) ! => ztauy is vtau interp @V
                !
                utau(ji,jj) = (1._wp - za_tot_u) * ztaux  +  za_tot_u * ztaux_oi_u  ! @U
                vtau(ji,jj) = (1._wp - za_tot_v) * ztauy  +  za_tot_v * ztauy_oi_v  ! @V
@@ -350,23 +371,46 @@ CONTAINS
       END DO
       !$acc end parallel loop
 
+      ! Halos of the ice-ocean stresses felt by the ice. Done here (and not at the end) because the T-point case
+      ! below reads their values at `ji-1` & `jj-1`.
+#if defined _OPENACC || defined _OPENMP
+      CALL lbc_lnk_gpu( 'ice_update_tau', taux_oi_u, tauy_oi_v )
+#else
+      CALL lbc_lnk(     'ice_update_tau', taux_oi_u,'U',-1._wp, tauy_oi_v,'V',-1._wp  )
+#endif
 
+      ! 4/ T-point case: ice-ocean stress felt by the OCEAN, interpolated @T, weighted with the ice concentration.
+      !    => both `utau` & `vtau` have to be located at T-point (`utau` & `vtau` already @T)
+      IF( k_tau_air_at_T == 1 ) THEN
+         !$acc parallel loop collapse(2)
+         DO jj=Njs0, Nje0
+            DO ji=Nis0, Nie0
+               za_tot_t = at_i(ji,jj)
+               ! minus sign: `taux_oi_u` & `tauy_oi_v` are the stresses felt by the ICE, the ocean feels the opposite
+               ztaux = - 0.5_wp * ( taux_oi_u(ji,jj) + taux_oi_u(ji-1,jj) ) ! => ztaux is the ice-ocean stress felt by the ocean, interp @T
+               ztauy = - 0.5_wp * ( tauy_oi_v(ji,jj) + tauy_oi_v(ji,jj-1) ) ! => ztauy is the ice-ocean stress felt by the ocean, interp @T
+               utau(ji,jj) = (1._wp - za_tot_t) * utau(ji,jj)  +  za_tot_t * ztaux ! @T
+               vtau(ji,jj) = (1._wp - za_tot_t) * vtau(ji,jj)  +  za_tot_t * ztauy ! @T
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
+
+      ! Halos of `taum`, `utau` & `vtau`
 #if defined _OPENACC || defined _OPENMP
       !#LOLOfixme: really ok for periodic LBC to do the same shit for T, U or V like here????
-      CALL lbc_lnk_gpu( 'ice_update_tau', taum, utau, vtau, taux_oi_u, tauy_oi_v )            ! lateral boundary condition
+      CALL lbc_lnk_gpu( 'ice_update_tau', taum, utau, vtau )            ! lateral boundary condition
 #else
       IF( k_tau_air_at_T == 1 ) THEN
 #if defined key_verbose
          IF(lwp) PRINT *, ' *** LOLO:ice_update_tau => `utau, vtau` updated at T-points!!!'
 #endif
-         CALL lbc_lnk(     'ice_update_tau', taum,'T',1._wp, utau,'T',-1._wp,      vtau,'T',-1._wp, &
-            &                                           taux_oi_u,'U',-1._wp, tauy_oi_v,'V',-1._wp  )   ! lateral boundary condition
+         CALL lbc_lnk(     'ice_update_tau', taum,'T',1._wp, utau,'T',-1._wp,      vtau,'T',-1._wp )   ! lateral boundary condition
       ELSE
 #if defined key_verbose
          IF(lwp) PRINT *, ' *** LOLO:ice_update_tau => `utau, vtau` updated at U- & V-points!!!'
 #endif
-         CALL lbc_lnk(     'ice_update_tau', taum,'T',1._wp, utau,'U',-1._wp,      vtau,'V',-1._wp, &
-            &                                           taux_oi_u,'U',-1._wp, tauy_oi_v,'V',-1._wp  )   ! lateral boundary condition
+         CALL lbc_lnk(     'ice_update_tau', taum,'T',1._wp, utau,'U',-1._wp,      vtau,'V',-1._wp )   ! lateral boundary condition
       ENDIF
 #endif
 

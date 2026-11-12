@@ -35,7 +35,8 @@ MODULE icesbc
    IMPLICIT NONE
    PRIVATE
 
-   PUBLIC ice_sbc       ! called by icestp.F90
+   PUBLIC ice_sbc_tau   ! called by icestp.F90 (before dynamics)
+   PUBLIC ice_sbc_flx   ! called by icestp.F90 (after dynamics, just before thermodynamics, as in SI3)
    PUBLIC ice_sbc_init  ! called by icestp.F90
    PUBLIC ice_sbc_wri   ! called bu icestp.F90
 
@@ -48,28 +49,6 @@ MODULE icesbc
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
 CONTAINS
-
-
-   SUBROUTINE ice_sbc( kt, ksbc, ptaux_ai, ptauy_ai )
-      !!-------------------------------------------------------------------
-      !!                  ***  ROUTINE ice_sbc  ***
-      !!  ==> Wrapper for ice_sbc_tau + ice_sbc_flx
-      !!-------------------------------------------------------------------
-      INTEGER                     , INTENT(in   ) ::   kt                   ! ocean time step
-      INTEGER                     , INTENT(in   ) ::   ksbc                 ! type of sbc flux
-      ! `INTENT(inout)`: in ABL mode, `ptaux_ai` & `ptauy_ai` are already filled by `sbc_abl()` (before `ice_stp()`) and are only
-      ! passed through `ice_sbc_tau()`. Declaring them `INTENT(out)` would make their values undefined on entry.
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(inout) ::   ptaux_ai, ptauy_ai   ! air-ice stress at T-point  [N/m2]
-      !!-------------------------------------------------------------------
-      !$acc data present( ptaux_ai, ptauy_ai, CH_ice, CE_ice )
-      !
-      CALL ice_sbc_tau( kt, ksbc, ptaux_ai, ptauy_ai, CH_ice, CE_ice )
-      !
-      CALL ice_sbc_flx( kt, ksbc,                     CH_ice, CE_ice )
-      !
-      !$acc end data
-   END SUBROUTINE ice_sbc
-
 
 
    SUBROUTINE ice_sbc_tau( kt, ksbc, ptaux_ai, ptauy_ai, pCHi, pCEi )

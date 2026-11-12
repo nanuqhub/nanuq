@@ -155,7 +155,7 @@ CONTAINS
       z0 = rough_leng_m( u_star , znu_a )
 
       DO jit = 1, 2
-         u_star = MAX ( Ubzu*vkarmn/(LOG(zu) - LOG(z0)) , 1.E-9 )
+         u_star = MAX ( Ubzu*vkarmn/(LOG(zu) - LOG(z0)) , 1.E-9_wp )
          z0 = rough_leng_m( u_star , znu_a )
       END DO
 
@@ -187,7 +187,7 @@ CONTAINS
          ztmp0   = psi_h_ice(zeta_u)
          t_star =      dt_zu*vkarmn/(LOG(zu) - LOG(z0tq(:,:,1)) - ztmp0)
          q_star =      dq_zu*vkarmn/(LOG(zu) - LOG(z0tq(:,:,2)) - ztmp0)
-         u_star = MAX( Ubzu*vkarmn/(LOG(zu) - LOG(z0(:,:)) - psi_m_ice(zeta_u)) , 1.E-9 )
+         u_star = MAX( Ubzu*vkarmn/(LOG(zu) - LOG(z0(:,:)) - psi_m_ice(zeta_u)) , 1.E-9_wp )
 
          IF( .NOT. l_zt_equal_zu ) THEN
             !! Re-updating temperature and humidity at zu if zt /= zu :
@@ -338,8 +338,12 @@ CONTAINS
                &     + 2.*LOG( (1._wp + zx       )/2. ) &
                &    - 2.*ATAN( zx ) + 0.5*rpi
 
-            ! Stable stratification:
-            zpsi_s = - ( 0.7_wp*zta + 0.75_wp*(zta - 14.3_wp)*EXP( -0.35*zta) + 10.7_wp )  ! Eq.(33) Jordan et al. 1999
+            ! Stable stratification, Holtslag & De Bruin (1988) as given in Eq.(33) of Jordan et al. 1999:
+            !   psi = -[ a*zeta + b*(zeta - c/d)*exp(-d*zeta) + b*c/d ],  with a=0.7, b=0.75, c=5, d=0.35
+            ! We use the exact values c/d = 5/0.35 and b*c/d = 0.75*5/0.35 instead of the rounded values
+            ! 14.3 and 10.7 printed in the paper, so that psi(0) = 0 exactly (it was +0.025 with the rounded values)
+            ! (same fix as in AeroBulk, commit 6f2bc8d)
+            zpsi_s = - ( 0.7_wp*zta + 0.75_wp*(zta - 5._wp/0.35_wp)*EXP( -0.35_wp*zta) + 0.75_wp*5._wp/0.35_wp )
 
             !! Combine:
             zstab = 0.5 + SIGN(0.5_wp, zta)
@@ -384,7 +388,12 @@ CONTAINS
             zpsi_u =   2.*LOG( (1._wp + zx*zx)/2. )  ! Eq.(31) Jordan et al. 1999
 
             ! Stable stratification (identical to Psi_m!):
-            zpsi_s = - ( 0.7_wp*zta + 0.75_wp*(zta - 14.3_wp)*EXP( -0.35*zta) + 10.7_wp )  ! Eq.(33) Jordan et al. 1999
+            ! Holtslag & De Bruin (1988) as given in Eq.(33) of Jordan et al. 1999:
+            !   psi = -[ a*zeta + b*(zeta - c/d)*exp(-d*zeta) + b*c/d ],  with a=0.7, b=0.75, c=5, d=0.35
+            ! We use the exact values c/d = 5/0.35 and b*c/d = 0.75*5/0.35 instead of the rounded values
+            ! 14.3 and 10.7 printed in the paper, so that psi(0) = 0 exactly (it was +0.025 with the rounded values)
+            ! (same fix as in AeroBulk, commit 6f2bc8d)
+            zpsi_s = - ( 0.7_wp*zta + 0.75_wp*(zta - 5._wp/0.35_wp)*EXP( -0.35_wp*zta) + 0.75_wp*5._wp/0.35_wp )
 
             !! Combine:
             zstab = 0.5 + SIGN(0.5_wp, zta)

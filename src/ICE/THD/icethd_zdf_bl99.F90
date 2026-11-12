@@ -184,7 +184,10 @@ CONTAINS
                ! Store initial temperatures and non solar heat fluxes
                !IF( k_cnd == np_cnd_OFF .OR. k_cnd == np_cnd_EMU ) THEN
                ztsub              =      zt_su        ! surface temperature at iteration n-1
-               zt_su = MIN( ztsub, rt0 - ztsu_err )   ! required to leave the choice between melting or not
+               ! Cap t_su just below 0degC only when BL99 computes t_su itself (conduction flux OFF or emulated),
+               ! to leave the choice between melting or not. In conduction-flux mode (ON), t_su comes from
+               ! the surface scheme and must not be modified here (as in SI3).
+               IF( k_cnd == np_cnd_OFF .OR. k_cnd == np_cnd_EMU )   zt_su = MIN( ztsub, rt0 - ztsu_err )
                zdqns_ice_b        =  dqns_ice(ji,jj,jl_cat)        ! derivative of incoming nonsolar flux
                zqns_ice_b         =   qns_ice(ji,jj,jl_cat)        ! store previous qns_ice_1d value
                !ENDIF
@@ -204,7 +207,10 @@ CONTAINS
                !-------------
                ! --- Transmission/absorption of solar radiation in the ice --- !
                ! extinction radiation in the snow
-               zraext_s = MERGE( rn_kappa_sdry ,  rn_kappa_smlt ,  zt_su < rt0 )
+               ! Extinction coefficient of solar radiation in the snow (nn_qtrice=1): melting or dry snow.
+               ! Must be decided with the surface temperature BEFORE it is capped at rt0-ztsu_err (see above),
+               ! i.e. `ztsub`, otherwise the test is always true and the "melting snow" value is never used (as in SI3).
+               zraext_s = MERGE( rn_kappa_sdry ,  rn_kappa_smlt ,  ztsub < rt0 )
                zraext_s = MERGE( rn_kappa_s    ,  zraext_s      ,           nn_qtrice == 0  )
                !
                zradtr_s(0) = qtr_ice_top(ji,jj,jl_cat)
@@ -426,7 +432,13 @@ CONTAINS
                   END DO
                   zdq = - zq_ini + ( zsum_i * h_i(ji,jj,jl_cat) * r1_nlay_i + zsum_s * h_s(ji,jj,jl_cat) * r1_nlay_s )
 
-                  zdum   = zradtr_i(nlay_i) - qcn_ice_bot(ji,jj,jl_cat) + zdq * r1_Dt_ice
+                  ! Heat leaving the ice column at its base plus heat stored in the column during the time step:
+                  !   zradtr_i(nlay_i) = solar flux transmitted below the ice (out)
+                  !   qcn_ice_bot      = conduction flux at the base, positive downward (out)
+                  !   -zdq/dt          = heat stored in snow+ice (e_i, e_s are energies of melting, so storing heat lowers them)
+                  ! Residual = (heat in at the top) - zdum, which must be ~0 if the solver converged (as in SI3).
+                  ! (bugfix: signs of `qcn_ice_bot` and `zdq` were inverted w.r.t. SI3)
+                  zdum   = zradtr_i(nlay_i) + qcn_ice_bot(ji,jj,jl_cat) - zdq * r1_Dt_ice
                   zsum_i = qcn_ice_top(ji,jj,jl_cat) + qtr_ice_top(ji,jj,jl_cat) - zdum
                   IF( k_cnd == np_cnd_OFF ) THEN
                      zhfx_err = MERGE( (     qns_ice(ji,jj,jl_cat) +     qsr_ice(ji,jj,jl_cat) - zdum ) ,  & ! case T_su < 0degC

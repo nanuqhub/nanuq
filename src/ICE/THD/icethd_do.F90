@@ -179,8 +179,10 @@ CONTAINS
                   ! --- Heat content of new ice --- !
                   ! We assume that new ice is formed at the seawater freezing point
                   ztmelts   = - rTmlt * zs_newice                  ! Melting point (C)
-                  ze_newice =   rhoi * (  rcpi  * ( ztmelts - ( t_bo(ji,jj) - rt0 ) )                     &
-                     &                  + rLfus * ( 1.0 - ztmelts / MIN( t_bo(ji,jj) - rt0, -epsi10 ) )   &
+                  ! Enthalpy of the new ice (J/m3). The latent part uses the solid fraction (1 - Tmelt/T), bounded at 0
+                  ! (as in SI3) to stay physical if the ice melting point were ever colder than the ocean freezing point
+                  ze_newice =   rhoi * (  rcpi  * ( ztmelts - ( t_bo(ji,jj) - rt0 ) )                                   &
+                     &                  + rLfus * MAX( 0._wp, 1.0 - ztmelts / MIN( t_bo(ji,jj) - rt0, -epsi10 ) )       &
                      &                  - rcp   *         ztmelts )
 
                   ! --- Age of new ice --- !

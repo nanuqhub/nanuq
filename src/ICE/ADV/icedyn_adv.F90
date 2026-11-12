@@ -280,6 +280,12 @@ CONTAINS
 #if defined _OPENACC || defined _OPENMP
          CALL ctl_stop( 'ice_dyn_adv_init: UMX advection has not been adapted yet for GPU!' )
 #endif
+         ! The UMX scheme does not advect the ridged-ice fraction tracer `rdgc` (only the Prather and WENO schemes do it,
+         ! by advecting the volume of ridged ice `Vr = rdgc * vt_i`). With UMX, `rdgc` would stay in place while the ice
+         ! moves, and `ice_dyn_rdgtrc` would then update it with the ice volume of another parcel of ice => wrong results.
+         ! So we forbid this combination until the advection of `Vr` is implemented in `icedyn_adv_umx.F90`:
+         IF( ln_rdgtrc ) CALL ctl_stop( 'ice_dyn_adv_init: UMX advection does not advect the ridged-ice tracer `rdgc` yet!', &
+            &                           'use `ln_adv_Pra=T` or `ln_adv_WNx=T` with `ln_rdgtrc=T`, or set `ln_rdgtrc=F`' )
       ENDIF
       IF( ln_adv_WNx ) THEN
          IF(     nn_WNx == 5 ) THEN
@@ -315,6 +321,15 @@ CONTAINS
             ENDIF
             IF( ln_adv_WNx )  ln_adv_d_wnx = .TRUE.
             IF( ln_adv_Pra )  ln_adv_d_pra = .TRUE.
+         ENDIF
+
+         ! Damage must be advected (nn_d_adv>=1) by one and only one scheme: otherwise `nice_d_adv` would stay 0
+         ! (no damage advection at all, silently) or Prather would be initialized and then silently replaced by WENO
+         IF( nn_d_adv >= 1 ) THEN
+            IF( (.NOT. ln_adv_d_pra) .AND. (.NOT. ln_adv_d_wnx) ) &
+               & CALL ctl_stop( 'ice_dyn_adv_init: nn_d_adv>=1 => choose a scheme to advect damage (ln_adv_d_pra or ln_adv_d_wnx)' )
+            IF( ln_adv_d_pra .AND. ln_adv_d_wnx ) &
+               & CALL ctl_stop( 'ice_dyn_adv_init: choose ONLY one scheme to advect damage (ln_adv_d_pra or ln_adv_d_wnx)' )
          ENDIF
 
          IF(ln_adv_d_pra) THEN

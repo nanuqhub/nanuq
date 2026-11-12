@@ -72,6 +72,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk, jl          ! dummy loop indices
       REAL(wp) ::   zdt, zati2
+      REAL(wp) ::   zvt                     ! total ice volume (sum over the categories) of a box
       !
       CHARACTER(len=15), PARAMETER :: crtnm = 'ice_dyn_adv_wnx'
       CHARACTER(len=1),  PARAMETER :: cgt    = 'T'
@@ -107,6 +108,27 @@ CONTAINS
       !   zdiag_adv_heat(:,:) = - SUM(SUM( pe_i(:,:,1:nlay_i,:) , dim=4 ), dim=3 ) &
       !      &                  - SUM(SUM( pe_s(:,:,1:nlay_s,:) , dim=4 ), dim=3 )
       !ENDIF
+
+      IF( ln_rdgtrc ) THEN
+         ! The ridged-ice fraction `rdgc` is the volume of ridged ice divided by the total volume of ice, so it is an intensive
+         ! field: the flux-form WENO operator (`div(f*u)`) would change it in a divergent flow (spurious `-f*div(u)` term).
+         ! As in the Prather scheme, we advect instead the volume of ridged ice `Vr = rdgc * vt_i` (a quantity per unit area),
+         ! and we get `rdgc = Vr / vt_i` back at the end of this routine, with the ice volume after advection.
+         ! This must be done HERE, before `v_i` is advected below. The whole domain (halos included) is converted, because
+         ! `wenoX_rk3` expects a fully `lbc_lnk`ed field. (`prdgc` then holds `Vr` until the end of this routine)
+         !$acc parallel loop collapse(2) present( prdgc, pv_i )
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               zvt = 0._wp
+               !$acc loop seq
+               DO jl=1, jpl
+                  zvt = zvt + pv_i(ji,jj,jl)
+               END DO
+               prdgc(ji,jj) = prdgc(ji,jj) * zvt
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
 
       !! --- ADVECT ---
 
@@ -210,6 +232,24 @@ CONTAINS
          ENDIF
 
       ENDIF !IF( .NOT. ln_pureADV2D )
+
+      IF( ln_rdgtrc ) THEN
+         ! Back from the advected volume of ridged ice `Vr` (held by `prdgc` since before the advection) to the ridged-ice fraction:
+         ! `rdgc = Vr / vt_i`, with the total ice volume `vt_i` AFTER advection (and after `ice_var_zapneg`), bounded to [0,1],
+         ! and 0 where there is (almost) no ice (same formula as in the Prather scheme). Whole domain, halos included.
+         !$acc parallel loop collapse(2) present( prdgc, pv_i )
+         DO jj=Njs0-nn_hls, Nje0+nn_hls
+            DO ji=Nis0-nn_hls, Nie0+nn_hls
+               zvt = 0._wp
+               !$acc loop seq
+               DO jl=1, jpl
+                  zvt = zvt + pv_i(ji,jj,jl)
+               END DO
+               prdgc(ji,jj) = MERGE( MIN( MAX( prdgc(ji,jj) / MAX( zvt, epsi10 ) , 0._wp ) , 1._wp ) , 0._wp , zvt > epsi10 )
+            END DO
+         END DO
+         !$acc end parallel loop
+      ENDIF
 
       !$acc end data
       IF( ln_timing )   CALL timing_stop(crtnm)

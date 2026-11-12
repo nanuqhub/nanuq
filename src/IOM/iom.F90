@@ -116,7 +116,6 @@ CONTAINS
       INTEGER           :: inum
       INTEGER           :: iln
       !
-      REAL(wp), ALLOCATABLE, DIMENSION(:,:) :: zt_bnds, zw_bnds
       REAL(wp), DIMENSION(2,jpkam1)         :: za_bnds   ! ABL vertical boundaries
       LOGICAL ::   ll_closedef
       LOGICAL ::   ll_exist
@@ -124,8 +123,6 @@ CONTAINS
 
       ll_closedef = .TRUE.
       IF( PRESENT(ld_closedef) ) ll_closedef = ld_closedef
-      !
-      ALLOCATE( zt_bnds(2,jpk), zw_bnds(2,jpk) )
       !
       clname = TRIM(cdname)
       IF( .NOT. Agrif_Root() ) THEN
@@ -238,8 +235,6 @@ CONTAINS
       !
       ! conditional closure of context definition
       IF( ll_closedef ) CALL iom_init_closedef
-      !
-      DEALLOCATE( zt_bnds, zw_bnds )
       !
 #endif
       !

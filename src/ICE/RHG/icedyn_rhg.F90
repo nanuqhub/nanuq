@@ -163,13 +163,11 @@ CONTAINS
             WRITE(numout,*) '         viscosity of undamaged ice  [Pa.s]                rn_eta0       = ', rn_eta0
             IF(ln_rhg_BBM) WRITE(numout,*) '         compression factor "P" at play in "P_max"         rn_P0         = ', rn_P0, 'Pa'
             WRITE(numout,*) '         healing constant for damage                       rn_kth        = ', rn_kth
-            WRITE(numout,*) '         advection of damage and stresses @T & @F          nn_d_adv  = ', nn_d_adv
+            WRITE(numout,*) '         advection of damage @T & @F                       nn_d_adv  = ', nn_d_adv
             IF( nn_d_adv==0 ) WRITE(numout,*) '           => no advection at all!'
             IF( nn_d_adv==1 ) WRITE(numout,*) '           => advection of damage only'
-            IF( nn_d_adv >1 ) WRITE(numout,*) '           => advection of damage + stress tensors'
-            IF( nn_d_adv==3 ) WRITE(numout,*) '             ==> add "lower-convected" term in tensor advection'
-            IF( nn_d_adv==4 ) WRITE(numout,*) '             ==> add "upper-convected" term in tensor advection'
-            IF( nn_d_adv >4 ) CALL ctl_stop( 'ice_dyn_rhg_init: valid choices for `nn_d_adv` span 0 to 4' )
+            ! Only 0 (no advection) or 1 (damage only) are possible: the advection of the stress tensors (former 2,3,4) has been removed
+            IF( nn_d_adv >1 ) CALL ctl_stop( 'ice_dyn_rhg_init: valid choices for `nn_d_adv` are 0 or 1 (advection of stress tensors removed)' )
             IF( nn_d_adv >0 ) THEN
                IF( ln_adv_d_pra ) WRITE(numout,*) '         => will use Prather advection scheme'
                IF( ln_adv_d_wnx ) WRITE(numout,*) '         => will use WENO advection scheme'

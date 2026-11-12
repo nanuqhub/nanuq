@@ -71,8 +71,8 @@ MODULE sbc_oce
    INTEGER , PUBLIC ::  ncpl_qsr_freq = 0        !: qsr coupling frequency per days from atmosphere (used by top)
    !
    !!                                   !!   now    ! before   !!
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   utau   , utau_b   !: sea surface i-stress (ocean referential) @ T [N/m2]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   vtau   , vtau_b   !: sea surface j-stress (ocean referential) @ T [N/m2]
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   utau              !: sea surface i-stress (ocean referential) @ T [N/m2]
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   vtau              !: sea surface j-stress (ocean referential) @ T [N/m2]
    !! IMPORTANT: about `utau` & `vtau`:
    !!            regardless of the value of `sn_loc_vct_tau`, `utau` and `vtau` computed for ice-free ocean (IOMed as
    !!            `utau_oce` & `vtau_oce`) ARE ALWAYS DEFINED AT T POINTS WHEN EXITING `SBC()`!!!
@@ -92,7 +92,7 @@ MODULE sbc_oce
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qsr    , qsr_b    !: sea heat flux:     solar                     [W/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qns    , qns_b    !: sea heat flux: non solar                     [W/m2]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   emp    , emp_b    !: freshwater budget: volume flux (>0 => LOSS for liquid ocean)      [Kg/m2/s]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   sfx    , sfx_b    !: salt flux                                                         [PSS.kg/m2/s]
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   sfx               !: salt flux                                                         [PSS.kg/m2/s]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   fmmflx            !: freshwater budget: freezing/melting (>0 => LOSS for liquid ocean) [Kg/m2/s]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   t_air_zu          !: air potential temperature (adjusted) at wind height (10m) [K]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   q_air_zu          !: air specific humidity (adjusted)     at wind height (10m) [kg/kg]
@@ -133,13 +133,13 @@ CONTAINS
       !!---------------------------------------------------------------------
       ierr(:) = 0
       !
-      ALLOCATE( utau(jpi,jpj) , utau_b(jpi,jpj) , taum(jpi,jpj) ,     &
-         &      vtau(jpi,jpj) , vtau_b(jpi,jpj) , wndm(jpi,jpj) ,     &
+      ALLOCATE( utau(jpi,jpj) , taum(jpi,jpj) ,     &
+         &      vtau(jpi,jpj) , wndm(jpi,jpj) ,     &
          &      rhoa(jpi,jpj) , t_air_zu(jpi,jpj), q_air_zu(jpi,jpj),  STAT=ierr(1) )
       !
       ALLOCATE( qns(jpi,jpj) , qns_b(jpi,jpj) , qsr(jpi,jpj) , qsr_b(jpi,jpj),  &
          &      emp    (jpi,jpj) , emp_b(jpi,jpj) ,                        &
-         &      sfx    (jpi,jpj) , sfx_b(jpi,jpj), fmmflx(jpi,jpj), STAT=ierr(2) )
+         &      sfx    (jpi,jpj) , fmmflx(jpi,jpj), STAT=ierr(2) )
 
       ALLOCATE( qns_oce(jpi,jpj), qsr_oce(jpi,jpj), qemp_oce(jpi,jpj), emp_oce(jpi,jpj), STAT=ierr(3))
 
@@ -147,23 +147,23 @@ CONTAINS
       CALL mpp_sum ( 'sbc_oce', sbc_oce_alloc )
       IF( sbc_oce_alloc > 0 )   CALL ctl_warn('sbc_oce_alloc: allocation of arrays failed')
 
-      utau(:,:)=0._wp ; utau_b(:,:)=0._wp ; taum(:,:)=0._wp
-      vtau(:,:)=0._wp ; vtau_b(:,:)=0._wp ; wndm(:,:)=0._wp
+      utau(:,:)=0._wp ; taum(:,:)=0._wp
+      vtau(:,:)=0._wp ; wndm(:,:)=0._wp
       rhoa(:,:)=0._wp ; t_air_zu(:,:)=0._wp ; q_air_zu(:,:)=0._wp
       !
       qns(:,:)=0._wp ; qns_b(:,:)=0._wp
       qsr(:,:)=0._wp ; qsr_b(:,:)=0._wp
       emp(:,:)=0._wp ; emp_b(:,:)=0._wp
-      sfx(:,:)=0._wp ; sfx_b(:,:)=0._wp ; fmmflx(:,:)=0._wp
+      sfx(:,:)=0._wp ; fmmflx(:,:)=0._wp
       !
       qns_oce(:,:)=0._wp ; qsr_oce(:,:)=0._wp ; qemp_oce(:,:)=0._wp ; emp_oce(:,:)=0._wp
       !
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: sbc_oce_alloc() => adding SBC-related arrays to memory!'
-      PRINT *, '            => qns, qsr, emp, sfx, fmmflx, qns_b, qsr_b, emp_b, sfx_b'
-      !$acc enter data copyin( qns, qsr, emp, sfx, fmmflx, qns_b, qsr_b, emp_b, sfx_b )
-      PRINT *, '            => qsr, wndm, taum, rhoa, utau, vtau, utau_b, vtau_b, t_air_zu, q_air_zu'
-      !$acc enter data copyin( qsr, wndm, taum, rhoa, utau, vtau, utau_b, vtau_b, t_air_zu, q_air_zu )
+      PRINT *, '            => qns, qsr, emp, sfx, fmmflx, qns_b, qsr_b, emp_b'
+      !$acc enter data copyin( qns, qsr, emp, sfx, fmmflx, qns_b, qsr_b, emp_b )
+      PRINT *, '            => qsr, wndm, taum, rhoa, utau, vtau, t_air_zu, q_air_zu'
+      !$acc enter data copyin( qsr, wndm, taum, rhoa, utau, vtau, t_air_zu, q_air_zu )
       PRINT *, '            => qns_oce, qsr_oce, qemp_oce, emp_oce'
       !$acc enter data copyin( qns_oce, qsr_oce, qemp_oce, emp_oce )
 #endif

@@ -382,8 +382,9 @@ CONTAINS
       !!-------------------------------------------------------------------
       !! Called into `ice_dyn_rhg_init()@icedyn_rhg.F90`
       !!-------------------------------------------------------------------
-      INTEGER  ::   ierr, nb_wet_cold, kold
+      INTEGER  ::   ierr
       REAL(wp) ::   zdx_m, zce, zdts
+      REAL(wp) ::   zsdx, znpt   ! global sum of Δx and global number of points used for the mean Δx
       REAL(wp) ::   zk11, zk22, zk12
       REAL(wp), DIMENSION(jpi,jpj) :: zt1
       !!-------------------------------------------------------------------
@@ -417,16 +418,38 @@ CONTAINS
       !!  * using the smallest Δx is not the best option (in global or Arctic confs it will use the tiny Δx in
       !!    the Canadian archipelago, leading to an obscenely restrictive CFL !
       !!  * instead, we rather use the the mean Δx of the wet domain where the presence of sea-ice is not silly: (ABS(latitude)> 55.)
+      !!
+      !! Mean Δx over the wet "cold-climate" points (|lat| >= 55) of the WHOLE domain: global sum of Δx divided by the global
+      !! number of such points (and not a mean of the per-MPI-domain means, which depends on the domain decomposition and
+      !! would give a different `nbrttl` for different `jpni x jpnj`, or CPU vs GPU).
       zt1(:,:) = xmskt(:,:)
       WHERE( ABS(gphit(:,:)) < 55._wp ) zt1(:,:) = 0._wp
-      nb_wet_cold = INT( SUM( zt1(Nis0:Nie0,Njs0:Nje0) ) ) ! number of wet & "cold" points over local MPI domain
-      zdx_m = MERGE( SUM( res_grd_loc_t(Nis0:Nie0,Njs0:Nje0) * zt1(Nis0:Nie0,Njs0:Nje0) ) / REAL(nb_wet_cold,wp)  ,  0._wp  ,  nb_wet_cold > 0 ) ! Mean Δx over local MPI domain
-      kold = MAX( MIN(nb_wet_cold,1) , 0 ) ! `1` if cold MPI domain `0` otherwize
-      CALL mpp_sum( crtnm//'_init', kold ) ! sum of cold domains
-      CALL mpp_sum( crtnm//'_init', zdx_m )
-      IF(lwp) WRITE(numout,'("   * ",i4.4," out of ",i4.4," MPI domains qualify as `cold climate` domains!")') kold, jpnij
-      !zdx_m = zdx_m / REAL( jpnij , wp ) !  Mean Δx over wet computational domain
-      zdx_m = zdx_m / REAL( kold , wp ) !  Mean Δx over wet "cold" computational domain
+      !
+      ! Global sum of Δx over these points: we use `glob_2Dsum` (compensated DDPDD sum, only on the interior points
+      ! `Nis0:Nie0,Njs0:Nje0`, masked with `xmskt`) rather than a local `SUM` + `mpp_sum`, because a plain floating-point
+      ! sum depends on the order of the additions, hence on the MPI domain decomposition. `zsdx` would then differ in its
+      ! last bits for different `jpni x jpnj`, and so could `nbrttl = CEILING(rDt_ice/zdts)` below (loss of bitwise MPI
+      ! reproducibility of the whole rheology). With `glob_2Dsum` the result is the same for any decomposition.
+      zsdx = glob_2Dsum( crtnm//'_init', res_grd_loc_t(:,:) * zt1(:,:) )
+      !
+      ! Global number of these points: sum of 0/1 values, which is exact whatever the order, so `SUM` + `mpp_sum` is fine here:
+      znpt = SUM( zt1(Nis0:Nie0,Njs0:Nje0) )
+      CALL mpp_sum( crtnm//'_init', znpt )
+      IF(lwp) WRITE(numout,*) '   * number of wet "cold-climate" points (|lat|>=55) over the whole domain: ', NINT(znpt)
+      !
+      ! No "cold" point at all (e.g. idealized low-latitude configuration): use all the wet points instead (avoids 0/0)
+      IF( znpt < 0.5_wp ) THEN
+         ! Same as above, over all the wet points: reproducible global sum of Δx (`glob_2Dsum` already masks with `xmskt`),
+         ! and exact `SUM` + `mpp_sum` for the number of points (sum of 0/1 values):
+         zsdx = glob_2Dsum( crtnm//'_init', res_grd_loc_t(:,:) * xmskt(:,:) )
+         znpt = SUM( xmskt(Nis0:Nie0,Njs0:Nje0) )
+         CALL mpp_sum( crtnm//'_init', znpt )
+         CALL ctl_warn( crtnm//'_init: no wet point with |lat|>=55 => mean dx computed over all wet points' )
+      ENDIF
+      ! Not a single wet point in the domain: nothing sensible can be done
+      IF( znpt < 0.5_wp )  CALL ctl_stop( crtnm//'_init: no wet point in the domain!' )
+      !
+      zdx_m = zsdx / MAX( znpt, 1._wp ) !  Mean Δx over the wet "cold" (or all wet) points of the whole domain
       !
       ! Find the smallest Δx of the whole WET domain:
       !zt1(:,:) = REAL( res_grd_loc_t(:,:) , 4 ) ! SQRT(Δx*Δy)

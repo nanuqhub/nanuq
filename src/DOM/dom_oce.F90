@@ -101,12 +101,11 @@ MODULE dom_oce
    REAL(dp), PUBLIC, ALLOCATABLE, SAVE, TARGET, DIMENSION(:,:)  :: e1u!: horizontal scale factors at u-point [m]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, TARGET, DIMENSION(:,:)  :: e1v, r1_e1v, r1_e2v!: horizontal scale factors at v-point [m]
    REAL(dp), PUBLIC, ALLOCATABLE, SAVE, TARGET, DIMENSION(:,:)  :: e2v!: horizontal scale factors at v-point [m]
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, TARGET, DIMENSION(:,:)  :: r1_e1f, r1_e2f!: horizontal scale factors at f-point [m]
    REAL(dp), PUBLIC, ALLOCATABLE, SAVE, TARGET, DIMENSION(:,:)  :: e1f, e2f!: horizontal scale factors at f-point [m]
    !
    REAL(dp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1e2t , r1_e1e2t                !: associated metrics at t-point
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1e2u , r1_e1e2u , e2_e1u       !: associated metrics at u-point
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1e2v , r1_e1e2v , e1_e2v       !: associated metrics at v-point
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1e2u , r1_e1e2u                !: associated metrics at u-point
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1e2v , r1_e1e2v                !: associated metrics at v-point
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1e2f , r1_e1e2f                !: associated metrics at f-point
    !
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE        , DIMENSION(:,:) ::   e1t2, e2t2
@@ -215,10 +214,10 @@ CONTAINS
          &       e1t (jpi,jpj) ,     e2t (jpi,jpj) , r1_e1t(jpi,jpj) , r1_e2t(jpi,jpj) ,     &
          &       e1u (jpi,jpj) ,     e2u (jpi,jpj) , r1_e1u(jpi,jpj) , r1_e2u(jpi,jpj) ,     &
          &       e1v (jpi,jpj) ,     e2v (jpi,jpj) , r1_e1v(jpi,jpj) , r1_e2v(jpi,jpj) ,     &
-         &       e1f (jpi,jpj) ,     e2f (jpi,jpj) , r1_e1f(jpi,jpj) , r1_e2f(jpi,jpj) ,     &
+         &       e1f (jpi,jpj) ,     e2f (jpi,jpj) ,                                         &
          &      e1e2t(jpi,jpj) , r1_e1e2t(jpi,jpj)                                     ,     &
-         &      e1e2u(jpi,jpj) , r1_e1e2u(jpi,jpj) , e2_e1u(jpi,jpj)                   ,     &
-         &      e1e2v(jpi,jpj) , r1_e1e2v(jpi,jpj) , e1_e2v(jpi,jpj)                   ,     &
+         &      e1e2u(jpi,jpj) , r1_e1e2u(jpi,jpj)                                     ,     &
+         &      e1e2v(jpi,jpj) , r1_e1e2v(jpi,jpj)                                     ,     &
          &      e1e2f(jpi,jpj) , r1_e1e2f(jpi,jpj) , ff_u(jpi,jpj),    ff_v(jpi,jpj)   ,     &
          &      res_grd_loc_t(jpi,jpj) ,  res_grd_loc_f(jpi,jpj),    STAT=ierr(ii) )
       !

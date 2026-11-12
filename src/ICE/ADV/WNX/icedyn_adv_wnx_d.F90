@@ -7,7 +7,7 @@ MODULE icedyn_adv_wnx_d
    !!--------------------------------------------------------------------
    !!----------------------------------------------------------------------
    !!----------------------------------------------------------------------
-   USE par_ice, ONLY: rDt_ice
+   USE par_ice, ONLY: rDt_ice, epsi10
    USE iom            ! I/O manager library
    !
    USE icedyn_adv_wnx_adv, ONLY : wenoX_rk3
@@ -23,6 +23,10 @@ MODULE icedyn_adv_wnx_d
    PRIVATE
 
    PUBLIC   ice_dyn_adv_wnx_d   ! called by icedyn_adv
+
+   ! Work array: a field equal to 1 advected with the same operator as `1-damage`. After advection it holds the relative area
+   ! of each box after transport (`V/A`), used to turn the flux-form result back into an intensive field (allocated at 1st call)
+   REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:) :: x1_adv
 
    !!----------------------------------------------------------------------
    !! NANUQ 1.0.1, Brodeau (2026)
@@ -80,10 +84,39 @@ CONTAINS
 #endif
 
 
+      ! Allocate the work array `x1_adv` at the first call (kept for all the next calls, for both T- and F-points)
+      IF( .NOT. ALLOCATED(x1_adv) ) THEN
+         ALLOCATE( x1_adv(jpi,jpj) )
+         !$acc enter data create( x1_adv )
+      ENDIF
+
+      ! Field equal to 1 everywhere (halos included, as `wenoX_rk3` expects a fully `lbc_lnk`ed field):
+      !$acc parallel loop collapse(2) present( x1_adv )
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            x1_adv(ji,jj) = 1._wp
+         END DO
+      END DO
+      !$acc end parallel loop
+
       !! ADVECT !
 
+      ! `1-damage` is an intensive field (a property carried by the ice), but `wenoX_rk3` is a flux-form operator (`div(f*u)`),
+      ! which adds a spurious `-f*div(u)` term (damage created where the ice diverges). As in the Prather scheme (`S0/V`), we
+      ! advect both `1-damage` and the field equal to 1 with the same operator, and divide the first by the second: the result
+      ! is the advected `1-damage` without the divergence effect (a uniform `1-damage` remains uniform in a divergent flow).
+      CALL wenoX_rk3( kt, cgt, zdt, pe1e2, p1_e1e2, pUx, pVx, pmlbc, x1_adv )
       CALL wenoX_rk3( kt, cgt, zdt, pe1e2, p1_e1e2, pUx, pVx, pmlbc, p1md )
-      
+
+      ! Back to an intensive field (whole domain, halos included; over land `x1_adv` remains 1 since there is no flux):
+      !$acc parallel loop collapse(2) present( x1_adv, p1md )
+      DO jj=Njs0-nn_hls, Nje0+nn_hls
+         DO ji=Nis0-nn_hls, Nie0+nn_hls
+            p1md(ji,jj) = p1md(ji,jj) / MAX( x1_adv(ji,jj), epsi10 )
+         END DO
+      END DO
+      !$acc end parallel loop
+
       !$acc end data
       IF( ln_timing )   CALL timing_stop(crtnm)
       !

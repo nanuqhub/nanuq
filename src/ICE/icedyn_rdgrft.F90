@@ -232,7 +232,9 @@ CONTAINS
 
 
       k_np_ice = 0
-      !$acc parallel loop collapse(2)
+      ! Count the ice points: the counter must be a reduction, otherwise each GPU thread increments its own private copy
+      ! (OpenACC default for scalars is `firstprivate`) and the host value stays 0, which would skip ridging entirely
+      !$acc parallel loop collapse(2) reduction(+:k_np_ice)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
             IF( at_i(ji,jj) > epsi10 ) THEN
@@ -275,7 +277,8 @@ CONTAINS
             &              pclosing_net=closing_net )                                                           ! <<== in
 
          k_np_rdg = 0
-         !$acc parallel loop collapse(2)
+         ! Count the ridging points: must be a reduction on GPU (see `k_np_ice` above), otherwise ridging is never done
+         !$acc parallel loop collapse(2) reduction(+:k_np_rdg)
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
                IF(ll_ice_present(ji,jj))  THEN
@@ -324,7 +327,9 @@ CONTAINS
             ! If not, because the closing and opening rates were reduced above, ridge again with new rates
 
             iterate_ridging = 0
-            !$acc parallel loop collapse(2)
+            ! Count the points that still need ridging: must be a reduction on GPU (see `k_np_ice` above),
+            ! otherwise the host value stays 0 and the iterations stop after the 1st pass
+            !$acc parallel loop collapse(2) reduction(+:iterate_ridging)
             DO jj=Njs0, Nje0
                DO ji=Nis0, Nie0
                   IF(ll_ridge(ji,jj) ) THEN
@@ -757,11 +762,13 @@ CONTAINS
                      ! volume etc of ridging / rafting ice and new ridges (vi, vs, sm, oi, es, ei)
                      zvirdg = v_i(ji,jj,jl1)    * afrdg + vsw
                      zvsrdg = v_s(ji,jj,jl1)    * afrdg
-                     zoirdg = oa_i(ji,jj,jl1)    * afrdg * phi_hrdg(ji,jj,jl1)
+                     ! Age content of ridging / rafting ice (only if the "age of the ice" tracer is used, `ln_age=T`):
+                     zoirdg = 0._wp ; zoirft = 0._wp
+                     IF( ln_age )  zoirdg = oa_i(ji,jj,jl1)    * afrdg * phi_hrdg(ji,jj,jl1)
 
                      zvirft = v_i(ji,jj,jl1)    * afrft
                      zvsrft = v_s(ji,jj,jl1)    * afrft
-                     zoirft = oa_i(ji,jj,jl1)    * afrft * hi_hrft
+                     IF( ln_age )  zoirft = oa_i(ji,jj,jl1)    * afrft * hi_hrft
 
                      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
                      !   zaprdg = a_ip(ji,jj,jl1)    * afrdg * phi_hrdg(ji,jj,jl1)
@@ -819,7 +826,7 @@ CONTAINS
                      a_i (ji,jj,jl1) = a_i (ji,jj,jl1) - airdg1(ji,jj) - airft1(ji,jj)
                      v_i (ji,jj,jl1) = v_i (ji,jj,jl1)     * ( 1._wp - afrdg - afrft )
                      v_s (ji,jj,jl1) = v_s (ji,jj,jl1)     * ( 1._wp - afrdg - afrft )
-                     oa_i(ji,jj,jl1) = oa_i(ji,jj,jl1)     * ( 1._wp - afrdg - afrft )
+                     IF( ln_age )  oa_i(ji,jj,jl1) = oa_i(ji,jj,jl1)     * ( 1._wp - afrdg - afrft )   ! only if `ln_age=T`
                      !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
                      !   a_ip(ji,jj,jl1)  = a_ip(ji,jj,jl1) * ( 1._wp - afrdg - afrft )
                      !   v_ip(ji,jj,jl1)  = v_ip(ji,jj,jl1) * ( 1._wp - afrdg - afrft )
@@ -918,7 +925,7 @@ CONTAINS
                         ! Add area, volume of new ridge to category jl2
                         !----------------------------------------------
                         a_i (ji,jj,jl2) = a_i (ji,jj,jl2) + ( airdg2(ji,jj)              * farea + airft2(ji,jj)              * zswitch )
-                        oa_i(ji,jj,jl2) = oa_i(ji,jj,jl2) + ( zoirdg              * farea + zoirft              * zswitch )
+                        IF( ln_age )  oa_i(ji,jj,jl2) = oa_i(ji,jj,jl2) + ( zoirdg * farea + zoirft * zswitch )   ! only if `ln_age=T`
                         v_i (ji,jj,jl2) = v_i (ji,jj,jl2) + ( zvirdg              * fvol  + zvirft              * zswitch )
                         v_s (ji,jj,jl2) = v_s (ji,jj,jl2) + ( zvsrdg * rn_fsnwrdg * fvol  + zvsrft * rn_fsnwrft * zswitch )
                         !IF( ln_pnd_LEV .OR. ln_pnd_TOPO ) THEN
@@ -1011,7 +1018,9 @@ CONTAINS
 
       kice_p = 0
       ! `at_i` needed for strength
-      !$acc parallel loop collapse(2)
+      ! Count the ice points: must be a reduction on GPU (see `ice_dyn_rdgrft`), otherwise the host value stays 0
+      ! and the R75 strength is never computed (strength = 0, i.e. free drift with EVP)
+      !$acc parallel loop collapse(2) reduction(+:kice_p)
       DO jj=Njs0-nn_hls, Nje0+nn_hls
          DO ji=Nis0-nn_hls, Nie0+nn_hls
             !
@@ -1076,8 +1085,12 @@ CONTAINS
                   IF(ll_ice_present(ji,jj)) THEN
                      !$acc loop seq
                      DO jl = 1, jpl
-                        zv = v_i(ji,jj,jl) / a_i(ji,jj,jl)
-                        IF( zv < rn_himin )  za_i_cap(ji,jj,jl) = a_i(ji,jj,jl) * zv / rn_himin
+                        ! Cap the concentration of thin ice (h < rn_himin) so that the thickness used in `rdgrft_prep` is >= rn_himin.
+                        ! Only for non-empty categories: an empty category (a_i=0) would give 0/0 here (as in SI3, guarded by epsi10)
+                        IF( a_i(ji,jj,jl) > epsi10 ) THEN
+                           zv = v_i(ji,jj,jl) / a_i(ji,jj,jl)
+                           IF( zv < rn_himin )  za_i_cap(ji,jj,jl) = a_i(ji,jj,jl) * zv / rn_himin
+                        ENDIF
                      END DO
                   ENDIF
                END DO

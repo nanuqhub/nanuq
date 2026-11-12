@@ -33,9 +33,12 @@
                   v_s(ji,jj,jc1) = v_s(ji,jj,jc1) - ztrans
                   v_s(ji,jj,jc2) = v_s(ji,jj,jc2) + ztrans
                   !
-                  ztrans          = oa_i(ji,jj,jc1) * zworka            ! Ice age
-                  oa_i(ji,jj,jc1) = oa_i(ji,jj,jc1) - ztrans
-                  oa_i(ji,jj,jc2) = oa_i(ji,jj,jc2) + ztrans
+                  ! Ice age content: only if the "age of the ice" tracer is used (`ln_age=T`)
+                  IF( ln_age ) THEN
+                     ztrans          = oa_i(ji,jj,jc1) * zworka            ! Ice age
+                     oa_i(ji,jj,jc1) = oa_i(ji,jj,jc1) - ztrans
+                     oa_i(ji,jj,jc2) = oa_i(ji,jj,jc2) + ztrans
+                  ENDIF
                   !
                   ztrans             = zaTsfn(jc1) * zworka             ! Surface temperature
                   zaTsfn(jc1)  = zaTsfn(jc1) - ztrans

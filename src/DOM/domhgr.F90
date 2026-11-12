@@ -106,7 +106,6 @@ CONTAINS
       r1_e1t(:,:) = 1._wp / e1t(:,:)   ;   r1_e2t (:,:) = 1._wp / e2t(:,:)
       r1_e1u(:,:) = 1._wp / e1u(:,:)   ;   r1_e2u (:,:) = 1._wp / e2u(:,:)
       r1_e1v(:,:) = 1._wp / e1v(:,:)   ;   r1_e2v (:,:) = 1._wp / e2v(:,:)
-      r1_e1f(:,:) = 1._wp / e1f(:,:)   ;   r1_e2f (:,:) = 1._wp / e2f(:,:)
       !
       e1e2t (:,:) = e1t(:,:) * e2t(:,:)   ;   r1_e1e2t(:,:) = 1._wp / e1e2t(:,:)
       e1e2f (:,:) = e1f(:,:) * e2f(:,:)   ;   r1_e1e2f(:,:) = 1._wp / e1e2f(:,:)
@@ -120,9 +119,6 @@ CONTAINS
       ENDIF
       r1_e1e2u(:,:) = 1._wp / e1e2u(:,:)     ! compute their invert in any cases
       r1_e1e2v(:,:) = 1._wp / e1e2v(:,:)
-      !
-      e2_e1u(:,:) = e2u(:,:) / e1u(:,:)
-      e1_e2v(:,:) = e1v(:,:) / e2v(:,:)
       !
       e1t2(:,:) = e1t(:,:) * e1t(:,:)
       e2t2(:,:) = e2t(:,:) * e2t(:,:)

@@ -50,9 +50,7 @@ CONTAINS
       !! ** Case 4 details :
       !!
       !!    For both gravity drainage and flushing, brines are calculated depending on ice temperature (liquidus formulation):
-      !!       Sbr = - T / mu                                [linear liquidus]   ( nn_liquidus == 1 )
-      !!       Sbr = -18.7 * T - 0.519 * T2 - 0.00535 * T3   [VC2019]            ( nn_liquidus == 2 )
-      !!       Sbr = -17.6 * T - 0.389 * T2 - 0.00362 * T3   [Weast]             ( nn_liquidus == 3 )
+      !!       Sbr = -18.7 * T - 0.519 * T2 - 0.00535 * T3   [VC2019]   (only formulation available)
       !!
       !! ****************
       !! Gravity Drainage
@@ -238,7 +236,10 @@ CONTAINS
                   !
                   zcfl_max = 0._wp
                   zs_min   = 0._wp
-                  IF( h_i(ji,jj,jl_cat) >= rn_sal_himin .AND. zhmelt >= 0._wp .AND. zs_brmax > sss_s(ji,jj) ) THEN
+                  ! Gravity drainage only if: ice thick enough, no surface melt, brine saltier than the ocean,
+                  ! and surface colder than the seawater freezing point (as in SI3: no convection in warm, near-isothermal ice)
+                  IF( h_i(ji,jj,jl_cat) >= rn_sal_himin .AND. zhmelt >= 0._wp .AND. zs_brmax > sss_s(ji,jj) &
+                     & .AND. t_su(ji,jj,jl_cat) <= t_bo(ji,jj) ) THEN
                      !                               ! during melting season, salt flux can turn upward
                      !
                      !$acc loop seq
@@ -250,7 +251,10 @@ CONTAINS
                      ! ===========
                      !$acc loop seq
                      DO jk = 1, nlay_i
-                        zv_br(jk) = zmsk(jk) * sz_i(ji,jj,jk,jl_cat) / zs_br(jk)
+                        ! Brine volume fraction of layer jk = S_ice / S_brine (0 where the layer is at melting point, zmsk=0).
+                        ! As in SI3, the brine salinity is bounded below by epsi10 to never divide by 0
+                        ! (zs_br can be 0 or negative if t_i reaches 0 degC exactly, e.g. with a zero ice salinity).
+                        zv_br(jk) = zmsk(jk) * sz_i(ji,jj,jk,jl_cat) / MAX( zs_br(jk), epsi10 )
                      END DO
 
                      !IF(ji==kdi .AND. jj==kdj) PRINT *, '(1) zmsk =', REAL(zmsk(1),4), REAL(zmsk(2),4)
@@ -265,15 +269,30 @@ CONTAINS
                            zperm_eff(jk) = 3.e-8_wp * ztmp * ztmp * ztmp
                         END DO
                      ELSEIF( np_perm_eff == 2 ) THEN ! Harmonic Mean
+                        ! Effective permeability of layer jk = harmonic mean of the layer permeabilities
+                        ! from layer jk down to the ice base (perm = 3.e-8 * v_br^3).
+                        ! As in SI3: if one layer between jk and the base is impermeable (brine volume
+                        ! fraction < epsi06), the whole column below jk blocks the brine flow, so
+                        ! zperm_eff(jk) = 0. We use the flag `lDo` instead of EXIT (GPU-friendly).
+                        ! This replaces the old floor `MAX(zperm, epsi10)`, which was larger than the
+                        ! real permeability for v_br < ~0.15 and made drainage much too strong.
                         !$acc loop seq
                         DO jk = 1, nlay_i
                            ztmp = 0._wp
+                           lDo  = .TRUE.
                            !$acc loop seq
                            DO jk2 = jk, nlay_i
-                              zperm = 3.e-8_wp * zv_br(jk2)*zv_br(jk2)*zv_br(jk2)
-                              ztmp = ztmp + 1._wp / MAX( zperm, epsi10 ) !LOLOfix
+                              IF( lDo ) THEN
+                                 IF( zv_br(jk2) < epsi06 ) THEN
+                                    lDo = .FALSE.     ! impermeable layer found => column is impermeable
+                                 ELSE
+                                    zperm = 3.e-8_wp * zv_br(jk2)*zv_br(jk2)*zv_br(jk2)
+                                    ztmp  = ztmp + 1._wp / zperm
+                                 ENDIF
+                              ENDIF
                            END DO
-                           zperm_eff(jk) = REAL( nlay_i-jk+1, wp ) / ztmp
+                           ! MAX(ztmp,epsi20) only avoids a division by 0 when lDo=F (result unused then)
+                           zperm_eff(jk) = MERGE( REAL( nlay_i-jk+1, wp ) / MAX( ztmp, epsi20 ) , 0._wp , lDo )
                         END DO
                      END IF
                      !IF(ji==kdi .AND. jj==kdj) PRINT *, '(2) zperm_eff =', REAL(zperm_eff(1),4), REAL(zperm_eff(2),4)
@@ -379,15 +398,31 @@ CONTAINS
                                  zperm_eff(jk) = 3.e-8_wp * ztmp * ztmp * ztmp
                               END DO
                            ELSEIF( np_perm_eff == 2 ) THEN ! Harmonic Mean
+                              ! Effective permeability of layer jk = harmonic mean of the layer permeabilities
+                              ! from layer jk down to the ice base (perm = 3.e-8 * v_br^3), recomputed at each
+                              ! drainage sub-iteration because sz_i (hence v_br) has changed.
+                              ! As in SI3: if one layer between jk and the base is impermeable (brine volume
+                              ! fraction < epsi06), the whole column below jk blocks the brine flow, so
+                              ! zperm_eff(jk) = 0. We use the flag `lDo` instead of EXIT (GPU-friendly).
+                              ! This replaces the old floor `MAX(zperm, epsi10)`, which was larger than the
+                              ! real permeability for v_br < ~0.15 and made drainage much too strong.
                               !$acc loop seq
                               DO jk = 1, nlay_i
                                  ztmp = 0._wp
+                                 lDo  = .TRUE.
                                  !$acc loop seq
                                  DO jk2 = jk, nlay_i
-                                    zperm = 3.e-8_wp * zv_br(jk2)*zv_br(jk2)*zv_br(jk2)
-                                    ztmp = ztmp + 1._wp / MAX( zperm, epsi10 ) !LOLOfix
+                                    IF( lDo ) THEN
+                                       IF( zv_br(jk2) < epsi06 ) THEN
+                                          lDo = .FALSE.     ! impermeable layer found => column is impermeable
+                                       ELSE
+                                          zperm = 3.e-8_wp * zv_br(jk2)*zv_br(jk2)*zv_br(jk2)
+                                          ztmp  = ztmp + 1._wp / zperm
+                                       ENDIF
+                                    ENDIF
                                  END DO
-                                 zperm_eff(jk) = REAL( nlay_i-jk+1, wp ) / ztmp
+                                 ! MAX(ztmp,epsi20) only avoids a division by 0 when lDo=F (result unused then)
+                                 zperm_eff(jk) = MERGE( REAL( nlay_i-jk+1, wp ) / MAX( ztmp, epsi20 ) , 0._wp , lDo )
                               END DO
                            END IF
 
@@ -657,7 +692,7 @@ CONTAINS
       INTEGER  ::   ios   ! Local integer
       !!
       NAMELIST/namthd_sal/ ln_flushing, ln_drainage, rn_sinew, rn_simin, &
-         &                 rn_sal_himin, nn_liquidus, nn_drainage, nn_flushing, rn_flushrate, rn_vbrc, &
+         &                 rn_sal_himin, nn_drainage, nn_flushing, rn_flushrate, rn_vbrc, &
          &                 nn_sal_scheme, rn_alpha_RJW, rn_Rc_RJW, rn_alpha_GN, rn_Rc_GN, rn_alpha_CW, ln_sal_chk
       !!-------------------------------------------------------------------
       !
@@ -676,7 +711,6 @@ CONTAINS
          WRITE(numout,*) '      Minimum tolerated ice salinity                          rn_simin      = ', rn_simin
          ! -- nnXicesal=4 -- !
          WRITE(numout,*) '      min ice thickness for drainage and flushing             rn_sal_himin  = ', rn_sal_himin
-         WRITE(numout,*) '      liquidous formulation (1=linear, 2=VC2019, 3=Weast71)   nn_liquidus   = ', nn_liquidus
          WRITE(numout,*) '      number of subcycles for gravity drainage                nn_drainage   = ', nn_drainage
          WRITE(numout,*) '      number of subcycles for flushing                        nn_flushing   = ', nn_flushing
          WRITE(numout,*) '      fraction of melt water used for flushing                rn_flushrate  = ', rn_flushrate
@@ -690,7 +724,12 @@ CONTAINS
          WRITE(numout,*) '      sanity checks (output diags)                            ln_sal_chk    = ', ln_sal_chk
       ENDIF
       !
-      !$acc update device( rn_sinew,rn_simin,ln_sal_chk,nn_liquidus,nn_sal_scheme,ln_flushing )
+      ! The salt drainage/flushing sanity checks (ln_sal_chk) are disabled in NANUQ for now:
+      ! the diagnostic arrays are never allocated nor filled (calls commented in icethd.F90 and here),
+      ! so running with ln_sal_chk=T would crash in ice_thd_salchk. Stop cleanly instead.
+      IF( ln_sal_chk )   CALL ctl_stop( 'ice_thd_sal_init: ln_sal_chk=T is not supported in NANUQ (yet), set it to .false.' )
+      !
+      !$acc update device( rn_sinew,rn_simin,ln_sal_chk,nn_sal_scheme,ln_flushing )
       !$acc update device( ln_drainage,nn_drainage,nn_flushing,rn_flushrate,rn_alpha_CW,rn_alpha_RJW,rn_alpha_GN,rn_Rc_RJW,rn_Rc_GN,rn_sal_himin,rn_vbrc )
       !
    END SUBROUTINE ice_thd_sal_init

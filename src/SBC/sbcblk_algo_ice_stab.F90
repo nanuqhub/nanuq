@@ -39,6 +39,10 @@ MODULE sbcblk_algo_ice_stab
 
    INTEGER , PARAMETER ::   nb_iter = 8   ! number of itterations, pretty big because usually stable over sea-ice
    !                                      !   => and "stable" means that more itterations may be required
+   !
+   ! For capping extreme values on all coefficients:
+   REAL(wp), PARAMETER :: rCx_min = 0.5E-3_wp
+   REAL(wp), PARAMETER :: rCx_max = 2.5E-3_wp
    !!----------------------------------------------------------------------
 
    !!----------------------------------------------------------------------
@@ -211,9 +215,9 @@ CONTAINS
 
             END DO !DO jit = 1, nb_iter
 
-            pCd_i(ji,jj) = zCD
-            pCh_i(ji,jj) = zCH
-            pCe_i(ji,jj) = zCE
+            pCd_i(ji,jj) = MIN( MAX( zCD, rCx_min ), rCx_max )
+            pCh_i(ji,jj) = MIN( MAX( zCH, rCx_min ), rCx_max )
+            pCe_i(ji,jj) = MIN( MAX( zCE, rCx_min ), rCx_max )
 
             pt_zu_i(ji,jj) = zt_zu
             pq_zu_i(ji,jj) = zq_zu

@@ -205,7 +205,10 @@ CONTAINS
             ztmp2(:,:) = zz0_s(:,:) + zz0_f(:,:)      ! total roughness length z0
             ztmp1 = LOG(zt/zu) + f_h_louis( zu, RiB(:,:), ztmp1(:,:), ztmp2(:,:) ) &
                &               - f_h_louis( zt, RiB(:,:), ztmp1(:,:), ztmp2(:,:) )
-            ztmp2(:,:) = MAX( Ubzu(:,:) + (SQRT(Cd_i(:,:))*Ubzu)*ztmp1 , wspd_thrshld_ice ) ! wind at zt ( SQRT(Cd_i(:,:))*Ubzu == u* !)
+            ! Wind at zt from the log profile: U(zt) = U(zu) + u*/vkarmn * ztmp1   (u* = SQRT(Cd)*U(zu))
+            ! (the division by vkarmn was missing, which gave a too strong wind at zt and a too weak RiB;
+            !  same fix as in AeroBulk, commit 6f2bc8d)
+            ztmp2(:,:) = MAX( Ubzu(:,:) + (SQRT(Cd_i(:,:))*Ubzu)/vkarmn*ztmp1 , wspd_thrshld_ice ) ! wind at zt ( SQRT(Cd_i(:,:))*Ubzu == u* !)
             ztmp2(:,:) = MIN( ztmp2(:,:) , Ubzu(:,:) )
             IF(l_dbg_print) PRINT *, 'LOLO: ADJUSTED WIND AT ZT =', ztmp2
          ELSE
