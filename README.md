@@ -100,7 +100,7 @@ New / renamed:
 
 As of now, this guide is written for someone familiar with the compilation of NEMO.
 
-The compilation of NANUQ has been extensively tested on Linux with the FORTRAN compilers of the following suites: LLVM (v22), ROCm (v7.2) and NVIDIA HPC SDK (check under `./arch` for templates).
+The compilation of NANUQ has been extensively tested on Linux with the FORTRAN compilers of the following suites: LLVM (v22), Intel OneApi, AMD ROCm (v7.2) and Nvidia HPC SDK (check under `./arch` for templates).
 GCC has not been tested but it is expected to work since it works for NEMO.
 Chose LLVM if you only plan to stick to the CPU.
 
