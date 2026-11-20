@@ -55,7 +55,7 @@ MODULE icectl
    REAL(wp)            ::   rdiag_adv_icemass, rdiag_adv_icesalt, rdiag_adv_iceheat
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------

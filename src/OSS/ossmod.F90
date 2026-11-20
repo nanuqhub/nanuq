@@ -34,7 +34,8 @@ MODULE ossmod
    USE lbclnk         ! lateral boundary conditions (or mpp links)
 #endif
    !
-   USE eosbn2, ONLY: eos10_fzp_2d, eos10_fzp_2d_gpu
+   ! Freezing point of sea water, the formula follows the EOS chosen in namelist `nameos` (as SI3):
+   USE eosbn2, ONLY: eos_fzp_2d, eos_fzp_2d_gpu
    !
    USE prtctl         ! Print control                    (prt_ctl routine)
    USE iom            ! IOM library
@@ -49,6 +50,7 @@ MODULE ossmod
    PUBLIC   oss_init        ! routine called by opa.F90
    PUBLIC   oss_blk_ssx     ! routine called by step.F90
    PUBLIC   oss_flx_write   ! deals with all the surface fluxes for the liquid ocean
+   PUBLIC   oss_slab_rst    ! read/write slab-ocean fields in the ice restart (READ is called by icestp.F90)
 
    INTEGER ::   noss   ! type of surface boundary condition (deduced from namsbc informations)
 
@@ -56,7 +58,7 @@ MODULE ossmod
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -204,30 +206,35 @@ CONTAINS
 
       !$acc update device ( rn_Cd_io, ln_drgice_imp, nn_foss, ln_cpl_oce, ln_cpl_oce_croco, ln_ice_embd )
 
-      IF( .NOT. ln_rstart ) THEN
-         IF(lwp) WRITE(numout,*)"  'oss_init()' => `ssst`, `sssq`, `sst_s` & `sss_s` initialized with `sst_m`, `sst_m` & `sss_m`!"
-         sst_s(:,:) = sst_m(:,:) ! slab bulk SST
-         sss_s(:,:) = sss_m(:,:) ! slab bulk SSS
-         !
-         ssst(:,:)  = sst_m(:,:) ! water skin temperature
-         !sssq(:,:)  = rdct_qsat_salt * q_sat( ssst(:,:)+rt0, sst_m(:,:)*0._wp+101000. )   ! (kg/kg)
-         sssq(:,:) = 0._wp
-         !$acc update device ( ssst, sssq, sst_s, sss_s )
-      ELSE
-         !
-         IF( ln_cpl_oce .OR. (ln_prs_oce .AND. (.NOT. ln_slab_sst) ) ) THEN
-            sst_s(:,:) = sst_m(:,:) ! slab bulk SST
-            sss_s(:,:) = sss_m(:,:) ! slab bulk SSS
-            ssst(:,:)  = sst_m(:,:) ! water skin temperature
-            sssq(:,:) = 0._wp
-            !$acc update device ( ssst, sssq, sst_s, sss_s )
-         ELSE
-            CALL ctl_stop( 'oss_init : FIXME!!! => add restart capability for `sst_s` & `sss_s` ! (-->ossmod.F90)' )
-         ENDIF
+
+      !! Initialization of `sst_s`, `sss_s`, `ssst` & `sssq` arrays
+      !! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+      !! Default, valid for most situations:
+      sst_s(:,:) = sst_m(:,:) ! slab bulk SST
+      sss_s(:,:) = sss_m(:,:) ! slab bulk SSS
+      !
+      ssst(:,:)  = sst_m(:,:) ! water skin temperature
+      !sssq(:,:)  = rdct_qsat_salt * q_sat( ssst(:,:)+rt0, sst_m(:,:)*0._wp+101000. )   ! (kg/kg)
+      sssq(:,:) = 0._wp
+
+      !! Now, only if in "prescribed ocean" mode with "slab ocean mode" and it's a restart:
+      !! The restart values of `sst_s`, `sss_s` & `t_bo` can NOT be read here, because at this point
+      !! the ice restart file is not open yet (`numrir`=0, it is opened in `ice_rst_read()`) and `t_bo`
+      !! is not allocated yet (done in `ice_alloc()`). Both happen later, in `ice_init()` of icestp.F90,
+      !! so `oss_slab_rst('READ')` is called from there, right after `ice_rst_read()`.
+      !! Here we keep the default initialization done above, which is overwritten later if the
+      !! fields are found in the restart file.
+      IF( ln_prs_oce .AND. ln_slab_sst .AND. ln_rstart ) THEN
+         IF(lwp) WRITE(numout,*)"  'oss_init()' => `sst_s`, `sss_s` & `t_bo` will be read from RESTART later in `ice_init()`!"
          !
          IF( ll_skin ) CALL ctl_stop( 'oss_init : FIXME!!! => add restart capability for `ssst` (skin) ! (-->ossmod.F90)' )
          !
+      ELSE
+         IF(lwp) WRITE(numout,*)"  'oss_init()' => `sst_s` & `sss_s` initialized with `sst_m` & `sss_m`!"
       ENDIF
+
+      !$acc update device ( ssst, sssq, sst_s, sss_s )
 
    END SUBROUTINE oss_init
 
@@ -276,7 +283,7 @@ CONTAINS
       IF( iom_use('e3t_m') ) CALL iom_put( 'e3t_m', e3t_m )
       IF( iom_use('frq_m') ) CALL iom_put( 'frq_m', frq_m )
       IF( iom_use('frz_m') ) THEN
-         CALL eos10_fzp_2d( sss_m(:,:), xtmp1(:,:) )
+         CALL eos_fzp_2d( sss_m(:,:), xtmp1(:,:) )
          CALL iom_put( 'frz_m', xtmp1 * xmskt )
          xtmp1(:,:) = 0._wp
       ENDIF
@@ -384,7 +391,7 @@ CONTAINS
       !! ** Action  :   - prevent prescribed SST to be colder than freezing point
       !!                - apply the SLAB ocean correction if required
       !!
-      !!                       => uses:       sst_m, sss_m, mld_m, qsr_b, qns_b, emp_b
+      !!                       => uses:       sst_m, sss_m, mld_m, qsr, qns, emp (fluxes of the previous time step)
       !!                       => may update: sst_m (freezing point consistency)
       !!                       => updates:    sst_s, sss_s, t_bo
       !!
@@ -402,9 +409,9 @@ CONTAINS
       INTEGER  ::   jj, ji          ! dummy loop argument
       !!---------------------------------------------------------------------
       IF( ln_timing )   CALL timing_start('oss_blk_ssx')
-      !$acc data present ( sst_m, sss_m, mld_m, qsr_b, qns_b, emp_b, sst_s, sss_s, t_bo )
+      !$acc data present ( sst_m, sss_m, mld_m, qsr, qns, emp, sst_s, sss_s, t_bo )
 
-      CALL eos10_fzp_2d_gpu( sss_m, t_bo )   ! -- freezing temperature based on salinity [C]
+      CALL eos_fzp_2d_gpu( sss_m, t_bo )   ! -- freezing temperature based on salinity [C], formula follows `neos` (as SI3)
 
       IF( ln_prs_oce ) THEN
          !! => we use a prescribed surface state of the ocean read into netCDF files,
@@ -420,10 +427,15 @@ CONTAINS
 
          !! Update `sst_s`,  `sss_s` & `t_bo` based on a simplistic slab-ocean model approach:
          IF( ln_slab_sst ) THEN
-            CALL oss_prs_slab( kt, rDt_ice, sst_m, sss_m, mld_m, qsr_b, qns_b, emp_b, sst_s, sss_s, t_bo )
+            !! The slab uses `qsr`, `qns` & `emp` and NOT `qsr_b`, `qns_b` & `emp_b`: at this point (before `sbc()`
+            !! in `stp()`), `qsr`, `qns` & `emp` still hold the most recent fluxes, those of the previous time step
+            !! (final values, after `ice_update_flx()`), while the `*_b` arrays hold the fluxes of 2 time steps ago.
+            CALL oss_prs_slab( kt, rDt_ice, sst_m, sss_m, mld_m, qsr, qns, emp, sst_s, sss_s, t_bo )
+            !! Note: the writing of the slab fields in the restart (`oss_slab_rst('WRITE')`) is done in `ice_stp()`
+            !! (icestp.F90), because the fluxes `qsr`, `qns` & `emp` must be saved after `ice_update_flx()`.
          ENDIF
          !
-      ENDIF !IF( ln_prs_oce .AND. ln_icethd )
+      ENDIF !IF( ln_prs_oce )
 
 
       !! Now for coupled oce-ice setup or a standalone run without the SLAB, `sst_s, sss_s` default to `sst_m, sss_m`
@@ -687,6 +699,77 @@ CONTAINS
       IF( ln_timing )   CALL timing_stop('oss_flx_write')
       !
    END SUBROUTINE oss_flx_write
+
+   SUBROUTINE oss_slab_rst( cdrw, kt )
+      !!---------------------------------------------------------------------
+      !!                   ***  ROUTINE oss_slab_rst  ***
+      !!
+      !! ** Purpose :   Read or write file in restart file
+      !!
+      !! ** Method  :   use of IOM library
+      !!----------------------------------------------------------------------
+      CHARACTER(len=*) , INTENT(in) ::   cdrw   ! "READ"/"WRITE" flag
+      INTEGER, OPTIONAL, INTENT(in) ::   kt     ! ice time-step
+      !
+      INTEGER ::   id1
+      !!----------------------------------------------------------------------
+      !
+      !                                      !==========================!
+      IF( TRIM(cdrw) == 'READ' ) THEN        !==  Read or initialize  ==!
+         !                                   !==========================!
+         !
+         id1 = 0                                                                              ! no restart: id1=0
+         IF( ln_rstart ) id1 = iom_varid( 'oss_slab_rst', numrir, 'sst_s' , ldstop = .FALSE. ) ! file exist: id1>0
+         !
+         IF( id1 > 0 ) THEN   !**  Read the restart file  **!
+            !
+            IF(lwp) WRITE(numout,*) '   ==>> reading `sst_s`, `sss_s` & `t_bo` in the restart'
+            CALL iom_get( 'oss_slab_rst', numrir, jpdom_auto, 'sst_s' , sst_s )
+            CALL iom_get( 'oss_slab_rst', numrir, jpdom_auto, 'sss_s' , sss_s )
+            CALL iom_get( 'oss_slab_rst', numrir, jpdom_auto, 't_bo'  , t_bo )
+            !
+            ! Fluxes of the last time step of the previous run, used by the slab at the first time step
+            ! of this run (`oss_blk_ssx()` is called before `sbc()` in `stp()`). Without them, the slab
+            ! would use zero fluxes at the first time step, and the restart would not be exact.
+            CALL iom_get( 'oss_slab_rst', numrir, jpdom_auto, 'qsr_slab' , qsr )
+            CALL iom_get( 'oss_slab_rst', numrir, jpdom_auto, 'qns_slab' , qns )
+            CALL iom_get( 'oss_slab_rst', numrir, jpdom_auto, 'emp_slab' , emp )
+            !
+            ! Copy the 6 fields just read on the host to the GPU device. This must be done here,
+            ! because this routine is called from `ice_init()` (icestp.F90), after the device
+            ! update of `sst_s` & `sss_s` done at the end of `oss_init()`.
+            !$acc update device( sst_s, sss_s, t_bo, qsr, qns, emp )
+            !
+         ELSE
+            !
+            IF(lwp) WRITE(numout,*) '   ==>> `sst_s`, `sss_s` & `t_bo` not found in restart => default initialization!'
+            ! => initialization is already done (before call to this routine)!
+            !
+         ENDIF !IF( id1 > 0 )
+         !
+         !
+         !                                   !=====================================!
+      ELSEIF( TRIM(cdrw) == 'WRITE' ) THEN   !==  write in the ice restart file  ==!
+         !                                   !=====================================!
+         IF(lwp) WRITE(numout,*) '----  oss-slab-rst  ----'
+         IF( .NOT. PRESENT(kt) )  CALL ctl_stop( 'oss_slab_rst : call me with `kt` argument in WRITE mode!')
+         !
+         !$acc update self( sst_s, sss_s, t_bo, qsr, qns, emp )
+         CALL iom_rstput( kt, nitrst, numriw, 'sst_s' , sst_s )
+         CALL iom_rstput( kt, nitrst, numriw, 'sss_s' , sss_s )
+         CALL iom_rstput( kt, nitrst, numriw, 't_bo'  , t_bo  )
+         !
+         ! Fluxes `qsr`, `qns` & `emp` of this time step (final values, after `ice_update_flx()`), needed by
+         ! the slab at the first time step of the next run. The names end with `_slab` to avoid any confusion
+         ! with possible ocean restart fields of the same name.
+         CALL iom_rstput( kt, nitrst, numriw, 'qsr_slab' , qsr )
+         CALL iom_rstput( kt, nitrst, numriw, 'qns_slab' , qns )
+         CALL iom_rstput( kt, nitrst, numriw, 'emp_slab' , emp )
+         !
+      ENDIF
+      !
+   END SUBROUTINE oss_slab_rst
+
 
    !!======================================================================
 END MODULE ossmod

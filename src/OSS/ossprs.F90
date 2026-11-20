@@ -13,7 +13,8 @@ MODULE ossprs
    USE dom_oce        ! ocean domain: variables
    USE oss_nnq        ! surface module: variables
    USE phycst         ! physical constants
-   USE eosbn2 , ONLY : t_eos10_fzp_scl, eos10_fzp_2d
+   ! Freezing point of sea water, the formula follows the EOS chosen in namelist `nameos` (as SI3):
+   USE eosbn2 , ONLY : eos_fzp_0d, eos_fzp_2d
    ! Lateral boundary conditions: `lbc_lnk_gpu` (periodicity only, 1 GPU) in the GPU build, `lbc_lnk` (MPI + periodicity)
    ! in the CPU build, as in the other modules (needed by `oss_prs_slab()`):
 #if defined _OPENACC || defined _OPENMP
@@ -46,7 +47,7 @@ MODULE ossprs
    LOGICAL,  PUBLIC   ::   ln_ssv_T      ! prescribed sea surface velocities are provided on T grid points (default is U,V!)
    LOGICAL,  PUBLIC   ::   ln_ssv_Fgrid  ! also read SSU @ V-points & SSV @ U-points in prescribed ocean surface state (IF ln_ssxread )
    LOGICAL,  PUBLIC   ::   ln_slab_sst   ! For standalone mode only: if ln_slab_sst=T => correct the prescribed SST based on a slab model approach
-   REAL(wp), PUBLIC   ::   rn_ncs_sst    ! nudging coefficient for SLAB bulk SST correction
+   REAL(wp), PUBLIC   ::   rn_ncs_sst    ! relaxation timescale for SLAB bulk SST & SSS correction [days]
 
    !$acc declare create( rn_e3t_0, rn_frq_0, rn_mld_0, ln_ssv_T, ln_ssv_Fgrid, rn_ncs_sst )
 
@@ -78,7 +79,7 @@ MODULE ossprs
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -114,7 +115,7 @@ CONTAINS
          ssv_m(:,:) = sf_ssm_2d(jf_vsp)%fnow(:,:,1) * vmask(:,:,1)    ! v-velocity
          !
          IF( TRIM(sf_ssm_2d(jf_sal)%clrootname)=='NOT_USED' )                   sf_ssm_2d(jf_sal)%fnow(:,:,1) = 35._wp
-         IF( TRIM(sf_ssm_2d(jf_tem)%clrootname)=='NOT_USED' ) CALL eos10_fzp_2d(sf_ssm_2d(jf_sal)%fnow(:,:,1), sf_ssm_2d(jf_tem)%fnow(:,:,1))
+         IF( TRIM(sf_ssm_2d(jf_tem)%clrootname)=='NOT_USED' ) CALL eos_fzp_2d(sf_ssm_2d(jf_sal)%fnow(:,:,1), sf_ssm_2d(jf_tem)%fnow(:,:,1))
          IF( TRIM(sf_ssm_2d(jf_ssh)%clrootname)=='NOT_USED' )                   sf_ssm_2d(jf_ssh)%fnow(:,:,1) = 0._wp
          sst_m(:,:) = sf_ssm_2d(jf_tem)%fnow(:,:,1) * xmskt(:,:)    ! temperature
          sss_m(:,:) = sf_ssm_2d(jf_sal)%fnow(:,:,1) * xmskt(:,:)    ! salinity
@@ -150,7 +151,7 @@ CONTAINS
       ELSE
          ! When forcing not read in netCDF file(s), fall back on the following:
          sss_m(:,:) = 35._wp                             ! =35. to obtain a physical value for the freezing point
-         CALL eos10_fzp_2d( sss_m(:,:), sst_m(:,:) )     ! sst_m is set at the freezing point
+         CALL eos_fzp_2d( sss_m(:,:), sst_m(:,:) )     ! sst_m is set at the freezing point
          ssu_m(:,:) = 0._wp
          ssv_m(:,:) = 0._wp
          ssh_m(:,:) = 0._wp
@@ -189,7 +190,7 @@ CONTAINS
       !!
       !! ** Method : uses the net heat & freshwater flux into the liquid ocean
       !!             and the prescribed MLD...
-      !!             with a nudging approach not to deviate to much from
+      !!             with a relaxation time scale (in days) approach not to deviate to much from
       !!             prescribed SST & SSS...
       !!
       !!----------------------------------------------------------------------
@@ -223,18 +224,15 @@ CONTAINS
       CALL TRDBG( 'oss_prs_slab:IN', 'psst_s, psss_s, pt_bo',  psst_s, psss_s, pt_bo )
 #endif
 
-
-
-      IF( ln_rstart ) THEN
-         PRINT *, 'FIX `sst_s` & `sss_s` for restarts!!!'; STOP
-      ENDIF
-
       ! The slab is updated on the interior points ONLY, and its 3 outputs are `lbc_lnk`ed right after the loop:
       !  => it used to be computed one point into the halo (`Nis0-1:Nie0+1`), but the halos of the fluxes it uses are not
       !     valid there (`qsr` is never exchanged, and the interior of `qns` is modified in `ice_update_flx` after its
       !     exchange). As `sst_s` & `sss_s` are integrated in time, their halo values then drifted away from the values
       !     computed by the MPI neighbour, and `t_bo` (read in the halo by the BBM healing, then remapped to F-points)
       !     made the results depend on the MPI domain decomposition.
+
+      znc = MIN( pdt / ( rn_ncs_sst * 86400._wp ), 1._wp ) ! because `rn_ncs_sst` is given in days
+
       !$acc parallel loop collapse(2)
       DO jj=Njs0, Nje0
          DO ji=Nis0, Nie0
@@ -284,14 +282,11 @@ CONTAINS
             zQjoules = ( pqns(ji,jj) + pqsr(ji,jj) ) * pdt   ! Energy received/lost per surface area during `pdt` (J/m2) !#LOLOfixme: consider solar penetration for qsr !?
             zinc =  zQjoules * r1_rho0_rcp * z1_mld   !  rho0_rcp ~ J/K/m3 => rho0_rcp*mld ~ J/K/m2 => zinc = (J/m2) / (J/K/m2) ==> K !
             zsst_n  = psst_s(ji,jj) + zinc                    !  expected new temperature in the MLD...
-            !CALL eos_fzp_0d( zsss_n, zdum )
-            zdum = t_eos10_fzp_scl( zsss_n )
+            ! Freezing point of the expected new slab salinity (formula follows `neos`, as SI3):
+            CALL eos_fzp_0d( zsss_n, zdum )
             zsst_n = MAX( zsst_n , zdum )  ! slab SST cannot be colder than slab freezing-point temperature.
 
 
-            ! We want the nudging coefficient to be `1` where open ocean and `rn_ncs_sst` where ice fraction = 1:
-            !znc = (1._wp - at_i(ji,jj)) + at_i(ji,jj)*rn_ncs_sst
-            znc = rn_ncs_sst
 
             !IF( ldebg ) THEN
             !   PRINT *, '---'
@@ -302,11 +297,11 @@ CONTAINS
             !   PRINT *, '  * NDG coeff, znc = ', REAL(znc,4)
             !ENDIF
 
-            psss_s(ji,jj) = zsss_n - znc * ( zsss_n - zsss_p ) ! nudging towards the prescribed SSS
-            psst_s(ji,jj) = zsst_n - znc * ( zsst_n - zsst_p ) ! nudging towards the prescribed SST
+            psss_s(ji,jj) = zsss_n - znc * ( zsss_n - zsss_p ) ! relaxation towards the prescribed SSS
+            psst_s(ji,jj) = zsst_n - znc * ( zsst_n - zsst_p ) ! relaxation towards the prescribed SST
 
-            !CALL eos_fzp_0d( psss_s(ji,jj), pt_bo(ji,jj) )
-            pt_bo(ji,jj) = t_eos10_fzp_scl( psss_s(ji,jj) )
+            ! Freezing point of the nudged slab salinity => `t_bo` [C] (formula follows `neos`, as SI3):
+            CALL eos_fzp_0d( psss_s(ji,jj), pt_bo(ji,jj) )
             psst_s(ji,jj) = MAX( psst_s(ji,jj) , pt_bo(ji,jj) )  ! slab SST cannot be colder than slab freezing-point temperature.
 
 
@@ -402,14 +397,14 @@ CONTAINS
          WRITE(numout,*) '      Initialisation using an input file                                 ln_ssxread   = ', ln_ssxread
          WRITE(numout,*) '      Are we supplying a 3D u,v and e3 field                             ln_3d_uve    = ', ln_3d_uve
          WRITE(numout,*) '      Are we reading e3t (depth of 1st ocean level                   )   ln_read_e3t  = ', ln_read_e3t
-         WRITE(numout,*) '                => prescribed value of `e3t` to fall back on                rn_e3t_0  = ', rn_e3t_0
+         WRITE(numout,*) '             => prescribed value of `e3t` to fall back on                   rn_e3t_0  = ', rn_e3t_0
          WRITE(numout,*) '      Are we reading frq (fraction of qsr absorbed in the 1st T level)   ln_read_frq  = ', ln_read_frq
-         WRITE(numout,*) '                => prescribed value of `frq` to fall back on                rn_frq_0  = ', rn_frq_0
+         WRITE(numout,*) '             => prescribed value of `frq` to fall back on                   rn_frq_0  = ', rn_frq_0
          WRITE(numout,*) '      Prescribed surface velocities provided @T rather than @U,V  points    ln_ssv_T  = ', ln_ssv_T
          WRITE(numout,*) '      Read SSU@V & SSV@U in prescribed OSS                               ln_ssv_Fgrid = ', ln_ssv_Fgrid
          WRITE(numout,*) '      Correction of the prescibed SST based on a "slab model" approach    ln_slab_sst = ', ln_slab_sst
-         WRITE(numout,*) '                => prescribed value of `mld` to fall back on                rn_mld_0  = ', rn_mld_0
-         WRITE(numout,*) '                => nudging coefficient for SLAB bulk SST correction       rn_ncs_sst  = ', rn_ncs_sst
+         WRITE(numout,*) '             => prescribed value of `mld` to fall back on                   rn_mld_0  = ', rn_mld_0
+         WRITE(numout,*) '             => relaxation timescale for SLAB bulk SS[T/S] correction     rn_ncs_sst  = ', rn_ncs_sst
 
          WRITE(numout,*) '                         cn_dir =', cn_dir
          IF( ln_ssxread ) THEN
@@ -428,6 +423,12 @@ CONTAINS
             ENDIF
          ENDIF
       ENDIF
+
+      ! With the slab, `rn_ncs_sst` is the relaxation timescale [days] of the slab SST & SSS toward the prescribed ones:
+      ! it must be > 0. Zero would divide by zero in `oss_prs_slab` (`znc = pdt / (rn_ncs_sst * 86400)`), a negative
+      ! value would push the slab away from the prescribed SST & SSS.
+      IF( ln_slab_sst .AND. rn_ncs_sst <= 0._wp ) &
+         & CALL ctl_stop( 'oss_prs_init: rn_ncs_sst (relaxation timescale of the slab, in days) must be > 0' )
 
       lk_read_mld = ( ln_slab_sst .AND. (TRIM(sn_mld%clname)/='NOT_USED') )
       IF(lwp) WRITE(numout,*) '           *      lk_read_mld =', lk_read_mld

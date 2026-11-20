@@ -15,7 +15,7 @@ MODULE iceistate
    USE phycst         ! physical constant
    USE oss_nnq , ONLY : sst_m, sss_m
    USE sbc_ice , ONLY : snwice_mass, snwice_mass_b
-   USE eosbn2  , ONLY : eos10_fzp_2d
+   USE eosbn2  , ONLY : eos_fzp_2d   ! freezing point of sea water, the formula follows `neos` (as SI3)
    USE ice            ! sea-ice: variables
    USE icevar  , ONLY : ice_var_salprof, ice_var_itd
    !
@@ -57,7 +57,7 @@ MODULE iceistate
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -104,7 +104,7 @@ CONTAINS
       !---------------------------
 
       ! basal temperature (considered at freezing point)   [Kelvin]
-      CALL eos10_fzp_2d( sss_m(:,:), t_bo(:,:) )
+      CALL eos_fzp_2d( sss_m(:,:), t_bo(:,:) )
       t_bo(:,:) = ( t_bo(:,:) + rt0 ) * xmskt(:,:)
       !
 
@@ -275,7 +275,7 @@ CONTAINS
          ELSE                          ! Read namelist !
             !                          !---------------!
             ! no ice if (sst - Tfreez) >= thresold
-            CALL eos10_fzp_2d( sss_m(:,:), ztfrz(:,:) )
+            CALL eos_fzp_2d( sss_m(:,:), ztfrz(:,:) )
             WHERE( ( sst_m(:,:) - ztfrz(:,:) ) * xmskt(:,:) >= rn_thres_sst )
                zmsk(:,:) = 0._wp
             ELSEWHERE

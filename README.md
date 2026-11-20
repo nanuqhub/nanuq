@@ -100,6 +100,10 @@ New / renamed:
 
 As of now, this guide is written for someone familiar with the compilation of NEMO.
 
+The compilation of NANUQ has been extensively tested on Linux with the FORTRAN compilers of the following suites: LLVM (v22), ROCm (v7.2) and NVIDIA HPC SDK (check under `./arch` for templates).
+GCC has not been tested but it is expected to work since it works for NEMO.
+Chose LLVM if you only plan to stick to the CPU.
+
 Just as for NEMO, compilers, compilation flags, MPI paths, as well as the path to the XIOS2 library and executables must be defined in the `arch/arch-<ARCH>.fcm` (standalone executable) or in the `arch/arch-<ARCH>_OA3.fcm` (coupled executable).
 `<ARCH>` being the string that identifies the host on which NANUQ is compiled.
 

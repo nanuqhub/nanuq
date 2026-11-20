@@ -41,7 +41,7 @@ MODULE icewri
    PUBLIC ice_wri_state  ! called by dia_wri_state
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -475,7 +475,6 @@ CONTAINS
             ENDIF
 
 
-            IF( iom_use('icehnew' ) )   CALL iom_put( 'icehnew', ht_i_new             )                                           ! new ice thickness formed in the leads
             !IF( iom_use('icefrb'  ) ) THEN                                                                                        ! Ice freeboard
             !   z2d(:,:) = ( zrho1 * xht(:,:) - zrho2 * hmXs(:,:) )
             !   WHERE( z2d < 0._wp )   z2d = 0._wp

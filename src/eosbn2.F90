@@ -33,8 +33,9 @@ MODULE eosbn2
    !!   eos_rab       : generic interface of in situ thermal/haline expansion ratio
    !!   eos_rab_3d    : compute in situ thermal/haline expansion ratio
    !!   eos_rab_2d    : compute in situ thermal/haline expansion ratio for 2d fields
-   !!   eos_fzp_2d    : freezing temperature for 2d fields
-   !!   eos_fzp_0d    : freezing temperature for scalar
+   !!   eos_fzp_2d    : freezing temperature for 2d fields (CPU arrays), follows `neos` (as SI3)
+   !!   eos_fzp_2d_gpu: freezing temperature for 2d fields (arrays present on the GPU), follows `neos`
+   !!   eos_fzp_0d    : freezing temperature for scalar (callable from a GPU kernel), follows `neos`
    !!   eos_init      : set eos parameters (namelist)
    !!----------------------------------------------------------------------
    USE dom_oce        ! ocean space and time domain
@@ -69,14 +70,12 @@ MODULE eosbn2
    PUBLIC   eos_pt_from_ct ! called by sbcssm
    !PUBLIC   eos_fzp        ! called by traadv_cen2 and sbcice_... modules
    !PUBLIC   eos_pen        ! used for pe diagnostics in trdpen module
-   PUBLIC   eos_fzp_2d_gpu
-   PUBLIC   eos_init       ! called by istate module
-   PUBLIC   eos_fzp_2d
-   PUBLIC   eos_fzp_0d
-
-   PUBLIC   t_eos10_fzp_scl
-   PUBLIC   eos10_fzp_2d
-   PUBLIC   eos10_fzp_2d_gpu
+   PUBLIC   eos_init       ! called by nanuqgcm
+   ! Freezing point of sea water: as in SI3, the formula depends on the EOS selected in namelist `nameos` (`neos`):
+   !   TEOS-10 / S-EOS => TEOS-10 polynomial of Absolute Salinity, EOS-80 => UNESCO formula of Practical Salinity
+   PUBLIC   eos_fzp_2d_gpu ! called by ossmod (`t_bo`, GPU arrays)
+   PUBLIC   eos_fzp_2d     ! called by ossmod, ossprs, iceistate (CPU arrays)
+   PUBLIC   eos_fzp_0d     ! called by ossprs (slab, inside a GPU kernel)
 
    !                               !!** Namelist nameos **
    LOGICAL , PUBLIC ::   ln_TEOS10
@@ -187,7 +186,7 @@ MODULE eosbn2
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -663,7 +662,7 @@ CONTAINS
 
    SUBROUTINE eos_fzp_2d( psal, ptf, pdep )
       !!
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in   )           ::   psal   ! salinity   [psu]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in   )           ::   psal   ! salinity [g/kg] (TEOS-10, S-EOS) or [psu] (EOS-80)
       REAL(dp), DIMENSION(jpi,jpj), INTENT(in   ), OPTIONAL ::   pdep   ! depth      [m]
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out  )           ::   ptf    ! freezing temperature [Celsius]
       !!
@@ -673,17 +672,26 @@ CONTAINS
 
    SUBROUTINE  eos_fzp_2d_t( psal, ptf, pdep )
       !!----------------------------------------------------------------------
-      !!                 ***  ROUTINE eos_fzp  ***
+      !!                 ***  ROUTINE eos_fzp_2d  ***
       !!
-      !! ** Purpose :   Compute the freezing point temperature [Celsius]
+      !! ** Purpose :   Compute the freezing point temperature of sea water [Celsius]
+      !!                for 2D arrays that live on the CPU (host) side.
+      !!                As in SI3, the formula depends on the EOS chosen in namelist `nameos`:
       !!
-      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
-      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
-      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
+      !! ** Method  :
+      !!   * TEOS-10 & S-EOS (`neos = np_teos10, np_seos`), `psal` = Absolute Salinity SA [g/kg]:
+      !!       polynomial fit of the TEOS-10 freezing temperature (same polynomial as in NEMO `eos_fzp`):
+      !!       ptf(SA) = SA * P(zs) , with zs = sqrt(SA/35.16504) and P a 5th order polynomial
+      !!   * EOS-80 (`neos = np_eos80`), `psal` = Practical Salinity SP [psu]:
+      !!       UNESCO freezing point: ptf(SP) = ( -0.0575 + 1.710523e-3*sqrt(SP) - 2.154996e-4*SP ) * SP
+      !!       checkvalue (with the depth term): tf=-2.588567 Celsius for SP=40psu, z=500m
+      !!   * In both cases, if `pdep` is present: ptf = ptf - 7.53e-4 * pdep
+      !!     (as in SI3, NANUQ calls it WITHOUT `pdep`, i.e. at surface pressure)
       !!
-      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
+      !! Reference  :   TEOS-10: IOC, SCOR & IAPSO (2010), The international thermodynamic equation of seawater - 2010
+      !!                EOS-80 : UNESCO tech. papers in the marine science no. 28. 1978
       !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj)  , INTENT(in   )           ::   psal   ! salinity   [psu]
+      REAL(wp), DIMENSION(jpi,jpj)  , INTENT(in   )           ::   psal   ! salinity [g/kg] (TEOS-10, S-EOS) or [psu] (EOS-80)
       REAL(dp), DIMENSION(jpi,jpj)  , INTENT(in   ), OPTIONAL ::   pdep   ! depth      [m]
       REAL(wp), DIMENSION(jpi,jpj)  , INTENT(out  )           ::   ptf    ! freezing temperature [Celsius]
       !
@@ -694,176 +702,118 @@ CONTAINS
          !
       CASE ( np_teos10, np_seos )      !==  CT,SA (TEOS-10 and S-EOS formulations) ==!
          !
+         ! TEOS-10 polynomial fit, computed on the interior + 1 halo point (same bounds as `eos_fzp_2d_gpu`),
+         ! the product by `psal` is done inside the loop so that only these points are touched:
          z1_S0 = 1._wp / 35.16504_wp
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1
-               zs= SQRT( ABS( psal(ji,jj) ) * z1_S0 )           ! square root salinity
-               ptf(ji,jj) = ((((1.46873e-03_wp*zs-9.64972e-03_wp)*zs+2.28348e-02_wp)*zs &
-                  &          - 3.12775e-02_wp)*zs+2.07679e-02_wp)*zs-5.87701e-02_wp
+               zs = SQRT( ABS( psal(ji,jj) ) * z1_S0 )           ! square root salinity
+               zt = ((((1.46873e-03_wp*zs-9.64972e-03_wp)*zs+2.28348e-02_wp)*zs &
+                  &     - 3.12775e-02_wp)*zs+2.07679e-02_wp)*zs-5.87701e-02_wp
+               ptf(ji,jj) = zt * psal(ji,jj)
             END DO
          ENDDO
-         ptf(:,:) = ptf(:,:) * psal(:,:)
-         !
-         IF( PRESENT( pdep ) )   ptf(:,:) = ptf(:,:) - 7.53e-4 * pdep(:,:)
          !
       CASE ( np_eos80 )                !==  PT,SP (UNESCO formulation)  ==!
          !
-         ptf(:,:) = ( - 0.0575_wp + 1.710523e-3_wp * SQRT( psal(:,:) )   &
-            &                     - 2.154996e-4_wp *       psal(:,:)   ) * psal(:,:)
-         !
-         IF( PRESENT( pdep ) )   ptf(:,:) = ptf(:,:) - 7.53e-4 * pdep(:,:)
+         ! UNESCO formula, computed on the same points as the TEOS-10 case above:
+         DO jj=Njs0-1, Nje0+1
+            DO ji=Nis0-1, Nie0+1
+               zs = psal(ji,jj)
+               ptf(ji,jj) = ( - 0.0575_wp + 1.710523e-3_wp * SQRT( zs ) - 2.154996e-4_wp * zs ) * zs
+            END DO
+         ENDDO
          !
       CASE DEFAULT
          CALL ctl_stop( 'eos_fzp_2d:', 'bad flag value for `neos`' )
          !
       END SELECT
       !
+      ! Optional pressure (depth) correction of the freezing point, the same for both formulations
+      ! (not used by NANUQ for now, as in SI3 where the call with `pdep` is commented out):
+      IF( PRESENT( pdep ) ) THEN
+         DO jj=Njs0-1, Nje0+1
+            DO ji=Nis0-1, Nie0+1
+               ptf(ji,jj) = ptf(ji,jj) - 7.53e-4_wp * REAL( pdep(ji,jj), wp )
+            END DO
+         ENDDO
+      ENDIF
+      !
    END SUBROUTINE eos_fzp_2d_t
 
 
-   SUBROUTINE eos_fzp_0d( psal, ptf ) !, pdep )
+   SUBROUTINE eos_fzp_0d( psal, ptf )
       !!----------------------------------------------------------------------
-      !!                 ***  ROUTINE eos_fzp  ***
+      !!                 ***  ROUTINE eos_fzp_0d  ***
       !!
-      !! ** Purpose :   Compute the freezing point temperature [Celsius]
+      !! ** Purpose :   Compute the freezing point temperature of sea water [Celsius]
+      !!                for a scalar. Can be called from inside a GPU kernel (`!$acc routine seq`),
+      !!                `neos` is available on the GPU (`!$acc declare create(neos)` + update in `eos_init`).
+      !!                As in SI3, the formula depends on the EOS chosen in namelist `nameos`:
       !!
-      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
-      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
-      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
+      !! ** Method  :
+      !!   * TEOS-10 & S-EOS (`neos = np_teos10, np_seos`), `psal` = Absolute Salinity SA [g/kg]:
+      !!       polynomial fit of the TEOS-10 freezing temperature (same polynomial as in NEMO `eos_fzp`):
+      !!       ptf(SA) = SA * P(zs) , with zs = sqrt(SA/35.16504) and P a 5th order polynomial
+      !!   * EOS-80 (`neos = np_eos80`), `psal` = Practical Salinity SP [psu]:
+      !!       UNESCO freezing point: ptf(SP) = ( -0.0575 + 1.710523e-3*sqrt(SP) - 2.154996e-4*SP ) * SP
+      !!   * No depth (pressure) term: surface pressure only.
       !!
-      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
+      !! Reference  :   TEOS-10: IOC, SCOR & IAPSO (2010), The international thermodynamic equation of seawater - 2010
+      !!                EOS-80 : UNESCO tech. papers in the marine science no. 28. 1978
       !!----------------------------------------------------------------------
-      !$acc routine
-      REAL(wp), INTENT(in )           ::   psal         ! salinity   [psu]
-      !REAL(wp), INTENT(in ), OPTIONAL ::   pdep         ! depth      [m]
+      ! Sequential GPU routine: called once per grid point from inside a GPU parallel loop (slab in `ossprs.F90`)
+      !$acc routine seq
+      REAL(wp), INTENT(in )           ::   psal         ! salinity [g/kg] (TEOS-10, S-EOS) or [psu] (EOS-80)
       REAL(wp), INTENT(out)           ::   ptf          ! freezing temperature [Celsius]
       !
       REAL(wp) :: zs   ! local scalars
       !!----------------------------------------------------------------------
       !
-      SELECT CASE ( neos )
+      ! `IF/ELSE` rather than `SELECT CASE` with a `CASE DEFAULT`: `ctl_stop` cannot be called from a GPU routine,
+      ! so the `ELSE` branch (TEOS-10, which also covers S-EOS) guarantees that `ptf` is always defined.
+      ! A wrong `neos` value cannot happen anyway, it is already stopped in `eos_init`.
+      IF( neos == np_eos80 ) THEN
          !
-      CASE ( np_teos10, np_seos )      !==  CT,SA (TEOS-10 and S-EOS formulations) ==!
+         ! EOS-80 => UNESCO formula of Practical Salinity:
+         ptf = ( - 0.0575_wp + 1.710523e-3_wp * SQRT( psal )   &
+            &                - 2.154996e-4_wp *       psal   ) * psal
          !
+      ELSE
+         !
+         ! TEOS-10 and S-EOS => TEOS-10 polynomial fit of Absolute Salinity:
          zs  = SQRT( ABS( psal ) / 35.16504_wp )           ! square root salinity
          ptf = ((((1.46873e-03_wp*zs-9.64972e-03_wp)*zs+2.28348e-02_wp)*zs &
             &          - 3.12775e-02_wp)*zs+2.07679e-02_wp)*zs-5.87701e-02_wp
          ptf = ptf * psal
          !
-         !IF( PRESENT( pdep ) )   ptf = ptf - 7.53e-4 * pdep
-         !
-      CASE ( np_eos80 )                !==  PT,SP (UNESCO formulation)  ==!
-         !
-         ptf = ( - 0.0575_wp + 1.710523e-3_wp * SQRT( psal )   &
-            &                - 2.154996e-4_wp *       psal   ) * psal
-         !
-         !
-      END SELECT
+      ENDIF
       !
    END SUBROUTINE eos_fzp_0d
 
 
-   FUNCTION t_eos10_fzp_scl( psal )
-      !!----------------------------------------------------------------------
-      !!                 ***  FUNCTION t_eos10_fzp_scl  ***
-      !!
-      !! ** Purpose :   Compute the freezing point temperature [Celsius]
-      !!
-      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
-      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
-      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
-      !!
-      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
-      !!----------------------------------------------------------------------
-      !$acc routine
-      REAL(wp)              ::   t_eos10_fzp_scl ! freezing temperature [Celsius]
-      REAL(wp), INTENT(in ) ::   psal            ! salinity   [psu]
-      !!----------------------------------------------------------------------
-      REAL(wp) :: zs, zt   ! local scalars
-      !!----------------------------------------------------------------------
-      zs  = SQRT( ABS( psal ) / 35.16504_wp )           ! square root salinity
-      zt = ((((1.46873e-03_wp*zs-9.64972e-03_wp)*zs+2.28348e-02_wp)*zs &
-         &      - 3.12775e-02_wp)*zs+2.07679e-02_wp)*zs-5.87701e-02_wp
-      !
-      t_eos10_fzp_scl = zt * psal
-      !
-   END FUNCTION t_eos10_fzp_scl
-
-
-   SUBROUTINE  eos10_fzp_2d_gpu( psal, ptf )
-      !!----------------------------------------------------------------------
-      !!                 ***  ROUTINE eos10_fzp_2d_gpu  ***
-      !!
-      !! ** Purpose :   Compute the freezing point temperature [Celsius]
-      !!
-      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
-      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
-      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
-      !!
-      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
-      !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity   [psu]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: ptf    ! freezing temperature [Celsius]
-      !!----------------------------------------------------------------------
-      INTEGER  ::   ji, jj          ! dummy loop indices
-      REAL(wp) ::   zt, zs, z1_S0   ! local scalars
-      !!----------------------------------------------------------------------
-      !$acc data present( psal, ptf )
-      !
-      z1_S0 = 1._wp / 35.16504_wp
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            zs= SQRT( ABS( psal(ji,jj) ) * z1_S0 )           ! square root salinity
-            zt = ((((1.46873e-3_wp*zs-9.64972e-3_wp)*zs+2.28348e-2_wp)*zs &
-               &     - 3.12775e-2_wp)*zs+2.07679e-2_wp)*zs-5.87701e-2_wp
-            ptf(ji,jj) = zt * psal(ji,jj)
-         END DO
-      ENDDO
-      !$acc end parallel loop
-
-      !$acc end data
-   END SUBROUTINE eos10_fzp_2d_gpu
-
-   !! NON-GPU version:
-   SUBROUTINE  eos10_fzp_2d( psal, ptf )
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity   [psu]
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: ptf    ! freezing temperature [Celsius]
-      !!----------------------------------------------------------------------
-      INTEGER  ::   ji, jj          ! dummy loop indices
-      REAL(wp) ::   zt, zs, z1_S0   ! local scalars
-      !!----------------------------------------------------------------------
-      z1_S0 = 1._wp / 35.16504_wp
-      !
-      DO jj=Njs0-1, Nje0+1
-         DO ji=Nis0-1, Nie0+1
-            zs= SQRT( ABS( psal(ji,jj) ) * z1_S0 )           ! square root salinity
-            zt = ((((1.46873e-3_wp*zs-9.64972e-3_wp)*zs+2.28348e-2_wp)*zs &
-               &     - 3.12775e-2_wp)*zs+2.07679e-2_wp)*zs-5.87701e-2_wp
-            ptf(ji,jj) = zt * psal(ji,jj)
-         END DO
-      ENDDO
-      !
-   END SUBROUTINE eos10_fzp_2d
-
-
-
-
-
-
    SUBROUTINE  eos_fzp_2d_gpu( psal, ptf )
       !!----------------------------------------------------------------------
-      !!                 ***  ROUTINE eos_fzp  ***
+      !!                 ***  ROUTINE eos_fzp_2d_gpu  ***
       !!
-      !! ** Purpose :   Compute the freezing point temperature [Celsius]
+      !! ** Purpose :   Compute the freezing point temperature of sea water [Celsius]
+      !!                for 2D arrays that are present on the GPU (`!$acc data present`).
+      !!                In the CPU build the `!$acc` directives are ignored and it works on host arrays.
+      !!                As in SI3, the formula depends on the EOS chosen in namelist `nameos`:
       !!
-      !! ** Method  :   UNESCO freezing point (ptf) in Celsius is given by
-      !!       ptf(t,z) = (-.0575+1.710523e-3*sqrt(abs(s))-2.154996e-4*s)*s - 7.53e-4*z
-      !!       checkvalue: tf=-2.588567 Celsius for s=40psu, z=500m
+      !! ** Method  :
+      !!   * TEOS-10 & S-EOS (`neos = np_teos10, np_seos`), `psal` = Absolute Salinity SA [g/kg]:
+      !!       polynomial fit of the TEOS-10 freezing temperature (same polynomial as in NEMO `eos_fzp`):
+      !!       ptf(SA) = SA * P(zs) , with zs = sqrt(SA/35.16504) and P a 5th order polynomial
+      !!   * EOS-80 (`neos = np_eos80`), `psal` = Practical Salinity SP [psu]:
+      !!       UNESCO freezing point: ptf(SP) = ( -0.0575 + 1.710523e-3*sqrt(SP) - 2.154996e-4*SP ) * SP
+      !!   * No depth (pressure) term: surface pressure only (as SI3 for `t_bo`).
+      !!   * Computed on the interior + 1 halo point (`Nis0-1:Nie0+1`, `Njs0-1:Nje0+1`).
       !!
-      !! Reference  :   UNESCO tech. papers in the marine science no. 28. 1978
+      !! Reference  :   TEOS-10: IOC, SCOR & IAPSO (2010), The international thermodynamic equation of seawater - 2010
+      !!                EOS-80 : UNESCO tech. papers in the marine science no. 28. 1978
       !!----------------------------------------------------------------------
-      REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity   [psu]
+      REAL(wp), DIMENSION(jpi,jpj), INTENT(in ) :: psal   ! salinity [g/kg] (TEOS-10, S-EOS) or [psu] (EOS-80)
       REAL(wp), DIMENSION(jpi,jpj), INTENT(out) :: ptf    ! freezing temperature [Celsius]
       !
       INTEGER  ::   ji, jj          ! dummy loop indices

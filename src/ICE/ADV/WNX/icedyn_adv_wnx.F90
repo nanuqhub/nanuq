@@ -32,7 +32,7 @@ MODULE icedyn_adv_wnx
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:)     ::   sati1
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -116,6 +116,18 @@ CONTAINS
          ! and we get `rdgc = Vr / vt_i` back at the end of this routine, with the ice volume after advection.
          ! This must be done HERE, before `v_i` is advected below. The whole domain (halos included) is converted, because
          ! `wenoX_rk3` expects a fully `lbc_lnk`ed field. (`prdgc` then holds `Vr` until the end of this routine)
+         !
+         ! Halo exchange of `rdgc` BEFORE it is used on the halo (the loop below goes over the whole halo):
+         ! at the end of the previous time step, `rdgc` was modified on the halo points AFTER its last exchange
+         ! (in `ice_dyn_rdgtrc()` and `ice_thd_rdgtrc()`), so its halo then holds locally computed values. After a
+         ! restart, however, the halo is filled by `lbc_lnk` (in `iom_get`), which gives different values: without
+         ! this exchange, the first time step of a restarted run would differ from the one of a continuous run, and
+         ! `rdgc` would also depend on the MPI domain decomposition.
+#if defined _OPENACC || defined _OPENMP
+         CALL lbc_lnk_gpu( crtnm, prdgc )
+#else
+         CALL lbc_lnk(     crtnm, prdgc,'T',1._wp )
+#endif
          !$acc parallel loop collapse(2) present( prdgc, pv_i )
          DO jj=Njs0-nn_hls, Nje0+nn_hls
             DO ji=Nis0-nn_hls, Nie0+nn_hls

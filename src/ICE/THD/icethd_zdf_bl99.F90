@@ -23,7 +23,7 @@ MODULE icethd_zdf_BL99
    PUBLIC   ice_thd_zdf_BL99   ! called by icethd_zdf
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -380,8 +380,8 @@ CONTAINS
                !
                IF( k_cnd == np_cnd_OFF .OR. k_cnd == np_cnd_EMU ) THEN
                   ! --- ice conduction fluxes (positive downward)
-                  qcn_ice_bot(ji,jj,jl_cat) = - zkappa_i(nlay_i) * zg1 * ( t_bo(ji,jj ) - t_i(ji,jj,nlay_i,jl_cat) )                ! bottom
-                  qcn_ice_top(ji,jj,jl_cat) = - zisnow   * zkappa_s(0) * zg1s * ( t_s(ji,jj,1,jl_cat) - zt_su ) & ! surface
+                  qcn_ice_bot(ji,jj) = - zkappa_i(nlay_i) * zg1 * ( t_bo(ji,jj ) - t_i(ji,jj,nlay_i,jl_cat) )                ! bottom
+                  qcn_ice_top(ji,jj) = - zisnow   * zkappa_s(0) * zg1s * ( t_s(ji,jj,1,jl_cat) - zt_su ) & ! surface
                      &                 - zdum * zkappa_i(0) * zg1  * ( t_i(ji,jj,1,jl_cat) - zt_su )
                   !
                   ! --- Diagnose the heat loss due to changing non-solar / conduction flux
@@ -389,12 +389,12 @@ CONTAINS
                   !
                ELSEIF( k_cnd == np_cnd_ON ) THEN
                   ! --- ice conduction fluxes (positive downward)
-                  qcn_ice_bot(ji,jj,jl_cat) = - zkappa_i(nlay_i) * zg1 * ( t_bo(ji,jj ) - t_i(ji,jj,nlay_i,jl_cat) ) ! bottom
-                  qcn_ice_top(ji,jj,jl_cat) = qcn_ice(ji,jj,jl_cat)                                                        ! surface
+                  qcn_ice_bot(ji,jj) = - zkappa_i(nlay_i) * zg1 * ( t_bo(ji,jj ) - t_i(ji,jj,nlay_i,jl_cat) ) ! bottom
+                  qcn_ice_top(ji,jj) = qcn_ice(ji,jj,jl_cat)                                                        ! surface
                   !
                   ! --- surface ice temperature
                   IF( ln_cndemulate ) THEN
-                     zt_su = ( qcn_ice_top(ji,jj,jl_cat) + zisnow * zkappa_s(0) * zg1s * t_s(ji,jj,1,jl_cat) + &
+                     zt_su = ( qcn_ice_top(ji,jj) + zisnow * zkappa_s(0) * zg1s * t_s(ji,jj,1,jl_cat) + &
                         &                                zdum * zkappa_i(0) * zg1  * t_i(ji,jj,1,jl_cat) ) &
                         &          / MAX( epsi10, zisnow * zkappa_s(0) * zg1s + zdum * zkappa_i(0) * zg1 )
                      zt_su = MAX( MIN( zt_su, rt0 ), rt0 - 100._wp )  ! cap t_su
@@ -438,8 +438,8 @@ CONTAINS
                   !   -zdq/dt          = heat stored in snow+ice (e_i, e_s are energies of melting, so storing heat lowers them)
                   ! Residual = (heat in at the top) - zdum, which must be ~0 if the solver converged (as in SI3).
                   ! (bugfix: signs of `qcn_ice_bot` and `zdq` were inverted w.r.t. SI3)
-                  zdum   = zradtr_i(nlay_i) + qcn_ice_bot(ji,jj,jl_cat) - zdq * r1_Dt_ice
-                  zsum_i = qcn_ice_top(ji,jj,jl_cat) + qtr_ice_top(ji,jj,jl_cat) - zdum
+                  zdum   = zradtr_i(nlay_i) + qcn_ice_bot(ji,jj) - zdq * r1_Dt_ice
+                  zsum_i = qcn_ice_top(ji,jj) + qtr_ice_top(ji,jj,jl_cat) - zdum
                   IF( k_cnd == np_cnd_OFF ) THEN
                      zhfx_err = MERGE( (     qns_ice(ji,jj,jl_cat) +     qsr_ice(ji,jj,jl_cat) - zdum ) ,  & ! case T_su < 0degC
                         &                                      zsum_i                                   ,  & ! case T_su = 0degC
@@ -476,7 +476,7 @@ CONTAINS
                   DO jk = 1, nlay_i
                      t_i(ji,jj,jk,jl_cat) = ztiold(jk)
                   END DO
-                  qcn_ice(ji,jj,jl_cat) = qcn_ice_top(ji,jj,jl_cat)
+                  qcn_ice(ji,jj,jl_cat) = qcn_ice_top(ji,jj)
                ENDIF
 
                ! --- SIMIP diagnostics (Snow-ice interfacial temperature)

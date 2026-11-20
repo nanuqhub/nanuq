@@ -44,7 +44,7 @@ MODULE icesbc
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -664,8 +664,6 @@ CONTAINS
 
       ! other heat fluxes
       IF( iom_use("hfxsensib"  ) )   CALL iom_put( "hfxsensib"  ,      qsb_ice_bot * at_i_b         )   ! Sensible oceanic heat flux
-      IF( iom_use("hfxcndbot"  ) )   CALL iom_put( "hfxcndbot"  , SUM( qcn_ice_bot * a_i_b, dim=3 ) )   ! Bottom conduction flux
-      IF( iom_use("hfxcndtop"  ) )   CALL iom_put( "hfxcndtop"  , SUM( qcn_ice_top * a_i_b, dim=3 ) )   ! Surface conduction flux
       IF( iom_use("hfxmelt"    ) )   CALL iom_put( "hfxmelt"    , SUM( qml_ice     * a_i_b, dim=3 ) )   ! Surface melt flux
       IF( iom_use("hfxldmelt"  ) )   CALL iom_put( "hfxldmelt"  ,      fhld        * at_i_b         )   ! Heat in lead for ice melting
       IF( iom_use("hfxldgrow"  ) )   CALL iom_put( "hfxldgrow"  ,      qlead       * r1_Dt_ice      )   ! Heat in lead for ice growth

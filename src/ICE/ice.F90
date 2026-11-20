@@ -61,7 +61,6 @@ MODULE ice
    !! v_s         |      -      |    Snow volume per unit area    | m     |
    !! szv_i       |      -      |    Sea ice salt content (4D)    | g/kg.m|
    !! oa_i        |      -      |    Sea ice areal age content    | s     |
-   !! o_i         |      -      |    Sea ice age (=oa_i/a_i)      | s     |
    !! e_i         |             |    Ice enthalpy                 | J/m2  |
    !!             |    e_i_1d   |    Ice enthalpy per unit vol.   | J/m3  |
    !! e_s         |             |    Snow enthalpy                | J/m2  |
@@ -135,8 +134,6 @@ MODULE ice
 
    !                                     !!** define arrays
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   V_oce           !: surface ocean velocity used in ice dynamics
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   ht_i_new        !: ice collection thickness accreted in leads
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   fraz_frac       !: fraction of frazil ice accreted at the ice bottom
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   strength        !: ice strength
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   delta_i         !: ice rheology elta factor (Flato & Hibler 95) [s-1]
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   divu_i          !: Divergence of the velocity field             [s-1]
@@ -148,61 +145,61 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qsb_ice_bot     !: net downward heat flux from the ice to the ocean
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   fhld            !: heat flux from the lead used for bottom melting
 
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw         !: mass flux from snow-ocean mass exchange             [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sni     !: mass flux from snow ice growth component of wfx_snw [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sum     !: mass flux from surface melt component of wfx_snw    [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_pnd         !: mass flux from melt pond-ocean mass exchange        [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_spr         !: mass flux from snow precipitation on ice            [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sub         !: mass flux from sublimation of snow/ice              [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sub     !: mass flux from snow sublimation                     [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice_sub     !: mass flux from ice sublimation                      [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw         !: mass flux from snow-ocean mass exchange             [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sni     !: mass flux from snow ice growth component of wfx_snw [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sum     !: mass flux from surface melt component of wfx_snw    [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_pnd         !: mass flux from melt pond-ocean mass exchange        [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_spr         !: mass flux from snow precipitation on ice            [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sub         !: mass flux from sublimation of snow/ice              [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_sub     !: mass flux from snow sublimation                     [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice_sub     !: mass flux from ice sublimation                      [kg.m-2.s-1]
 
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_dyn     !: mass flux from dynamical component of wfx_snw       [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_snw_dyn     !: mass flux from dynamical component of wfx_snw       [kg.m-2.s-1]
 
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice         !: mass flux from ice-ocean mass exchange                   [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sni         !: mass flux from snow ice growth component of wfx_ice      [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_opw         !: mass flux from lateral ice growth component of wfx_ice   [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bog         !: mass flux from bottom ice growth component of wfx_ice    [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_dyn         !: mass flux from dynamical ice growth component of wfx_ice [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bom         !: mass flux from bottom melt component of wfx_ice          [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sum         !: mass flux from surface melt component of wfx_ice         [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_lam         !: mass flux from lateral melt component of wfx_ice         [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_res         !: mass flux from residual component of wfx_ice             [kg.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_err_sub     !: mass flux error after sublimation                        [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_ice         !: mass flux from ice-ocean mass exchange                   [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sni         !: mass flux from snow ice growth component of wfx_ice      [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_opw         !: mass flux from lateral ice growth component of wfx_ice   [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bog         !: mass flux from bottom ice growth component of wfx_ice    [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_dyn         !: mass flux from dynamical ice growth component of wfx_ice [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_bom         !: mass flux from bottom melt component of wfx_ice          [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_sum         !: mass flux from surface melt component of wfx_ice         [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_lam         !: mass flux from lateral melt component of wfx_ice         [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_res         !: mass flux from residual component of wfx_ice             [kg.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   wfx_err_sub     !: mass flux error after sublimation                        [kg.m-2.s-1]
 
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bog         !: salt flux due to ice bottom growth                   [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bom         !: salt flux due to ice bottom melt                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_lam         !: salt flux due to ice lateral melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sum         !: salt flux due to ice surface melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sni         !: salt flux due to snow-ice growth                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_opw         !: salt flux due to growth in open water                [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bri         !: salt flux due to brine rejection                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_dyn         !: salt flux due to porous ridged ice formation         [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_res         !: salt flux due to correction on ice thick. (residual) [g/kg.kg.m-2.s-1 => g.m-2.s-1]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sub         !: salt flux due to ice sublimation                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bog         !: salt flux due to ice bottom growth                   [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bom         !: salt flux due to ice bottom melt                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_lam         !: salt flux due to ice lateral melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sum         !: salt flux due to ice surface melt                    [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sni         !: salt flux due to snow-ice growth                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_opw         !: salt flux due to growth in open water                [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_bri         !: salt flux due to brine rejection                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_dyn         !: salt flux due to porous ridged ice formation         [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_res         !: salt flux due to correction on ice thick. (residual) [g/kg.kg.m-2.s-1 => g.m-2.s-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   sfx_sub         !: salt flux due to ice sublimation                     [g/kg.kg.m-2.s-1 => g.m-2.s-1]
 
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bog         !: total heat flux causing bottom ice growth           [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bom         !: total heat flux causing bottom ice melt             [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sum         !: total heat flux causing surface ice melt            [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_opw         !: total heat flux causing open water ice formation    [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dif         !: total heat flux causing Temp change in the ice      [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_snw         !: heat flux for snow melt                             [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_err_dif     !: heat flux remaining due to change in non-solar flux [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_atm_oi       !: heat flux at the interface atm-[oce+ice]            [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_oce_ai       !: heat flux at the interface oce-[atm+ice]            [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bog         !: total heat flux causing bottom ice growth           [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_bom         !: total heat flux causing bottom ice melt             [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sum         !: total heat flux causing surface ice melt            [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_opw         !: total heat flux causing open water ice formation    [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dif         !: total heat flux causing Temp change in the ice      [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_snw         !: heat flux for snow melt                             [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_err_dif     !: heat flux remaining due to change in non-solar flux [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_atm_oi       !: heat flux at the interface atm-[oce+ice]            [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   qt_oce_ai       !: heat flux at the interface oce-[atm+ice]            [W.m-2]
 
    ! heat flux associated with ice-atmosphere mass exchange
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sub         !: heat flux for sublimation            [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_spr         !: heat flux of the snow precipitation  [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_sub         !: heat flux for sublimation            [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_spr         !: heat flux of the snow precipitation  [W.m-2]
 
    ! heat flux associated with ice-ocean mass exchange
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_thd         !: ice-ocean heat flux from thermo processes (icethd_dh) [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dyn         !: ice-ocean heat flux from ridging                      [W.m-2]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_res         !: heat flux due to correction on ice thick. (residual)  [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_thd         !: ice-ocean heat flux from thermo processes (icethd_dh) [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_dyn         !: ice-ocean heat flux from ridging                      [W.m-2]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:)   ::   hfx_res         !: heat flux due to correction on ice thick. (residual)  [W.m-2]
 
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qtr_ice_bot     !: transmitted solar radiation under ice
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t1_ice          !: temperature of the first layer          (ln_cndflx=T) [K]
-   REAL(4), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   cnd_ice         !: effective conductivity of the 1st layer (ln_cndflx=T) [W.m-2.K-1]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qtr_ice_bot     !: transmitted solar radiation under ice
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t1_ice          !: temperature of the first layer          (ln_cndflx=T) [K]
+   REAL(sp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   cnd_ice         !: effective conductivity of the 1st layer (ln_cndflx=T) [W.m-2.K-1]
 
    !!----------------------------------------------------------------------
    !! * Ice global state variables
@@ -216,7 +213,6 @@ MODULE ice
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   t_su          !: Sea-Ice Surface Temperature             (K)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   s_i           !: Sea-Ice Bulk salinity                   (g/kg)
    REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   oa_i          !: Sea-Ice Age * ice area                  (s)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   o_i           !: Sea-Ice Age (=oa_i/a_i), used in thermo to keep the age when a_i changes (s)
    !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:)   ::   v_ibr         !: brine volume
 
    !! Variables summed over all categories, or associated to all the ice in a single grid cell
@@ -329,18 +325,22 @@ MODULE ice
    !!----------------------------------------------------------------------
    ! Extra sea ice diagnostics to address the data request
    !REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   t_si            !: Temperature at Snow-ice interface (K)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qcn_ice_bot     !: Bottom  conduction flux (W/m2)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) ::   qcn_ice_top     !: Surface conduction flux (W/m2)
+   ! Conduction fluxes for the ice category currently processed in `ice_thd`: computed in `ice_thd_zdf_BL99`
+   ! and used in `ice_thd_dh`, for the same category, inside the same iteration of the category loop of `ice_thd`.
+   ! So no category dimension is needed (2D, not 3D anymore).
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qcn_ice_bot     !: Bottom  conduction flux (W/m2)
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) ::   qcn_ice_top     !: Surface conduction flux (W/m2)
    !
    !#thd2d:
    !!----------------------------------------------------------------------
    !! * 2D version of a few arrays thar are (used to be) declared and
    !!   allocated in `ice1d.F90` for 1d thermo...
    !!----------------------------------------------------------------------
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: dh_i_itm, dh_s_itm, dh_i_bom, &
-      &                                                   dh_i_sub, dh_i_bog, dh_snowice
    ! meltwater arrays to save for melt ponds (mv - could be grouped in a single meltwater volume array)
-   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:,:) :: dh_i_sum_2d, dh_s_sum_2d
+   ! Surface melt of ice and snow (m, <0) for the ice category currently processed in `ice_thd`:
+   ! computed in `ice_thd_dh` and used in `ice_thd_sal`, for the same category, inside the same iteration of the
+   ! category loop of `ice_thd`. So no category dimension is needed (2D, not 3D anymore).
+   REAL(wp), PUBLIC, ALLOCATABLE, SAVE, DIMENSION(:,:) :: dh_i_sum_2d, dh_s_sum_2d
 
    !! Transports for advection:
    REAL(wp), ALLOCATABLE, SAVE, PUBLIC, DIMENSION(:,:)   ::   sudy_u, svdx_v  ! transports (u*dy, v*dx) for T-centric mesh (m^2/s)
@@ -356,7 +356,7 @@ MODULE ice
 
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -373,14 +373,14 @@ CONTAINS
       ierr(:) = 0
 
       ii = 1
-      ALLOCATE( ht_i_new(jpi,jpj) , fraz_frac(jpi,jpj) , strength(jpi,jpj),  &
+      ALLOCATE( strength(jpi,jpj),  &
          &       delta_i(jpi,jpj) ,    divu_i(jpi,jpj) ,  shear_i(jpi,jpj) , STAT=ierr(ii) )
-      ht_i_new(:,:)=0._wp ; fraz_frac(:,:)=0._wp ; strength(:,:)=0._wp
+      strength(:,:)=0._wp
       delta_i(:,:)=0._wp ;    divu_i(:,:)=0._wp ;  shear_i(:,:)=0._wp
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 2D arrays to memory'
-      PRINT *, '            => ht_i_new, fraz_frac, strength, delta_i, divu_i, shear_i'
-      !$acc enter data copyin( ht_i_new, fraz_frac, strength, delta_i, divu_i, shear_i  )
+      PRINT *, '            => strength, delta_i, divu_i, shear_i'
+      !$acc enter data copyin( strength, delta_i, divu_i, shear_i  )
 #endif
 
       !LOLOfixme: make it inside a `ln_icethd` flag here?
@@ -437,17 +437,17 @@ CONTAINS
       ALLOCATE( qtr_ice_bot(jpi,jpj,jpl) , cnd_ice(jpi,jpj,jpl) , t1_ice(jpi,jpj,jpl) ,  &
          &      h_i        (jpi,jpj,jpl) , a_i    (jpi,jpj,jpl) , v_i   (jpi,jpj,jpl) ,  &
          &      v_s        (jpi,jpj,jpl) , h_s    (jpi,jpj,jpl) , t_su  (jpi,jpj,jpl) ,  &
-         &      s_i        (jpi,jpj,jpl) , oa_i   (jpi,jpj,jpl) , o_i   (jpi,jpj,jpl) ,   STAT=ierr(ii) )
+         &      s_i        (jpi,jpj,jpl) , oa_i   (jpi,jpj,jpl) ,   STAT=ierr(ii) )
       ! v_ibr(jpi,jpj,jpl)
       qtr_ice_bot(:,:,:)=0._wp ; cnd_ice(:,:,:)=0._wp ; t1_ice(:,:,:)=0._wp
       h_i        (:,:,:)=0._wp ; a_i    (:,:,:)=0._wp ; v_i   (:,:,:)=0._wp
       v_s        (:,:,:)=0._wp ; h_s    (:,:,:)=0._wp ; t_su  (:,:,:)=0._wp
-      s_i        (:,:,:)=0._wp ; oa_i   (:,:,:)=0._wp ; o_i   (:,:,:)=0._wp ; !v_ibr   (:,:,:)=0._wp
+      s_i        (:,:,:)=0._wp ; oa_i   (:,:,:)=0._wp ; !v_ibr   (:,:,:)=0._wp
       !
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding 3D arrays to memory'
-      PRINT *, '            => qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i, o_i'
-      !$acc enter data copyin( qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i, o_i )
+      PRINT *, '            => qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i'
+      !$acc enter data copyin( qtr_ice_bot, cnd_ice, t1_ice, h_i, a_i, v_i, v_s, h_s, t_su, s_i, oa_i )
       !!   --> ignored for now: v_ibr
 #endif
 
@@ -537,7 +537,7 @@ CONTAINS
       !   &      diag_fv(jpi,jpj) , diag_fs(jpi,jpj) , diag_ft(jpi,jpj), STAT=ierr(ii) )
 
       ii = ii + 1
-      ALLOCATE( qcn_ice_bot(jpi,jpj,jpl) , qcn_ice_top(jpi,jpj,jpl) , STAT = ierr(ii) )  ! t_si(jpi,jpj,jpl) ,
+      ALLOCATE( qcn_ice_bot(jpi,jpj) , qcn_ice_top(jpi,jpj) , STAT = ierr(ii) )  ! t_si(jpi,jpj,jpl) ,
       !t_si(:,:,:) = 0._wp
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding arrays to memory'
@@ -581,14 +581,13 @@ CONTAINS
 
       !LOLOfixme: make it inside a `ln_icethd` flag here?
       ii = ii + 1
-      ALLOCATE( dh_i_itm(jpi,jpj),    &
-         &      dh_i_bom(jpi,jpj), dh_s_itm(jpi,jpj), &
-         &      dh_i_sub(jpi,jpj), dh_i_bog(jpi,jpj), dh_snowice(jpi,jpj), &
-         &      dh_i_sum_2d(jpi,jpj,jpl), dh_s_sum_2d(jpi,jpj,jpl),  STAT = ierr(ii) )
+      ALLOCATE( dh_i_sum_2d(jpi,jpj), dh_s_sum_2d(jpi,jpj),  STAT = ierr(ii) )
+      ! Must start at 0: if `ice_thd_dh` is not called (`ln_icedH=F`), `ice_thd_sal` still reads them
+      dh_i_sum_2d(:,:) = 0._wp ; dh_s_sum_2d(:,:) = 0._wp
 #if defined _OPENACC || defined _OPENMP
       PRINT *, ' * info GPU: ice_alloc() => adding thermo-only arrays to memory'
-      PRINT *, '            => dh_i_itm, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, dh_i_sum_2d, dh_s_sum_2d'
-      !$acc enter data copyin( dh_i_itm, dh_i_bom, dh_s_itm, dh_i_sub, dh_i_bog, dh_snowice, dh_i_sum_2d, dh_s_sum_2d )
+      PRINT *, '            => dh_i_sum_2d, dh_s_sum_2d'
+      !$acc enter data copyin( dh_i_sum_2d, dh_s_sum_2d )
 #endif
       !LOLO.
 

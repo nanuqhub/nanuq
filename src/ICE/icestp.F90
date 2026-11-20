@@ -59,6 +59,10 @@ MODULE icestp
    USE iceistate      ! sea-ice: initial state
    USE iceitd         ! sea-ice: remapping thickness distribution
    USE icealb         ! sea-ice: albedo
+   ! Needed to read the slab-ocean fields from the ice restart file (see `ice_init()`):
+   USE oss_nnq , ONLY : ln_prs_oce     ! prescribed ocean surface state (standalone) mode
+   USE ossprs  , ONLY : ln_slab_sst    ! slab-ocean correction of the prescribed SST
+   USE ossmod  , ONLY : oss_slab_rst   ! read/write of `sst_s`, `sss_s` & `t_bo` in the ice restart
    !
    !USE remap_classic, ONLY : rmpT2F, do_Voce
    !
@@ -82,7 +86,7 @@ MODULE icestp
 #  include "read_nml_substitute.h90"
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -241,6 +245,12 @@ CONTAINS
          CALL ice_wri_adv( kt )        ! -- Ice outputs (minimal set for advection-only tests)
       ENDIF
 
+      ! Slab-ocean fields in the ice restart (`sst_s`, `sss_s`, `t_bo`, and the fluxes `qsr`, `qns`, `emp` used by
+      ! the slab at the next time step). It is done here, because only now the fluxes are final for this time step
+      ! (after `ice_update_flx()`). It must be called BEFORE `ice_rst_write()`, because `ice_rst_write()` closes the
+      ! restart file at `kt == nitrst`.
+      IF( lrst_ice .AND. ln_prs_oce .AND. ln_slab_sst )  CALL oss_slab_rst( 'WRITE', kt )
+
       IF( lrst_ice )           CALL ice_rst_write( kt )      ! -- Ice restart file
 
       IF( ln_icectl )          CALL ice_ctl( kt )            ! -- Control checks
@@ -298,16 +308,33 @@ CONTAINS
       !WRITE(numout,*) 'LOLO: calling `ice_oss_init` from icestp.F90 !'
       !CALL ice_oss_init                ! set ice-ocean and ice-atm. coupling parameters
       !
+      ! Initialization of the WENO point-to-point remapping (reads namelist `namrmp`, including
+      ! `ln_use_weno_rmp`, and the WENO weights). It MUST be done before the first call to
+      ! `ice_var_agg()` below (and before `ice_istate()`), because `ice_var_agg()` computes `af_i`
+      ! & `xhf` (ice concentration & thickness @F) with `rmpT2F_A_h_wn5s()` when `ln_use_weno_rmp=T`.
+      ! When it was called after `ice_var_agg(1)`, `af_i` & `xhf` were computed at init with a
+      ! different interpolation than during the run, so that the first time step of a restarted run
+      ! (rheology @F) differed from the one of a continuous run.
+      CALL remap_weno_init
+      !
       CALL ice_istate_init             ! Initial sea-ice state
       IF ( ln_rstart .OR. nn_iceini_file == 2 ) THEN
          CALL ice_rst_read()         ! start from a restart file
+         !
+         ! Slab-ocean restart fields (`sst_s`, `sss_s` & `t_bo`): they are read here and not in
+         ! `oss_init()`, because only now the ice restart file is open (`numrir`, opened in
+         ! `ice_rst_read()`) and `t_bo` is allocated (in `ice_alloc()` above). The file is
+         ! closed further below in this routine. Only in "prescribed ocean" + "slab SST" mode,
+         ! and only for a real restart (not for `nn_iceini_file == 2`).
+         IF( ln_prs_oce .AND. ln_slab_sst .AND. ln_rstart )  CALL oss_slab_rst( 'READ' )
+         !
       ELSE
          CALL ice_istate( nit000 )   ! start from rest or read a file
       ENDIF
       CALL ice_var_glo2eqv(1)
       CALL ice_var_agg(1)
       !
-      CALL remap_weno_init
+      ! (`remap_weno_init` is now called above, before `ice_istate_init`)
       !
       CALL ice_dyn_init                ! set ice dynamics parameters
       !
@@ -591,15 +618,10 @@ CONTAINS
             DO ji=Nis0-1, Nie0+1
                ! SIMIP diagnostics
                !t_si       (ji,jj,jl) = rt0     ! temp at the ice-snow interface
-               qcn_ice_bot(ji,jj,jl) = 0._wp
-               qcn_ice_top(ji,jj,jl) = 0._wp   ! conductive fluxes
                cnd_ice    (ji,jj,jl) = 0._wp   ! effective conductivity at the top of ice/snow (ln_cndflx=T)
                qcn_ice    (ji,jj,jl) = 0._wp   ! conductive flux (ln_cndflx=T & ln_cndemule=T)
                qtr_ice_bot(ji,jj,jl) = 0._wp   ! part of solar radiation transmitted through the ice needed at least for outputs
                qml_ice    (ji,jj,jl) = 0._wp   ! surface melt heat flux
-               ! Melt pond surface melt diagnostics (mv - more efficient: grouped into one water volume flux)
-               dh_i_sum_2d(ji,jj,jl) = 0._wp
-               dh_s_sum_2d(ji,jj,jl) = 0._wp
             END DO
          END DO
       ENDDO
@@ -617,7 +639,7 @@ CONTAINS
       !!----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jl      ! dummy loop index
       !!----------------------------------------------------------------------
-      !$acc data present(dh_s_sum_2d,dh_i_sum_2d,qml_ice,qtr_ice_bot,qcn_ice,cnd_ice,qcn_ice_top,qcn_ice_bot)
+      !$acc data present(qml_ice,qtr_ice_bot,qcn_ice,cnd_ice)
       !,t_si
 
       !$acc parallel loop collapse(2)
@@ -679,15 +701,10 @@ CONTAINS
             DO jl = 1, jpl
                ! SIMIP diagnostics
                !t_si       (ji,jj,jl) = rt0     ! temp at the ice-snow interface
-               qcn_ice_bot(ji,jj,jl) = 0._wp
-               qcn_ice_top(ji,jj,jl) = 0._wp   ! conductive fluxes
                cnd_ice    (ji,jj,jl) = 0._wp   ! effective conductivity at the top of ice/snow (ln_cndflx=T)
                qcn_ice    (ji,jj,jl) = 0._wp   ! conductive flux (ln_cndflx=T & ln_cndemule=T)
                qtr_ice_bot(ji,jj,jl) = 0._wp   ! part of solar radiation transmitted through the ice needed at least for outputs
                qml_ice    (ji,jj,jl) = 0._wp   ! surface melt heat flux
-               ! Melt pond surface melt diagnostics (mv - more efficient: grouped into one water volume flux)
-               dh_i_sum_2d(ji,jj,jl) = 0._wp
-               dh_s_sum_2d(ji,jj,jl) = 0._wp
             END DO
          END DO
       ENDDO

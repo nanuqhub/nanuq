@@ -52,7 +52,7 @@ MODULE icedyn_adv_pra
    REAL(wp), ALLOCATABLE, SAVE, DIMENSION(:,:,:,:) ::   sei_max, ses_max, sszi_max
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -183,6 +183,18 @@ CONTAINS
          ! so the standard advection is the right one for it) and we get `rdgc = Vr / vt_i` back at the end of this routine,
          ! with the ice volume after advection. This must be done HERE, before `v_i` is advected below.
          ! (`prdgc` then holds `Vr`, and `sxrdg`, `syrdg`, ... the moments of `Vr`)
+         !
+         ! Halo exchange of `rdgc` BEFORE it is used on the halo (the loop below goes over `Nis0-1:Nie0+1`):
+         ! at the end of the previous time step, `rdgc` was modified on the halo points AFTER its last exchange
+         ! (in `ice_dyn_rdgtrc()` and `ice_thd_rdgtrc()`), so its halo then holds locally computed values. After a
+         ! restart, however, the halo is filled by `lbc_lnk` (in `iom_get`), which gives different values: without
+         ! this exchange, the first time step of a restarted run would differ from the one of a continuous run, and
+         ! `rdgc` would also depend on the MPI domain decomposition.
+#if defined _OPENACC || defined _OPENMP
+         CALL lbc_lnk_gpu( crtnm, prdgc )
+#else
+         CALL lbc_lnk(     crtnm, prdgc,'T',1._wp )
+#endif
          !$acc parallel loop collapse(2) present( prdgc, pv_i )
          DO jj=Njs0-1, Nje0+1
             DO ji=Nis0-1, Nie0+1

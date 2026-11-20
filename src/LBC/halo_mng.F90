@@ -28,7 +28,7 @@ MODULE halo_mng
    INTEGER :: Nis0_1, Njs0_1
    INTEGER :: Nie0_1, Nje0_1
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------

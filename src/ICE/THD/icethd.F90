@@ -49,7 +49,7 @@ MODULE icethd
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -71,7 +71,6 @@ CONTAINS
       !!                - call ice_thd_temp to  retrieve temperature from ice enthalpy
       !!                - call ice_thd_sal  for ice desalination
       !!                - call ice_thd_temp to  retrieve temperature from ice enthalpy
-      !!                - call ice_thd_mono for extra lateral ice melt if active virtual thickness distribution
       !!                - call ice_thd_da   for lateral ice melt
       !!             - back to the geographic grid
       !!                - call ice_thd_rem  for remapping thickness distribution
@@ -110,8 +109,6 @@ CONTAINS
       ! Thermodynamic computation (only on grid points covered by ice) => loop over ice categories
       !-------------------------------------------------------------------------------------------!
 
-      CALL ice_thd_frazil             !--- frazil ice: collection thickness (ht_i_new) & fraction of frazil (fraz_frac)
-
       DO jl = 1, jpl
 
          k_np_ice = 0
@@ -133,24 +130,13 @@ CONTAINS
             CALL ice_thd_unit_convert( jl, 1 )            ! --- & Change units of e_i, e_s from J/m2 to J/m3 --- !
             !=> UPDATES: e_i, e_s
 
-            !$acc parallel loop collapse(2)
-            DO jj=Njs0-nn_hls, Nje0+nn_hls
-               DO ji=Nis0-nn_hls, Nie0+nn_hls
-                  ! --- some init --- !  (important to have them here)
-                  dh_i_bom(ji,jj) = 0._wp ; dh_i_itm(ji,jj) = 0._wp
-                  dh_i_sub(ji,jj) = 0._wp ; dh_i_bog(ji,jj) = 0._wp
-                  dh_snowice(ji,jj) = 0._wp ; dh_s_itm(ji,jj) = 0._wp
-               END DO
-            END DO
-            !$acc end parallel loop
-
             CALL ice_thd_zdf( jl, ll_ice_present )                  ! --- Ice-Snow temperature --- !
             !=> UPDATES: cnd_ice, hfx_dif, hfx_err_dif, h_s, qcn_ice, qcn_ice_bot, qcn_ice_top, qns_ice, qtr_ice_bot, t1_ice, t_i, t_s, t_si, t_su, e_i, e_s
 
             ! ll_ice_present can be updated by thd_dh, due to melting
             IF( ln_icedH ) CALL ice_thd_dh( jl, ll_ice_present )                   ! --- Growing/Melting --- !
             !=> UPDATES:  h_i, h_s, ll_ice_present,a_i, e_s,  qml_ice, s_i, t_s, t_su
-            !             dh_i_bog,dh_i_bom,dh_i_itm,dh_i_sub,dh_i_sum_2d,dh_s_itm,dh_snowice,dh_s_sum_2d
+            !             dh_i_sum_2d,dh_s_sum_2d
             !             sfx_bog,sfx_bom,sfx_bri,sfx_res,sfx_sni,sfx_sub,sfx_sum,hfx_bog,hfx_bom
             !             hfx_res,hfx_snw,hfx_spr,hfx_sub,hfx_sum,hfx_thd wfx_bog,wfx_bom,wfx_err_sub
             !             wfx_ice_sub,wfx_res,wfx_sni,wfx_snw_sni,wfx_snw_sub,wfx_snw_sum,wfx_spr,wfx_sum
@@ -166,9 +152,6 @@ CONTAINS
 
 
 
-            !lolo:IF( ln_icedH .AND. ln_virtual_itd ) &
-            !lolo:&              CALL ice_thd_mono( jl, ll_ice_present )                 ! --- Extra lateral melting if virtual_itd --- !
-            !
             ! ll_ice_present can be updated by thd_da
             IF( ln_icedA )    CALL ice_thd_da( jl, ll_ice_present )                   ! --- Lateral melting --- !
 
@@ -324,51 +307,6 @@ CONTAINS
    END SUBROUTINE ice_thd_temp
 
 
-   SUBROUTINE ice_thd_mono(jl_cat, lk_ice_present)
-      !!-----------------------------------------------------------------------
-      !!                   ***  ROUTINE ice_thd_mono ***
-      !!
-      !! ** Purpose :   Lateral melting in case virtual_itd
-      !!                          ( dA = A/2h dh )
-      !!-----------------------------------------------------------------------
-      INTEGER, INTENT(IN) :: jl_cat
-      LOGICAL, DIMENSION(jpi,jpj) :: lk_ice_present
-      INTEGER  ::   ji,jj              ! dummy loop indices
-      REAL(wp) ::   zhi_bef            ! ice thickness before thermo
-      REAL(wp) ::   zdh_mel, zda_mel   ! net melting
-      REAL(wp) ::   zvi, zvs           ! ice/snow volumes
-      !!-----------------------------------------------------------------------
-      !$acc data present( lk_ice_present )
-
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            !
-            IF (lk_ice_present(ji,jj)) THEN
-               zdh_mel = MIN( 0._wp, dh_i_itm(ji,jj) + dh_i_sum_2d(ji,jj,jl_cat) + dh_i_bom(ji,jj) + dh_snowice(ji,jj) + dh_i_sub(ji,jj) )
-               IF( zdh_mel < 0._wp .AND. a_i(ji,jj,jl_cat) > 0._wp )  THEN
-                  zvi          = a_i(ji,jj,jl_cat) * h_i(ji,jj,jl_cat)
-                  zvs          = a_i(ji,jj,jl_cat) * h_s(ji,jj,jl_cat)
-                  ! lateral melting = concentration change
-                  zhi_bef     = h_i(ji,jj,jl_cat) - zdh_mel
-                  zda_mel     = MAX( -a_i(ji,jj,jl_cat) , a_i(ji,jj,jl_cat) * zdh_mel / ( 2._wp * MAX( zhi_bef, epsi20 ) ) )
-                  a_i(ji,jj,jl_cat)  = MAX( epsi20, a_i(ji,jj,jl_cat) + zda_mel )
-                  ! adjust thickness
-                  h_i(ji,jj,jl_cat) = zvi / a_i(ji,jj,jl_cat)
-                  h_s(ji,jj,jl_cat) = zvs / a_i(ji,jj,jl_cat)
-                  ! retrieve total concentration
-                  at_i(ji,jj) = a_i(ji,jj,jl_cat)
-               ENDIF
-            ENDIF
-            !
-         END DO
-      END DO
-      !$acc end parallel loop
-      !
-      !$acc end data
-   END SUBROUTINE ice_thd_mono
-
-
    SUBROUTINE ice_thd_salchk( kt, kn )
       !!-----------------------------------------------------------------------
       !!                   ***  ROUTINE ice_thd_salchk ***
@@ -428,7 +366,7 @@ CONTAINS
       !!-----------------------------------------------------------------------
       INTEGER  ::   ji, jj, jk   ! dummy loop indices
       !!-----------------------------------------------------------------------
-      !$acc data present( e_i, e_s, szv_i, oa_i, o_i )
+      !$acc data present( e_i, e_s, szv_i, oa_i )
 
       SELECT CASE( kn )
          !                 !-------------------------!
@@ -439,18 +377,20 @@ CONTAINS
          ! meaningless, products of sea ice thicknesses/snow depths and sea ice
          ! concentration
          !
-         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, oa_i, o_i )
+         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, oa_i )
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
-               ! Save the ice age (o_i = oa_i/a_i) before thermo changes a_i (melt, lateral melt),
-               ! so that oa_i can be rebuilt with the new a_i at the end (case 2), as in SI3.
+               ! Convert, in place, the areal age content `oa_i` (s) into the ice age (= oa_i/a_i, s), before thermo
+               ! changes a_i (melt, lateral melt), so that oa_i can be rebuilt with the new a_i at the end (case 2), as in SI3.
                ! Without this, the age (oa_i/a_i) would grow artificially when a_i decreases.
+               ! This is done in place (as for e_i, e_s below), so no extra array is needed: between case 1 and
+               ! case 2, `oa_i` holds the ice age, and it is not used by anything else in the thermodynamics.
                ! (only if the "age of the ice" tracer is used, `ln_age=T`)
                IF( ln_age ) THEN
                   IF( a_i(ji,jj,kl) > epsi20 ) THEN
-                     o_i(ji,jj,kl) = oa_i(ji,jj,kl) / a_i(ji,jj,kl)
+                     oa_i(ji,jj,kl) = oa_i(ji,jj,kl) / a_i(ji,jj,kl)
                   ELSE
-                     o_i(ji,jj,kl) = 0._wp
+                     oa_i(ji,jj,kl) = 0._wp
                   ENDIF
                ENDIF
                !$acc loop seq
@@ -476,16 +416,16 @@ CONTAINS
          !                 !-------------------------!
       CASE( 2 )            !==  from J/m3 to J/m2  ==!
          !                 !-------------------------!
-         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, v_i, v_s, oa_i, o_i, s_i, szv_i, sz_i )
+         !$acc parallel loop collapse(2) present( h_i, a_i, e_i, h_s, e_s, v_i, v_s, oa_i, s_i, szv_i, sz_i )
          DO jj=Njs0, Nje0
             DO ji=Nis0, Nie0
                ! Change thickness to volume (replaces routine ice_var_eqv2glo)
                v_i(ji,jj,kl)   = h_i(ji,jj,kl)   * a_i(ji,jj,kl)
                v_s(ji,jj,kl)   = h_s(ji,jj,kl)   * a_i(ji,jj,kl)
-               ! Rebuild the areal age content with the new ice area: the age (o_i, saved in case 1) is kept,
-               ! only the area has changed during thermo (as in SI3). Gives oa_i=0 where the category has melted.
-               ! (only if the "age of the ice" tracer is used, `ln_age=T`)
-               IF( ln_age )  oa_i(ji,jj,kl)  = o_i(ji,jj,kl)   * a_i(ji,jj,kl)
+               ! Rebuild, in place, the areal age content with the new ice area: `oa_i` holds the ice age since case 1,
+               ! and this age is kept, only the area has changed during thermo (as in SI3). Gives oa_i=0 where the
+               ! category has melted. (only if the "age of the ice" tracer is used, `ln_age=T`)
+               IF( ln_age )  oa_i(ji,jj,kl)  = oa_i(ji,jj,kl)   * a_i(ji,jj,kl)
 
                ! --- Change units of e_i, e_s from J/m3 to J/m2 --- !
                !$acc loop seq

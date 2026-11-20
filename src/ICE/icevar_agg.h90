@@ -28,9 +28,13 @@ SUBROUTINE ice_var_agg( kn )
          !
          ato_i(ji,jj) = 1._wp - at_i(ji,jj)  ! open water fraction
          !
-         z1_at_i = 1._wp / MAX( at_i(ji,jj) , epsi20 )
+         ! Mean ice thickness @T. MIND: this expression must stay bit-for-bit identical to the one
+         ! of `ice_var_agg_gpu()` (direct division, not a multiplication by the inverse), because
+         ! `ice_var_agg()` is used at init (also after reading a restart) while `ice_var_agg_gpu()`
+         ! is used during the run: any roundoff difference would make the first time step of a
+         ! restarted run differ from the one of a continuous run (BBM amplifies it quickly).
          lDo = at_i(ji,jj) <= epsi20
-         xht(ji,jj) = MERGE( 0._wp  ,  vt_i(ji,jj) * z1_at_i  ,  lDo )
+         xht(ji,jj) = MERGE( 0._wp  ,  vt_i(ji,jj) / MAX( at_i(ji,jj) , epsi20 )  ,  lDo )
          !
       END DO
    END DO

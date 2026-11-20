@@ -132,7 +132,7 @@ MODULE bdy
    LOGICAL, ALLOCATABLE, DIMENSION(:,:,:,:) ::   lrecv_bdyext   !:  when searching towards the exterior of the computational domain
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------

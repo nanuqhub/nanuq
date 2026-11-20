@@ -50,7 +50,8 @@ MODULE osscpl
    USE ice    , ONLY: at_i ! sea-ice fraction
    USE oss_nnq        ! Surface boundary condition: ocean fields
    USE cpl_oasis3     ! OASIS3 coupling
-   !USE eosbn2
+   ! EOS: `l_useCT` (=T with TEOS-10 / S-EOS) and the Conservative => potential temperature conversion of the received SST:
+   USE eosbn2, ONLY : l_useCT, eos_pt_from_ct
    !
    USE in_out_manager ! I/O manager
    USE iom            ! NetCDF library
@@ -128,7 +129,7 @@ MODULE osscpl
 
    !! Substitution
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -408,6 +409,7 @@ CONTAINS
       REAL(wp) ::   zcdrag = 1.5e-3        ! drag coefficient
       REAL(wp) ::   zzx, zzy               ! temporary variables
       REAL(wp) ::   r1_grau                ! = 1.e0 / (grav * rho0)
+      REAL(wp), DIMENSION(:,:), ALLOCATABLE :: zpt   ! potential temperature computed from the received Conservative Temperature [Celsius]
       !REAL(wp), DIMENSION(Nis0:Nie0,Njs0:Nje0) :: ztx, zty, zmsk, zemp, zqns, zqsr
       !!----------------------------------------------------------------------
 
@@ -432,6 +434,20 @@ CONTAINS
       !                                                      ! ================== !
       IF( smyrcv(jpr_sss)%laction ) THEN                     ! received by NANUQ in case of OceanModel <-> NANUQ coupling
          sss_m(Nis0:Nie0,Njs0:Nje0) = smyrcv(jpr_sss)%z3(Nis0:Nie0,Njs0:Nje0,1)
+      ENDIF
+      !                                                      ! ========================== !
+      !                                                      !  SST: CT => potential temp. !
+      !                                                      ! ========================== !
+      ! As in SI3 (`sbccpl.F90`): with TEOS-10 (or S-EOS) the ocean model sends its surface temperature as it is,
+      ! i.e. the Conservative Temperature, while the sea-ice needs the potential temperature. So, when both SST and
+      ! SSS have been received and `l_useCT=T`, `sst_m` is converted to potential temperature with `eos_pt_from_ct`.
+      ! This must be done here, AFTER the SSS block above, because the conversion needs the received salinity.
+      ! Only the interior points are updated (as for the received fields), the halo is set by the `lbc_lnk` below.
+      ! MIND: NANUQ's choice of EOS in namelist `nameos` must be the same as the one of the ocean model!
+      IF( smyrcv(jpr_sst)%laction .AND. smyrcv(jpr_sss)%laction .AND. l_useCT ) THEN
+         zpt = eos_pt_from_ct( sst_m(:,:), sss_m(:,:) )
+         sst_m(Nis0:Nie0,Njs0:Nje0) = zpt(Nis0:Nie0,Njs0:Nje0)
+         DEALLOCATE( zpt )
       ENDIF
       !                                                      ! ================== !
       !                                                      !        SSH         !

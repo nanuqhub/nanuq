@@ -33,7 +33,7 @@ MODULE icethd_sal
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -219,7 +219,7 @@ CONTAINS
                   z1_h_i = 1._wp / MAX( epsi10, h_i(ji,jj,jl_cat) * r1_nlay_i )
                   !
                   ! surface melting (m)
-                  zhmelt = dh_s_sum_2d(ji,jj,jl_cat) + dh_i_sum_2d(ji,jj,jl_cat) ! =0 if no melt, <0 otherwise
+                  zhmelt = dh_s_sum_2d(ji,jj) + dh_i_sum_2d(ji,jj) ! =0 if no melt, <0 otherwise
                   !
                   ! brine salinity
                   zs_brmax = 0._wp
@@ -537,7 +537,7 @@ CONTAINS
                   z1_h_i = 1._wp / MAX( h_i(ji,jj,jl_cat) * r1_nlay_i, epsi10 )
                   !
                   ! surface melting (m)
-                  zhmelt = dh_s_sum_2d(ji,jj,jl_cat) + dh_i_sum_2d(ji,jj,jl_cat) ! =0 if no melt, <0 otherwise
+                  zhmelt = dh_s_sum_2d(ji,jj) + dh_i_sum_2d(ji,jj) ! =0 if no melt, <0 otherwise
                   !
                   zcfl_max = 0._wp
                   zs_min   = 0._wp
@@ -570,7 +570,7 @@ CONTAINS
                      zcfl_test = 0._wp
                      !$acc loop seq
                      DO jk = 1, nlay_i
-                        zw_br(jk) = -rn_flushrate * ( dh_i_sum_2d(ji,jj,jl_cat)*rhoi + dh_s_sum_2d(ji,jj,jl_cat)*rhos )  &
+                        zw_br(jk) = -rn_flushrate * ( dh_i_sum_2d(ji,jj)*rhoi + dh_s_sum_2d(ji,jj)*rhos )  &
                            &                 / ( rhow * ( 1._wp + 0.8e-3_wp * zs_br(jk) ) ) * r1_Dt_ice ! r1_Dt_ice is ok
                         !                        can be replaced by rhow but in theory rhow should be rho_br = (rho0*(1+c*S_br)), with c = 0.8e-3
                         zcfl = zw_br(jk) * rDt_ice * z1_h_i
@@ -600,7 +600,7 @@ CONTAINS
                            DO jk = 1, nlay_i
                               ! Vertical velocity
                               ! -----------------
-                              zw_br(jk) = -rn_flushrate * ( dh_i_sum_2d(ji,jj,jl_cat)*rhoi + dh_s_sum_2d(ji,jj,jl_cat)*rhos )  &
+                              zw_br(jk) = -rn_flushrate * ( dh_i_sum_2d(ji,jj)*rhoi + dh_s_sum_2d(ji,jj)*rhos )  &
                                  &                 / ( rhow * ( 1._wp + 0.8e-3_wp * zs_br(jk) ) ) * r1_Dt_ice ! r1_Dt_ice is ok
                               !                        can be replaced by rhow but in theory rhow should be rho_br = (rho0*(1+c*S_br)), with c = 0.8e-3
                               ! Salinity

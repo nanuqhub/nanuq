@@ -28,7 +28,6 @@ MODULE icethd_do
    PRIVATE
 
    PUBLIC   ice_thd_do        ! called by ice_thd
-   PUBLIC   ice_thd_frazil    ! called by ice_thd
    PUBLIC   ice_thd_do_init   ! called by ice_stp
    !
    !                             !!** namelist (namthd_do) **
@@ -42,7 +41,7 @@ MODULE icethd_do
    !! * Substitutions
 #  include "read_nml_substitute.h90"
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
@@ -72,7 +71,7 @@ CONTAINS
       !!             - Computation of a_i after lateral accretion and
       !!               update h_s, h_i
       !!
-      !! ** Involves : qlead,a_i,at_i,e_i,v_i,szv_i,ht_i_new,hi_max,t_bo,hfx_thd,hfx_opw,wfx_opw,sfx_opw,fraz_frac,sss_s
+      !! ** Involves : qlead,a_i,at_i,e_i,v_i,szv_i,hi_max,t_bo,hfx_thd,hfx_opw,wfx_opw,sfx_opw,sss_s,u_ice,v_ice,taux_ai_t,tauy_ai_t
       !! ** Updates :  a_i,e_i,hfx_opw,hfx_thd,sfx_opw,szv_i,v_i,wfx_opw
       !!
       !!------------------------------------------------------------------------
@@ -100,6 +99,21 @@ CONTAINS
       REAL(wp) ::   zs_newice   ! salinity of accreted ice
       LOGICAL  ::   lDo
       !
+      ! Frazil ice collection thickness and fraction, at the current grid point.
+      ! They used to be permanent 2D module arrays (`ht_i_new`, `fraz_frac`) computed in a separate routine
+      ! (`ice_thd_frazil`, called at the start of `ice_thd`). Their inputs (qlead, wind stress, ice velocity, at_i)
+      ! do not change between that call and `ice_thd_do`, so they are now computed here, inside the main kernel,
+      ! as local scalars: no permanent memory, and no extra kernel.
+      REAL(wp) ::   zht_i_new   ! thickness of the new ice formed in open water (collection thickness) (m)
+      REAL(wp) ::   zfraz_frac  ! fraction of frazil ice accreted at the ice bottom (-)
+      ! Local scalars and parameters for the frazil computation (formerly in `ice_thd_frazil`):
+      INTEGER  ::   iter
+      REAL(wp) ::   zfr_dum, ztmp, zhti, zvfrx, zvgx, ztaux, zf, ztenagm, zvfry, zvgy, ztauy, zvrel2, zfp, ztwogp
+      REAL(wp), PARAMETER ::   zcai    = 1.4e-3_wp                       ! ice-air drag (clem: should be dependent on coupling/forcing used)
+      REAL(wp), PARAMETER ::   zhicrit = 0.04_wp                         ! frazil ice thickness
+      REAL(wp), PARAMETER ::   zsqcd   = 1.0_wp / SQRT( 1.3_wp * zcai )  ! 1/SQRT(airdensity*drag)
+      REAL(wp), PARAMETER ::   zgamafr = 0.03_wp
+      !
       REAL(wp), DIMENSION(jpl)        ::   zv_b    ! old volume of ice in category jl
       REAL(wp), DIMENSION(jpl)        ::   za_b    ! old area of ice in category jl
       REAL(wp), DIMENSION(0:nlay_i+1) ::   zh_i_o, ze_i_o, zs_i_o
@@ -112,7 +126,10 @@ CONTAINS
       REAL(wp), DIMENSION(0:nlay_i)   ::   zxi_cum1, zhi_cum1   ! new cumulative enthlapies/salinities and layers interfaces
       !!-----------------------------------------------------------------------!
       IF( ln_timing    )   CALL timing_start('icethd_do')
-      !$acc data present( qlead,ht_i_new,hi_max,t_bo,hfx_thd,hfx_opw,wfx_opw,sfx_opw,fraz_frac,sss_s ) create( zv_b,za_b,zh_i_o,ze_i_o,zs_i_o, zxi_cum0,zhi_cum0,zxi_cum1,zhi_cum1 )
+      !$acc data present( qlead,hi_max,t_bo,hfx_thd,hfx_opw,wfx_opw,sfx_opw,sss_s,u_ice,v_ice,taux_ai_t,tauy_ai_t ) create( zv_b,za_b,zh_i_o,ze_i_o,zs_i_o, zxi_cum0,zhi_cum0,zxi_cum1,zhi_cum1 )
+
+      ! Reduced gravity, needed for the frazil collection thickness (only if `ln_frazil=T`)
+      ztwogp  = 2._wp * rho0 / ( grav * 0.3_wp * ( rho0 - rhoi ) )
 
       !IF( ln_icediachk )   CALL ice_cons_hsm( 0, 'icethd_do', rdiag_v, rdiag_s, rdiag_t, rdiag_fv, rdiag_fs, rdiag_ft )
       !IF( ln_icediachk )   CALL ice_cons2D  ( 0, 'icethd_do',  diag_v,  diag_s,  diag_t,  diag_fv,  diag_fs,  diag_ft )
@@ -169,6 +186,57 @@ CONTAINS
                !                       ! Start main loop here !
                !                       ! ==================== !
                IF( qlead(ji,jj) < 0._wp ) THEN ! qlead is the heat budget in the first ocean level. Only grow ice when it is negative
+
+                  !---------------------------------------------------------!
+                  ! Collection thickness of ice formed in leads and polynyas
+                  !---------------------------------------------------------!
+                  ! (formerly done in routine `ice_thd_frazil`, same computation)
+                  ! zht_i_new is the thickness of new ice formed in open water
+                  ! zht_i_new can be either prescribed (ln_frazil=F) or computed (ln_frazil=T)
+                  ! Frazil ice forms in open water, is transported by wind, accumulates at the edge of the consolidated ice edge
+                  ! where it forms aggregates of a specific thickness called collection thickness.
+                  ! Default values (prescribed new ice thickness, no frazil accreted at the ice bottom):
+                  zfraz_frac = 0._wp
+                  zht_i_new  = rn_hinew
+                  !
+                  IF( ln_frazil ) THEN
+                     ! -- Wind stress -- !
+                     ztaux = taux_ai_t(ji,jj) * xmskt(ji,jj)
+                     ztauy = tauy_ai_t(ji,jj) * xmskt(ji,jj)
+                     ! Square root of wind stress
+                     ztenagm = SQRT( SQRT( ztaux * ztaux + ztauy * ztauy ) )
+
+                     ! -- Frazil ice velocity -- !
+                     lDo = ztenagm >= epsi10
+                     zfr_dum = zgamafr * zsqcd / MAX( ztenagm, epsi10 )
+                     zvfrx = MERGE( zfr_dum * ztaux , 0._wp , lDo )
+                     zvfry = MERGE( zfr_dum * ztauy , 0._wp , lDo )
+                     ! -- Pack ice velocity -- !
+                     zvgx = ( u_ice(ji-1,jj  ) * umask(ji-1,jj  ,1)  + u_ice(ji,jj) * umask(ji,jj,1) ) * 0.5_wp
+                     zvgy = ( v_ice(ji  ,jj-1) * vmask(ji  ,jj-1,1)  + v_ice(ji,jj) * vmask(ji,jj,1) ) * 0.5_wp
+
+                     ! -- Relative frazil/pack ice velocity & fraction of frazil ice-- !
+                     lDo = at_i(ji,jj) >= epsi10
+                     zvrel2     = MERGE( MAX( (zvfrx - zvgx)*(zvfrx - zvgx) + (zvfry - zvgy)*(zvfry - zvgy), 0.15_wp*0.15_wp ) , 0._wp , lDo )
+                     zfraz_frac = MERGE( ( TANH( rn_Cfraz * ( SQRT(zvrel2) - rn_vfraz ) ) + 1._wp ) * 0.5_wp * rn_maxfraz      , 0._wp , lDo )
+
+                     ! -- new ice thickness (iterative loop) -- !
+                     zhti = zhicrit +   ( zhicrit + 0.1_wp )    &
+                        &                / ( ( zhicrit + 0.1_wp ) * ( zhicrit + 0.1_wp ) -  zhicrit * zhicrit ) * ztwogp * zvrel2
+                     iter = 1
+                     DO WHILE ( iter < 20 )
+                        zfr_dum = zhti - zhicrit
+                        ztmp = zhicrit * ztwogp * zvrel2
+                        zf  = zfr_dum * ( zhti * zhti - zhicrit * zhicrit ) - zhti * ztmp
+                        zfp = zfr_dum * ( 3.0_wp * zhti + zhicrit ) -  ztmp
+                        zhti = zhti - zf / MAX( zfp, epsi20 )
+                        iter = iter + 1
+                     END DO
+                     !
+                     ! bound zht_i_new (though I don't see why it should be necessary)
+                     zht_i_new = MAX( 0.01_wp, MIN( zhti, hi_max(jpl) ) )
+                  ENDIF
+
                   ! Keep old ice areas and volume in memory
                   !$acc loop seq
                   DO jl = 1, jpl
@@ -211,12 +279,12 @@ CONTAINS
                   ! salt flux
                   sfx_opw(ji,jj) = sfx_opw(ji,jj) - zv_newice * rhoi * zs_newice * r1_Dt_ice
 
-                  ! A fraction fraz_frac of frazil ice is accreted at the ice bottom
+                  ! A fraction zfraz_frac of frazil ice is accreted at the ice bottom
                   lDo = zAt > 0._wp
-                  zv_frazb  = MERGE(           fraz_frac(ji,jj)   * zv_newice , 0._wp     , lDo )
-                  zv_newice = MERGE( ( 1._wp - fraz_frac(ji,jj) ) * zv_newice , zv_newice , lDo )
+                  zv_frazb  = MERGE(           zfraz_frac   * zv_newice , 0._wp     , lDo )
+                  zv_newice = MERGE( ( 1._wp - zfraz_frac ) * zv_newice , zv_newice , lDo )
                   ! --- Area of new ice --- !
-                  za_newice = zv_newice / ht_i_new(ji,jj)
+                  za_newice = zv_newice / zht_i_new
 
                   ! --- Redistribute new ice area and volume into ice categories --- !
 
@@ -225,7 +293,7 @@ CONTAINS
                   ! we keep the excessive volume in memory and attribute it later to bottom accretion
                   IF( za_newice >  MAX( 0._wp, rn_amax - zAt ) ) THEN ! max is for roundoff error
                      zda_res   = za_newice - MAX( 0._wp, rn_amax - zAt )
-                     zdv_res   = zda_res * ht_i_new(ji,jj)
+                     zdv_res   = zda_res * zht_i_new
                      za_newice = MAX( 0._wp, za_newice - zda_res )
                      zv_newice = MAX( 0._wp, zv_newice - zdv_res )
                   ELSE
@@ -237,7 +305,7 @@ CONTAINS
                   zAt = 0._wp
                   !$acc loop seq
                   DO jl = 1, jpl
-                     IF( ht_i_new(ji,jj) > hi_max(jl-1) .AND. ht_i_new(ji,jj) <= hi_max(jl) ) THEN
+                     IF( zht_i_new > hi_max(jl-1) .AND. zht_i_new <= hi_max(jl) ) THEN
                         a_i(ji,jj,jl) = a_i(ji,jj,jl) + za_newice
                         v_i(ji,jj,jl) = v_i(ji,jj,jl) + zv_newice
                         jcat = jl
@@ -337,100 +405,6 @@ CONTAINS
       !
    END SUBROUTINE ice_thd_do
 
-
-   SUBROUTINE ice_thd_frazil
-      !!-----------------------------------------------------------------------
-      !!                   ***  ROUTINE ice_thd_frazil ***
-      !!
-      !! ** Purpose :   frazil ice collection thickness and fraction
-      !!
-      !! ** Inputs  :   u_ice, v_ice, taux_ai_t, tauy_ai_t
-      !! ** Ouputs  :   ht_i_new, fraz_frac
-      !!-----------------------------------------------------------------------
-      INTEGER  ::   ji, jj             ! dummy loop indices
-      INTEGER  ::   iter
-      LOGICAL  ::   lDo
-      REAL(wp) ::   zdum, ztmp, zhti, zvfrx, zvgx, ztaux, zf, ztenagm, zvfry, zvgy, ztauy, zvrel2, zfp, ztwogp
-      REAL(wp), PARAMETER ::   zcai    = 1.4e-3_wp                       ! ice-air drag (clem: should be dependent on coupling/forcing used)
-      REAL(wp), PARAMETER ::   zhicrit = 0.04_wp                         ! frazil ice thickness
-      REAL(wp), PARAMETER ::   zsqcd   = 1.0_wp / SQRT( 1.3_wp * zcai )  ! 1/SQRT(airdensity*drag)
-      REAL(wp), PARAMETER ::   zgamafr = 0.03_wp
-      !!-----------------------------------------------------------------------
-      !$acc data present( fraz_frac, qlead, ht_i_new, u_ice, v_ice, taux_ai_t, tauy_ai_t )
-      !
-      !---------------------------------------------------------!
-      ! Collection thickness of ice formed in leads and polynyas
-      !---------------------------------------------------------!
-      ! ht_i_new is the thickness of new ice formed in open water
-      ! ht_i_new can be either prescribed (ln_frazil=F) or computed (ln_frazil=T)
-      ! Frazil ice forms in open water, is transported by wind, accumulates at the edge of the consolidated ice edge
-      ! where it forms aggregates of a specific thickness called collection thickness.
-      !
-      !$acc parallel loop collapse(2)
-      DO jj=Njs0, Nje0
-         DO ji=Nis0, Nie0
-            fraz_frac(ji,jj) = 0._wp
-            ht_i_new(ji,jj)  = MERGE( rn_hinew , 0._wp ,  qlead(ji,jj) < 0._wp )  ! default new ice thickness
-         END DO
-      END DO
-      !$acc end parallel loop
-
-
-      IF( ln_frazil ) THEN
-         ztwogp  = 2._wp * rho0 / ( grav * 0.3_wp * ( rho0 - rhoi ) )  ! reduced grav
-         !
-         !$acc parallel loop collapse(2)
-         DO jj=Njs0, Nje0
-            DO ji=Nis0, Nie0
-               IF( qlead(ji,jj) < 0._wp ) THEN ! cooling
-                  ! -- Wind stress -- !
-                  ztaux = taux_ai_t(ji,jj) * xmskt(ji,jj)
-                  ztauy = tauy_ai_t(ji,jj) * xmskt(ji,jj)
-                  ! Square root of wind stress
-                  ztenagm = SQRT( SQRT( ztaux * ztaux + ztauy * ztauy ) )
-
-                  ! -- Frazil ice velocity -- !
-                  lDo = ztenagm >= epsi10
-                  zdum    = zgamafr * zsqcd / MAX( ztenagm, epsi10 )
-                  zvfrx = MERGE( zdum * ztaux , 0._wp , lDo )
-                  zvfry = MERGE( zdum * ztauy , 0._wp , lDo )
-                  ! -- Pack ice velocity -- !
-                  zvgx = ( u_ice(ji-1,jj  ) * umask(ji-1,jj  ,1)  + u_ice(ji,jj) * umask(ji,jj,1) ) * 0.5_wp
-                  zvgy = ( v_ice(ji  ,jj-1) * vmask(ji  ,jj-1,1)  + v_ice(ji,jj) * vmask(ji,jj,1) ) * 0.5_wp
-
-                  ! -- Relative frazil/pack ice velocity & fraction of frazil ice-- !
-                  lDo = at_i(ji,jj) >= epsi10
-                  zvrel2           = MERGE( MAX( (zvfrx - zvgx)*(zvfrx - zvgx) + (zvfry - zvgy)*(zvfry - zvgy), 0.15_wp*0.15_wp ) , 0._wp , lDo )
-                  fraz_frac(ji,jj) = MERGE( ( TANH( rn_Cfraz * ( SQRT(zvrel2) - rn_vfraz ) ) + 1._wp ) * 0.5_wp * rn_maxfraz      , 0._wp , lDo )
-
-                  ! -- new ice thickness (iterative loop) -- !
-                  zhti = zhicrit +   ( zhicrit + 0.1_wp )    &
-                     &                / ( ( zhicrit + 0.1_wp ) * ( zhicrit + 0.1_wp ) -  zhicrit * zhicrit ) * ztwogp * zvrel2
-                  iter = 1
-                  DO WHILE ( iter < 20 )
-                     zdum = zhti - zhicrit
-                     ztmp = zhicrit * ztwogp * zvrel2
-                     zf  = zdum * ( zhti * zhti - zhicrit * zhicrit ) - zhti * ztmp
-                     zfp = zdum * ( 3.0_wp * zhti + zhicrit ) -  ztmp
-                     zhti = zhti - zf / MAX( zfp, epsi20 )
-                     iter = iter + 1
-                  END DO
-                  !
-                  ! bound ht_i_new (though I don't see why it should be necessary)
-                  ht_i_new(ji,jj) = MAX( 0.01_wp, MIN( zhti, hi_max(jpl) ) )
-                  !
-               ELSE
-                  ht_i_new(ji,jj) = 0._wp
-               ENDIF
-               !
-            END DO
-         END DO
-         !$acc end parallel loop
-         !
-      ENDIF
-
-      !$acc end data
-   END SUBROUTINE ice_thd_frazil
 
    SUBROUTINE ice_thd_do_init
       !!-----------------------------------------------------------------------

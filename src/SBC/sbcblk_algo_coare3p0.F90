@@ -55,7 +55,7 @@ MODULE sbcblk_algo_coare3p0
    REAL(wp), PARAMETER :: zeta_abs_max = 50._wp
 
    !!----------------------------------------------------------------------
-   !! NANUQ 1.0.1, Brodeau (2026)
+   !! NANUQ 1.0.2, Brodeau (2026)
    !! -- a standalone fork of NEMO/SI3 version 5 ---
    !! Software governed by the CeCILL license (see ./LICENSE)
    !!----------------------------------------------------------------------
